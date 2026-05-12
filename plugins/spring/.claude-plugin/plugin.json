@@ -1,0 +1,9 @@
+{
+  "name": "dmitriy-spring",
+  "description": "Spring Boot 3+ / Kotlin stack: beans, AOP, events, transactions, validation, Web MVC, security/auth, caching (Caffeine/Redis), messaging (RabbitMQ), and Spring Boot mastery.",
+  "version": "0.1.0",
+  "author": {
+    "name": "dmitriy"
+  },
+  "keywords": ["spring", "spring-boot", "kotlin", "backend"]
+}

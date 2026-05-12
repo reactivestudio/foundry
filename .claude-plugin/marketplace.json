@@ -1,0 +1,59 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "dmitriy-claude",
+  "description": "Personal Claude Code marketplace: Kotlin/Spring methodology, clean-code, Spring stack, DDD, testing, architecture, and custom subagents — split into granular plugins so only the ones you need consume context.",
+  "owner": {
+    "name": "dmitriy"
+  },
+  "plugins": [
+    {
+      "name": "methodology",
+      "description": "Always-on coding discipline: think before coding, ask when underspecified, verify before claiming done, debug from root cause.",
+      "source": "./plugins/methodology",
+      "category": "workflow",
+      "keywords": ["methodology", "debugging", "verification"]
+    },
+    {
+      "name": "clean-code",
+      "description": "Clean Code router + per-topic siblings for Kotlin/Spring: naming, functions, classes, comments, formatting, error handling, boundaries, objects vs data, systems.",
+      "source": "./plugins/clean-code",
+      "category": "code-quality",
+      "keywords": ["clean-code", "kotlin", "refactoring"]
+    },
+    {
+      "name": "spring",
+      "description": "Spring Boot 3+ / Kotlin: beans, AOP, events, transactions, validation, Web MVC, security, caching, RabbitMQ messaging, Boot mastery.",
+      "source": "./plugins/spring",
+      "category": "framework",
+      "keywords": ["spring", "spring-boot", "kotlin"]
+    },
+    {
+      "name": "ddd",
+      "description": "Domain-Driven Design: strategic, context-mapping, tactical patterns, and the DDD router for Kotlin/Spring.",
+      "source": "./plugins/ddd",
+      "category": "architecture",
+      "keywords": ["ddd", "bounded-context"]
+    },
+    {
+      "name": "test",
+      "description": "Testing discipline: strategy, principles, unit, integration, acceptance, contract, architecture fitness, mutation testing.",
+      "source": "./plugins/test",
+      "category": "testing",
+      "keywords": ["testing", "junit", "testcontainers"]
+    },
+    {
+      "name": "architecture",
+      "description": "Architecture & design: decision-making, ADRs, layout patterns, SOLID/GRASP/GoF, microservices, API/DB design, CQRS, JVM perf, algorithms, architect review.",
+      "source": "./plugins/architecture",
+      "category": "architecture",
+      "keywords": ["architecture", "design", "solid"]
+    },
+    {
+      "name": "agents",
+      "description": "Custom subagents: architect, architecture-reviewer, code-implementor, code-reviewer, security-reviewer, test-architect, test-implementor, test-reviewer, troubleshooter.",
+      "source": "./plugins/agents",
+      "category": "workflow",
+      "keywords": ["agents", "review"]
+    }
+  ]
+}

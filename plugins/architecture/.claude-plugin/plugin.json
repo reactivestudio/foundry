@@ -1,0 +1,9 @@
+{
+  "name": "dmitriy-architecture",
+  "description": "Architecture and design for Kotlin/Spring backend: decision-making, ADRs, layout patterns (Layered/Onion/Clean), SOLID, GRASP, GoF, microservices, API design, database design, caching/CQRS, JVM performance, algorithms.",
+  "version": "0.1.0",
+  "author": {
+    "name": "dmitriy"
+  },
+  "keywords": ["architecture", "design", "solid", "patterns", "microservices"]
+}

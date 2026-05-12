@@ -1,0 +1,9 @@
+{
+  "name": "dmitriy-agents",
+  "description": "Custom subagents: architect, architecture-reviewer, code-implementor, code-reviewer, security-reviewer, test-architect, test-implementor, test-reviewer, troubleshooter.",
+  "version": "0.1.0",
+  "author": {
+    "name": "dmitriy"
+  },
+  "keywords": ["agents", "subagents", "review", "architect"]
+}
