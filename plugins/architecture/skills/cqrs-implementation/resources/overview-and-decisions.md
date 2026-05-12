@@ -26,7 +26,7 @@ This skill covers **CQRS, optionally with events used for projections** — not 
 
 ```
 Is the read shape fundamentally different from the write shape?
-├── No  → CRUD. Stop.
+├── No  → CRUD. Stop. 
 └── Yes
     │
     Is the slow read just a missing index or N+1?
