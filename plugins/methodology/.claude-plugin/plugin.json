@@ -1,9 +1,0 @@
-{
-  "name": "dmitriy-methodology",
-  "description": "Coding methodology and debugging discipline: always-on rules for thinking before coding, asking clarifying questions, verifying before completion, and root-cause debugging.",
-  "version": "0.1.0",
-  "author": {
-    "name": "dmitriy"
-  },
-  "keywords": ["methodology", "debugging", "discipline", "verification"]
-}

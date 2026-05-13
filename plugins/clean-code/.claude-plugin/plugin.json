@@ -1,9 +1,0 @@
-{
-  "name": "dmitriy-clean-code",
-  "description": "Clean Code discipline for Kotlin/Spring: naming, functions, classes, comments, formatting, error handling, boundaries, objects vs data, systems. Router + per-topic siblings.",
-  "version": "0.1.0",
-  "author": {
-    "name": "dmitriy"
-  },
-  "keywords": ["clean-code", "kotlin", "refactoring", "code-quality"]
-}

@@ -1,9 +1,0 @@
-{
-  "name": "dmitriy-ddd",
-  "description": "Domain-Driven Design for Kotlin/Spring: strategic design, context mapping, tactical patterns (aggregates, value objects, repositories, domain events), router for the pipeline.",
-  "version": "0.1.0",
-  "author": {
-    "name": "dmitriy"
-  },
-  "keywords": ["ddd", "domain-driven-design", "bounded-context", "kotlin"]
-}

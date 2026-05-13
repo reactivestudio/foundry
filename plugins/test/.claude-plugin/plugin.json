@@ -1,9 +1,0 @@
-{
-  "name": "dmitriy-test",
-  "description": "Testing discipline for Kotlin/Spring: strategy (pyramid/diamond/honeycomb), principles, unit/integration/acceptance/contract layers, architecture fitness functions, mutation testing.",
-  "version": "0.1.0",
-  "author": {
-    "name": "dmitriy"
-  },
-  "keywords": ["testing", "junit", "testcontainers", "pact", "archunit"]
-}
