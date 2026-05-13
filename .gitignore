@@ -1,1 +1,12 @@
-.idea
+.idea/
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+
+# Local Claude Code permissions for this repo itself
+.claude/settings.local.json
+
+# Local state from CLI runs (not committed)
+*.local
