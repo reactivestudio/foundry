@@ -11,3 +11,6 @@
 
 # Local state from CLI runs (not committed)
 *.local
+
+# Skill-creator eval workspace — temporary artifacts from description tuning
+skill-creator-workspace/

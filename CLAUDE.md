@@ -10,64 +10,77 @@ Final shape target: 10–15 agents, 50–80 skills, ~10 commands. Their `descrip
 
 Targets:
 - Idle (plugin installed, nothing active): ≤ 2600 tokens
-- Active (1 router + 2 siblings loaded): ≤ 6000 tokens
+- Active (2-3 sibling skills loaded): ≤ 6000 tokens
 - Heavy (5 skills + 2 agents in conversation): ≤ 12 000 tokens
 
 Per-item budget:
 
 | Component | Budget |
 |---|---|
-| skill (router) description | ≤ 25 tokens (~110 chars) |
-| skill (specific) description | ≤ 25 tokens (~100 chars) |
+| skill description | ≤ 25 tokens (~100 chars) |
 | agent description | ≤ 30 tokens (~120 chars) |
 | command description | ≤ 25 tokens (~100 chars) |
 
-Not in always-on prompt: `SKILL.md` bodies (loaded on activation), `skills/<name>/resources/*.md` (on demand from the body), command bodies (on invocation), hook scripts (runtime).
+Not in always-on prompt: `SKILL.md` bodies (loaded on activation), `skills/<category>/<skill>/resources/*.md` (on demand from the body), command bodies (on invocation), hook scripts (runtime).
 
 ### Description rules
 
 - Format: **what + when + when-NOT** in one sentence. The `NOT for X` clause is mandatory — it doubles trigger precision.
 - ❌ `"Skill for working with Kotlin coroutines, providing best practices"` — noise.
 - ✅ `"Kotlin coroutines: structured concurrency, dispatchers, exceptions, flows. NOT for RxJava/Reactor."`
-- Router descriptions enumerate siblings: `"Kotlin idioms router → kotlin-idioms / kotlin-coroutines / kotlin-null-safety / …"`.
 - Description is metadata for activation. Don't repeat what the body explains.
 
 ## Naming
 
-Flat namespaces, kebab-case, domain prefixes:
+Two-level nested directory under `skills/`. Category dir groups related skills; skill name is short (no category prefix). No router skills.
 
 ```
 bushin/skills/
-├── methodology/                       # router
-├── methodology-clarifying-questions/
-├── kotlin/                            # router
-├── kotlin-coroutines/
-├── kotlin-null-safety/
-├── …
+├── methodology/
+│   ├── karpathy/
+│   ├── clarifying-questions/
+│   └── interview/
+├── kotlin/
+│   ├── coroutines/
+│   ├── null-safety/
+│   └── …
+├── spring/
+│   ├── boot/
+│   ├── aop/
+│   └── …
 
 bushin/agents/<name>.md                # flat
 bushin/commands/<name>.md              # flat
 ```
 
 Rules:
-- Router = single domain word (`kotlin`, `spring`, `ddd`, `clean-code`, `testing`, `architecture`, `methodology`).
-- Specific skill = `<router>-<concern>` (`kotlin-coroutines`).
-- One skill = one directory = one `SKILL.md` (+ optional `resources/`).
+- Each skill: `skills/<category>/<skill>/SKILL.md` (+ optional `resources/`).
+- `name:` in frontmatter = short skill name (no category prefix). Must be unique within the plugin.
+- Categories themselves (`methodology/`, `kotlin/`, etc.) hold no `SKILL.md` — they're pure directories. No router skills.
+- kebab-case for both category and skill.
+
+### Why this requires `skills` in plugin.json
+
+Claude Code's default skill loader scans `skills/<name>/SKILL.md` — **one level deep only**. Our nested layout (`skills/<category>/<skill>/SKILL.md`) is two levels deep, so each category must be explicitly registered in `bushin/.claude-plugin/plugin.json`:
+
+```json
+{
+  "skills": [
+    "./skills/methodology/",
+    "./skills/kotlin/",
+    "./skills/spring/"
+  ]
+}
+```
+
+Each listed dir is scanned for `<name>/SKILL.md` subdirs. Adding a new skill inside an already-registered category requires **no plugin.json edit** — only a new category does. Verified via `claude plugin validate <plugin-path>`.
 
 ## Frontmatter
 
-Router skill:
+Skill:
 ```yaml
 ---
-name: kotlin
-description: "Kotlin idioms router → kotlin-idioms / kotlin-coroutines / kotlin-null-safety / …"
----
-```
-
-Specific skill:
-```yaml
----
-name: kotlin-coroutines
+name: coroutines
 description: "Kotlin coroutines: structured concurrency, dispatchers, exceptions, flows. NOT for RxJava/Reactor."
 ---
 ```
@@ -99,11 +112,9 @@ description: "Pre-commit review of staged changes against checklist (correctness
 
 ### Skill `SKILL.md` — ≤ 150 lines
 
-Headings: `# <name>` → `## When to use` → `## Procedure` (or `## Routing` for a router) → `## When NOT to use` → `## Resources` (optional).
+Headings: `# <name>` → `## When to use` → `## Procedure` → `## When NOT to use` → `## Resources` (optional).
 
 If body grows past 150 lines, split into `resources/<concern>.md` and route from the body. This shifts cost from "loaded on activation" to "loaded on demand".
-
-A router's `SKILL.md` body is itself a router: a small table mapping concerns to sibling skill names.
 
 ### Agent body — ≤ ~800 tokens
 
@@ -149,7 +160,7 @@ Before committing a new agent / skill / command:
 
 - [ ] Description ≤ budgeted chars; includes a `NOT for X` clause.
 - [ ] Body ≤ 150 lines (skills) or ≤ ~800 tokens (commands).
-- [ ] Naming follows the prefix convention.
+- [ ] Naming follows the nested-dir convention (`skills/<category>/<skill>/`).
 - [ ] No `tools:` on agents unless intentionally restricting.
 - [ ] `model:` set only if the role demands `opus` or `haiku` specifically.
 - [ ] `/context` measurement still within token budget targets.
