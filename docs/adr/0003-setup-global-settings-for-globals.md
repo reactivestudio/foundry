@@ -43,7 +43,7 @@ All four are markdown files in `commands/`. Body is a prompt for Claude; the run
 ## Consequences
 
 - The four tuning commands are the canonical surface for `~/.claude/` management; the README and `docs/architecture.md` document them.
-- The plugin's `.claude-global/settings.json` template intentionally **omits the `hooks` block** — the Stop hook is registered separately from `hooks/stop.json` by Claude Code on install. This keeps a clean separation: hook lives with the plugin, not with user-level globals.
+- The plugin's `.claude-global/settings.json` template intentionally **omits the `hooks` block** — the Stop hook is registered separately from `hooks/hooks.json` by Claude Code on install. This keeps a clean separation: hook lives with the plugin, not with user-level globals.
 - A user who manually edits `~/.claude/CLAUDE.md` or `~/.claude/settings.json` will be prompted on the next `/sync-globals` — diff shown, choice {overwrite-with-backup / keep / view-full-diff}. Their work is never silently lost.
 - Backups accumulate under `~/.claude/.bak/<UTC-timestamp>/`. Cleanup is on the user (a small cost; addressable by a future `/clean-backups` command if it ever becomes a problem).
 

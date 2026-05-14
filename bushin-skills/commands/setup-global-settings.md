@@ -7,15 +7,15 @@ You are about to install or refresh user-level Claude Code globals from this plu
 
 ## Source → target map
 
-- `${CLAUDE_PLUGIN_DIR}/.claude-global/CLAUDE.md`     → `~/.claude/CLAUDE.md`
-- `${CLAUDE_PLUGIN_DIR}/.claude-global/settings.json` → `~/.claude/settings.json`
-- `${CLAUDE_PLUGIN_DIR}/.claude-global/claudeignore`  → `~/.claude/.claudeignore`
+- `${CLAUDE_PLUGIN_ROOT}/.claude-global/CLAUDE.md`     → `~/.claude/CLAUDE.md`
+- `${CLAUDE_PLUGIN_ROOT}/.claude-global/settings.json` → `~/.claude/settings.json`
+- `${CLAUDE_PLUGIN_ROOT}/.claude-global/claudeignore`  → `~/.claude/.claudeignore`
 
 ## Procedure
 
 1. Resolve the plugin directory:
    ```bash
-   echo "$CLAUDE_PLUGIN_DIR"
+   echo "$CLAUDE_PLUGIN_ROOT"
    ```
    If the variable is empty, stop and ask the user to provide the plugin path manually.
 
@@ -47,5 +47,5 @@ You are about to install or refresh user-level Claude Code globals from this plu
 ## Important
 
 - Never overwrite a differing target without backing it up first.
-- The plugin's `settings.json` template does **not** contain a `hooks` section — the Stop hook is registered automatically by Claude Code from `hooks/stop.json` when the plugin is installed. If the user's existing `~/.claude/settings.json` had a custom `hooks` block, it will appear as a diff and the user will be prompted explicitly.
+- The plugin's `settings.json` template does **not** contain a `hooks` section — the Stop hook is registered automatically by Claude Code from `hooks/hooks.json` when the plugin is installed. If the user's existing `~/.claude/settings.json` had a custom `hooks` block, it will appear as a diff and the user will be prompted explicitly.
 - This command is idempotent: running it again on an already-set-up `~/.claude/` is fully silent (all targets identical).

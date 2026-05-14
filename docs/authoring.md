@@ -111,18 +111,20 @@ Always end with "NOT for X" where it sharpens the trigger. The "NOT" clause prev
 
 ## Hooks
 
-`hooks/<event>.json`:
+`hooks/hooks.json` (single file, all events keyed inside the outer `hooks` wrapper):
 ```json
 {
-  "<event>": [
-    { "matcher": "", "hooks": [ { "type": "command", "command": "<shell>" } ] }
-  ]
+  "hooks": {
+    "<Event>": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "<shell>" } ] }
+    ]
+  }
 }
 ```
 
-Asset references use `${CLAUDE_PLUGIN_DIR}`:
+Asset references use `${CLAUDE_PLUGIN_ROOT}`:
 ```
-afplay "${CLAUDE_PLUGIN_DIR}/assets/sounds/stop.m4r" >/dev/null 2>&1 &
+afplay "${CLAUDE_PLUGIN_ROOT}/assets/sounds/stop.m4r" >/dev/null 2>&1 &
 ```
 
 Trailing `&` so the hook doesn't block the next turn; `>/dev/null 2>&1` to suppress stdout/stderr noise.

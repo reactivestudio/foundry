@@ -33,14 +33,14 @@ Per-project disable: use Claude Code's native `/plugin disable bushin-skills@rea
 ## What's inside
 
 - `.claude-plugin/marketplace.json` — marketplace catalog at the repo root.
-- `bushin-skills/` — the plugin itself (Claude Code's `${CLAUDE_PLUGIN_DIR}` resolves here once installed):
+- `bushin-skills/` — the plugin itself (Claude Code's `${CLAUDE_PLUGIN_ROOT}` resolves here once installed):
   - `.claude-plugin/plugin.json` — plugin manifest.
   - `agents/` — 10–15 agent definitions (architect, code-reviewer, security-reviewer, troubleshooter, specialists).
   - `commands/` — meta-commands (`/challenge`, `/plan`, `/explain`, `/postmortem`, `/review`) and tuning commands (`/setup-global-settings`, `/sync-globals`, `/show-globals`, `/configure`).
   - `skills/` — 50–80 skill directories, flat namespace, prefixed names (`kotlin`, `kotlin-coroutines`, `spring`, `spring-aop`, …). Top-level router skills point to siblings.
   - `hooks/` — declarative event hooks (e.g. `stop.json` for end-of-turn sound).
   - `mcp/` — opt-in MCP server configs.
-  - `assets/sounds/` — binary assets used by hooks via `${CLAUDE_PLUGIN_DIR}/assets/sounds/...`
+  - `assets/sounds/` — binary assets used by hooks via `${CLAUDE_PLUGIN_ROOT}/assets/sounds/...`
   - `.claude-global/` — `CLAUDE.md`, `settings.json`, `.claudeignore` source-of-truth templates, copied into `~/.claude/` by `/setup-global-settings` and `/sync-globals`. The only directory whose contents are *copied* anywhere.
 - `docs/` — architecture, token budget, authoring conventions, per-project disable, ADRs (marketplace-level documentation, lives at repo root).
 

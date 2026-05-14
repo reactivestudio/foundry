@@ -7,7 +7,7 @@ Read-only diagnostic command. **Do not modify any files.**
 
 ## What to report
 
-For each managed source (`${CLAUDE_PLUGIN_DIR}/.claude-global/{CLAUDE.md,settings.json,claudeignore}`) and its corresponding target (`~/.claude/CLAUDE.md`, `~/.claude/settings.json`, `~/.claude/.claudeignore`), determine the state:
+For each managed source (`${CLAUDE_PLUGIN_ROOT}/.claude-global/{CLAUDE.md,settings.json,claudeignore}`) and its corresponding target (`~/.claude/CLAUDE.md`, `~/.claude/settings.json`, `~/.claude/.claudeignore`), determine the state:
 
 | State | Meaning |
 |---|---|
@@ -23,7 +23,7 @@ Also report the backup directory state:
 
 ## Procedure
 
-1. Resolve `CLAUDE_PLUGIN_DIR` via `echo "$CLAUDE_PLUGIN_DIR"`. If empty, ask the user.
+1. Resolve `CLAUDE_PLUGIN_ROOT` via `echo "$CLAUDE_PLUGIN_ROOT"`. If empty, ask the user.
 2. For each pair, run `cmp -s source target` and an `stat` on each side. Capture state.
 3. For drifted files, run a short `diff -u source target | head -n 20` to give a preview (do **not** dump the full diff unless the user asks).
 4. List `~/.claude/.bak/` contents: count of subdirectories and the latest one.
@@ -32,7 +32,7 @@ Also report the backup directory state:
 
 ```
 Globals status (from /show-globals)
-Plugin: <CLAUDE_PLUGIN_DIR>
+Plugin: <CLAUDE_PLUGIN_ROOT>
 Target: ~/.claude/
 
   CLAUDE.md       <state>
