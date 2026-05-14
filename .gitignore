@@ -5,8 +5,9 @@
 *~
 .vscode/
 
-# Local Claude Code permissions for this repo itself
-.claude/settings.local.json
+# Local Claude Code state for this repo itself (we test the plugin from within
+# the repo, so project-scope settings appear here but should never be committed)
+.claude/
 
 # Local state from CLI runs (not committed)
 *.local
