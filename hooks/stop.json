@@ -1,0 +1,13 @@
+{
+  "Stop": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "afplay \"${CLAUDE_PLUGIN_DIR}/assets/sounds/stop.m4r\" >/dev/null 2>&1 &"
+        }
+      ]
+    }
+  ]
+}

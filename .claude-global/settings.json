@@ -1,0 +1,52 @@
+{
+  "model": "claude-sonnet-4-6",
+  "autoCompactWindow": 750000,
+  "env": {
+    "BASH_MAX_OUTPUT_LENGTH": "150000"
+  },
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "Bash(ls:*)",
+      "Bash(pwd)",
+      "Bash(echo:*)",
+      "Bash(find:*)",
+      "Bash(rg:*)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(tree:*)",
+      "Bash(file:*)",
+      "Bash(stat:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git remote:*)",
+      "Bash(git stash list:*)",
+      "Bash(git config --get:*)",
+      "Bash(./gradlew tasks:*)",
+      "Bash(./gradlew dependencies:*)",
+      "Bash(./gradlew help:*)",
+      "Bash(./mvnw help:*)",
+      "Bash(./mvnw dependency:tree:*)",
+      "Bash(jq:*)",
+      "Bash(yq:*)"
+    ],
+    "deny": [
+      "Bash(sudo:*)",
+      "Bash(rm -rf /*)",
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(curl:* | sh)",
+      "Bash(curl:* | bash)"
+    ]
+  }
+}

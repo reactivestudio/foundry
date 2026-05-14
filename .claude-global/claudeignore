@@ -1,0 +1,51 @@
+# Build artefacts (JVM)
+build/
+target/
+out/
+.gradle/
+.kotlin/
+
+# Build artefacts (JS/web)
+node_modules/
+.next/
+.nuxt/
+.svelte-kit/
+dist/
+.vite/
+.turbo/
+
+# Python
+__pycache__/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# IDE and OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Generated / minified
+*.min.js
+*.min.css
+*.lock.json
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Logs and dumps
+*.log
+logs/
+*.dump
+*.hprof
+
+# Large data files
+*.csv
+*.tsv
+*.parquet
+*.sqlite
+*.db

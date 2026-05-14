@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "bushin-skills",
+  "description": "Personal Claude Code marketplace for a Kotlin / Spring Boot engineer.",
+  "owner": { "name": "Dmitriy Bushin" },
+  "plugins": [
+    {
+      "name": "bushin-skills",
+      "source": ".",
+      "description": "Opinionated senior-engineer toolkit for Kotlin / Spring Boot: agents, methodology / clean-code / DDD / testing / architecture skills, adversarial review commands, end-of-turn sound hook.",
+      "category": "workflow",
+      "keywords": ["kotlin", "spring-boot", "ddd", "testing", "architecture"]
+    }
+  ]
+}

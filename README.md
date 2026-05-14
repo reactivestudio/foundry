@@ -1,39 +1,55 @@
-# claude
+# bushin-skills
 
-Personal Claude Code configuration library for a solo Kotlin / Spring Boot engineer.
-
-Clone once, attach to any project via an interactive CLI wizard. Updates propagate to every linked project on `git pull`.
+Personal Claude Code marketplace shipping a single plugin `bushin-skills` for a solo Kotlin / Spring Boot engineer. Installed natively via `/plugin install`; updated via `/plugin update`.
 
 ## Philosophy
 
-- **Token efficiency without sacrificing quality.** The main lever is *precise context* — Claude reads exactly the files needed, not more.
+- **Token efficiency without sacrificing quality.** Plugin ships 10–15 agents and 50–80 skills; the cost of "always on" descriptions is paid with strict per-item budgets (see [docs/token-budget.md](docs/token-budget.md)). Bodies and resources load on demand only.
 - **Each component knows its boundaries.** Architect doesn't write code. Reviewer doesn't make architectural decisions. Mechanical work is for Haiku; senior judgement is for Opus.
 - **Adversarial thinking is built-in.** Non-trivial decisions pass through `/challenge` before they're accepted.
-- **Composable, not monolithic.** Agents, slash-commands, rules, skills and MCP fragments are independent. The wizard picks what fits the current project.
+- **One plugin, native toggle.** Per-project disable is a native Claude Code feature — no custom mechanism needed.
 
 ## Quick start
 
-```bash
-# 1) Clone (anywhere; ~/code/claude is fine)
-git clone <repo-url> ~/code/claude
+On a new machine:
 
-# 2) Install global preferences and senior agents into ~/.claude/
-~/code/claude/bin/claude-global
-
-# 3) In each project, run the wizard to pick stack-specific components
-cd ~/work/some-spring-project
-~/code/claude/bin/claude-init
+```
+> /plugin marketplace add <repo-url-or-local-path>
+> /plugin install bushin-skills@bushin
+> /setup-global-settings
 ```
 
-Re-run either command at any time; both are idempotent and ask before overwriting.
+That's it. Agents, commands, skills, hooks become available immediately on install. `/setup-global-settings` copies `CLAUDE.md`, `settings.json` and `.claudeignore` into `~/.claude/` with a diff-prompt and backup.
+
+Updates:
+
+```
+> /plugin update          # refresh plugin content (agents/skills/commands/hooks/assets)
+> /sync-globals           # bring ~/.claude/ in line with refreshed plugin templates
+```
+
+Per-project disable: use Claude Code's native `/plugin disable bushin-skills@bushin` from inside the project, or edit `<project>/.claude/settings.json`. See [docs/per-project-disable.md](docs/per-project-disable.md).
 
 ## What's inside
 
-- `bin/` — `claude-init` (project wizard) and `claude-global` (one-shot global install).
-- `components/` — atomic, reusable pieces: agents, commands, rules, skills, MCP servers.
-- `global/` — templates symlinked into `~/.claude/` (CLAUDE.md, settings.json with model routing, .claudeignore).
-- `docs/` — architecture, wizard flow, authoring guides, ADRs.
-- `templates/` — boilerplate for new agents/commands/rules.
+- `.claude-plugin/marketplace.json`, `.claude-plugin/plugin.json` — marketplace and plugin manifests at the repo root (the whole repo is the plugin).
+- `agents/` — 10–15 agent definitions (architect, code-reviewer, security-reviewer, troubleshooter, specialists).
+- `commands/` — meta-commands (`/challenge`, `/plan`, `/explain`, `/postmortem`, `/review`) and tuning commands (`/setup-global-settings`, `/sync-globals`, `/show-globals`, `/configure`).
+- `skills/` — 50–80 skill directories, flat namespace, prefixed names (`kotlin`, `kotlin-coroutines`, `spring`, `spring-aop`, …). Top-level router skills point to siblings.
+- `hooks/` — declarative event hooks (e.g. `stop.json` for end-of-turn sound).
+- `mcp/` — opt-in MCP server configs.
+- `assets/sounds/` — binary assets used by hooks via `${CLAUDE_PLUGIN_DIR}/assets/sounds/...`
+- `.claude-global/` — `CLAUDE.md`, `settings.json`, `.claudeignore` source-of-truth templates, copied into `~/.claude/` by `/setup-global-settings` and `/sync-globals`. This is the only directory whose contents are *copied* anywhere — everything else lives in place inside the plugin.
+- `docs/` — architecture, token budget, authoring conventions, per-project disable, ADRs.
+
+## Tuning toolkit
+
+| Command | Purpose |
+|---|---|
+| `/setup-global-settings` | Initial copy of plugin globals into `~/.claude/`. Idempotent. |
+| `/sync-globals` | Re-sync after `/plugin update`. |
+| `/show-globals` | Read-only diagnostic: identical / drifted / missing. |
+| `/configure` | Interactive editor for `~/.claude/settings.json`: model, permissions, env, hooks. |
 
 ## Model routing
 
@@ -41,12 +57,12 @@ Re-run either command at any time; both are idempotent and ask before overwritin
 - **Sonnet 4.6** — default working horse: code, review, troubleshooting, specialists.
 - **Opus 4.7** — architecture, hard trade-offs, `/challenge`, `/plan`.
 
-Routing lives in `global/settings.json` (default) and is overridden per-agent via `model:` frontmatter and per-command in the command file. See [docs/model-routing.md](docs/model-routing.md).
+The session default is set in `.claude-global/settings.json` (`claude-sonnet-4-6`). Agents and commands override via `model:` in their frontmatter.
 
 ## Adding new components
 
-See `templates/` and `docs/authoring-*.md`. One agent = one file. One skill = one file under 200 lines. No deep folder hierarchies inside a single component.
+See [docs/authoring.md](docs/authoring.md). One agent = one file. One skill = one `SKILL.md` under ~150 lines plus optional `resources/`. Description budgets per [docs/token-budget.md](docs/token-budget.md).
 
-## Why not a marketplace / plugins / profiles?
+## Why not a CLI installer / symlinks / multiple plugins?
 
-See [docs/adr/0001-symlink-over-marketplace.md](docs/adr/0001-symlink-over-marketplace.md) and [docs/adr/0002-wizard-over-profiles.md](docs/adr/0002-wizard-over-profiles.md).
+See [docs/adr/0001-marketplace-over-cli.md](docs/adr/0001-marketplace-over-cli.md) and [docs/adr/0002-single-plugin-over-split.md](docs/adr/0002-single-plugin-over-split.md).
