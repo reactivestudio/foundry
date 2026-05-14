@@ -32,8 +32,7 @@ The repository is a **Claude Code marketplace** that ships **one plugin, `bushin
 │  - hooks can reference assets via that var       │
 │                                                  │
 │  Slash-commands in the plugin operate on:        │
-│  /setup-global-settings, /sync-globals,          │
-│  /show-globals, /configure                       │
+│  /global-settings-setup, /global-settings-show   │
 │        │                                         │
 │        ▼  uses Read/Write/Bash/AskUserQuestion   │
 │  ┌──────────────────────────────────────┐        │
@@ -58,7 +57,7 @@ All plugin paths below are inside `bushin/`; `${CLAUDE_PLUGIN_ROOT}` resolves to
 - **Skill** (`bushin/skills/<name>/SKILL.md`) — one directory per skill, flat namespace with prefixed names (`kotlin`, `kotlin-coroutines`, …). Frontmatter: `name`, `description` (the trigger). Body kept under ~150 lines; heavy material lives in `skills/<name>/resources/*.md`, loaded by Claude on demand.
 - **Hook** (`bushin/hooks/hooks.json`) — declarative event → command(s). Commands may reference assets via `${CLAUDE_PLUGIN_ROOT}`.
 - **MCP fragment** (`bushin/mcp/<server>.json`) — opt-in MCP server configs. Phase 6.
-- **Globals templates** (`bushin/.claude-global/`) — `CLAUDE.md`, `settings.json`, `.claudeignore`. The **only** directory whose contents get *copied* anywhere — into `~/.claude/` by `/setup-global-settings`.
+- **Globals templates** (`bushin/.claude-global/`) — `CLAUDE.md`, `settings.json`, `.claudeignore`. The **only** directory whose contents get *copied* anywhere — into `~/.claude/` by `/global-settings-setup`.
 - **Sound asset** (`bushin/assets/sounds/...`) — referenced by hooks via `${CLAUDE_PLUGIN_ROOT}/assets/sounds/...`. Not copied.
 
 ## Two paths into `~/.claude/`
@@ -66,7 +65,7 @@ All plugin paths below are inside `bushin/`; `${CLAUDE_PLUGIN_ROOT}` resolves to
 Plugins do not touch `~/.claude/` directly. Two surfaces of the plugin do:
 
 1. **Auto-loaded by Claude Code** — agents, commands, skills, hooks, MCP. The plugin's files stay in place; Claude Code reads them where they are.
-2. **Copied by `/setup-global-settings` and `/sync-globals`** — `CLAUDE.md`, `settings.json`, `.claudeignore`. These are user-level memory/settings that Claude Code expects under `~/.claude/`. The plugin ships templates; the commands copy them with diff-prompting so the user never loses local edits.
+2. **Copied by `/global-settings-setup`** — `CLAUDE.md`, `settings.json`, `.claudeignore`. Plugin ships templates; the command copies them with diff-prompting + backup, and for `settings.json` does a structured merge that preserves the user's plugin-management keys (`extraKnownMarketplaces`, `enabledPlugins`, `disabledPlugins`). Idempotent — re-run after `/plugin update` to pick up new template defaults.
 
 ## Per-project disable
 

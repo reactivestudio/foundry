@@ -1,5 +1,5 @@
 ---
-name: setup-global-settings
+name: global-settings-setup
 description: "Copy plugin globals (CLAUDE.md, settings.json, .claudeignore) into ~/.claude/ with diff-prompt and backup. Idempotent."
 ---
 

@@ -17,13 +17,13 @@ Three approaches were tried before settling on the current model:
 
 ## Decision
 
-Use **Claude Code's native marketplace + plugin system**. The repository *is* a marketplace; the root *is* the single plugin `bushin`. Installation and updates are done via `/plugin marketplace add`, `/plugin install`, and `/plugin update`. User-level globals (`CLAUDE.md`, `settings.json`, `.claudeignore`) — which the plugin system does not manage directly — are handled by an in-plugin slash-command `/setup-global-settings` (see ADR 0003).
+Use **Claude Code's native marketplace + plugin system**. The repository *is* a marketplace; the root *is* the single plugin `bushin`. Installation and updates are done via `/plugin marketplace add`, `/plugin install`, and `/plugin update`. User-level globals (`CLAUDE.md`, `settings.json`, `.claudeignore`) — which the plugin system does not manage directly — are handled by an in-plugin slash-command `/global-settings-setup` (see ADR 0003).
 
 ## Rationale
 
 | Factor | Bash CLI + symlinks | Manual copy | Native marketplace (chosen) |
 |---|---|---|---|
-| First-run UX on a new machine | `git clone` + `bin/claude-global` + `bin/claude-init` | clone + manual file copies | `/plugin marketplace add` + `/plugin install` + `/setup-global-settings` |
+| First-run UX on a new machine | `git clone` + `bin/claude-global` + `bin/claude-init` | clone + manual file copies | `/plugin marketplace add` + `/plugin install` + `/global-settings-setup` |
 | Auto-discovery of agents/commands/skills/hooks | symlink each into `~/.claude/...` | copy each | **built in** — Claude Code reads plugin directory directly |
 | Update flow | `git pull` (instant via symlinks) | re-copy manually | `/plugin update` |
 | Sharability | clone the repo + run scripts | manually copy | `/plugin marketplace add <repo-url>` works for anyone |
@@ -37,7 +37,7 @@ The native mechanism removes every custom moving part: no CLI, no symlinks, no s
 ## Consequences
 
 - The repository's root directory layout is fixed by Claude Code conventions (`.claude-plugin/`, `agents/`, `commands/`, `skills/`, `hooks/`, `mcp/`, `assets/`).
-- User-level globals (`~/.claude/CLAUDE.md`, `~/.claude/settings.json`, `~/.claude/.claudeignore`) are **not** auto-managed by plugin install. They are handled by the plugin's own `/setup-global-settings` and `/sync-globals` slash-commands, which copy from `.claude-global/` into `~/.claude/` with diff-prompt + backup.
+- User-level globals (`~/.claude/CLAUDE.md`, `~/.claude/settings.json`, `~/.claude/.claudeignore`) are **not** auto-managed by plugin install. They are handled by the plugin's own `/global-settings-setup` slash-command, which copies from `.claude-global/` into `~/.claude/` with diff-prompt + backup (structured merge for `settings.json` so plugin-management keys are preserved).
 - Lock-in to Claude Code's plugin schema. If the schema changes incompatibly, manifests must be migrated. This is a small surface (two JSON files).
 
 ## Reconsider when

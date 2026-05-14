@@ -1,5 +1,5 @@
 ---
-name: show-globals
+name: global-settings-show
 description: "Read-only diagnostic: status of ~/.claude/ globals vs plugin sources. Lists managed/drifted/user-only files."
 ---
 
@@ -31,7 +31,7 @@ Also report the backup directory state:
 ## Output format
 
 ```
-Globals status (from /show-globals)
+Globals status (from /global-settings-show)
 Plugin: <CLAUDE_PLUGIN_ROOT>
 Target: ~/.claude/
 
@@ -45,7 +45,7 @@ Backups: <N> backup run(s); latest: <path or "none">
 Drift preview (first 20 lines):
 <short diffs>
 
-Tip: run /sync-globals to bring drifted files in line with the plugin (with diff-prompt and backup).
+Tip: run /global-settings-setup to bring drifted files in line with the plugin (with diff-prompt and backup; idempotent on identical files).
 ```
 
 This command is purely informational. It does not write, move, or back up anything.

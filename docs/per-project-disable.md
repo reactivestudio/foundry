@@ -46,7 +46,7 @@ Then in each project where you want it active, add an `enabledPlugins` override 
 
 ## What persists when disabled
 
-- `~/.claude/CLAUDE.md` — unaffected. It is a user-level file copied by `/setup-global-settings`, not auto-managed by the plugin.
+- `~/.claude/CLAUDE.md` — unaffected. It is a user-level file copied by `/global-settings-setup`, not auto-managed by the plugin.
 - `~/.claude/settings.json` — unaffected. Same.
 - The plugin's `agents/`, `commands/`, `skills/`, `hooks/` — **not active** in this project. They re-appear if the plugin is re-enabled.
 
