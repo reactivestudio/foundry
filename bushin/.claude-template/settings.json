@@ -45,8 +45,8 @@
       "Bash(rm -rf /*)",
       "Bash(git push --force:*)",
       "Bash(git reset --hard:*)",
-      "Bash(curl:* | sh)",
-      "Bash(curl:* | bash)"
+      "Bash(curl * | sh)",
+      "Bash(curl * | bash)"
     ]
   }
 }
