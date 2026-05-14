@@ -15,7 +15,7 @@ On a new machine:
 
 ```
 > /plugin marketplace add <repo-url-or-local-path>
-> /plugin install bushin-skills@bushin
+> /plugin install bushin-skills@reactivestudio
 > /setup-global-settings
 ```
 
@@ -28,7 +28,7 @@ Updates:
 > /sync-globals           # bring ~/.claude/ in line with refreshed plugin templates
 ```
 
-Per-project disable: use Claude Code's native `/plugin disable bushin-skills@bushin` from inside the project, or edit `<project>/.claude/settings.json`. See [docs/per-project-disable.md](docs/per-project-disable.md).
+Per-project disable: use Claude Code's native `/plugin disable bushin-skills@reactivestudio` from inside the project, or edit `<project>/.claude/settings.json`. See [docs/per-project-disable.md](docs/per-project-disable.md).
 
 ## What's inside
 

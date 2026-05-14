@@ -65,7 +65,7 @@ Plugins do not touch `~/.claude/` directly. Two surfaces of the plugin do:
 
 ## Per-project disable
 
-Native Claude Code feature — no custom code required. To disable `bushin-skills` in a specific project, use `/plugin disable bushin-skills@bushin` from inside that project, or add the equivalent key to `<project>/.claude/settings.json`. See `per-project-disable.md` for the exact key once verified.
+Native Claude Code feature — no custom code required. To disable `bushin-skills` in a specific project, use `/plugin disable bushin-skills@reactivestudio` from inside that project, or add the equivalent key to `<project>/.claude/settings.json`. See `per-project-disable.md` for the exact key once verified.
 
 ## Token economy
 

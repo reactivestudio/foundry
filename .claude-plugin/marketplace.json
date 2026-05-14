@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "bushin-skills",
+  "name": "reactivestudio",
   "description": "Personal Claude Code marketplace for a Kotlin / Spring Boot engineer.",
   "owner": { "name": "Dmitriy Bushin" },
   "plugins": [
