@@ -17,7 +17,7 @@ Three approaches were tried before settling on the current model:
 
 ## Decision
 
-Use **Claude Code's native marketplace + plugin system**. The repository *is* a marketplace; the root *is* the single plugin `bushin-skills`. Installation and updates are done via `/plugin marketplace add`, `/plugin install`, and `/plugin update`. User-level globals (`CLAUDE.md`, `settings.json`, `.claudeignore`) — which the plugin system does not manage directly — are handled by an in-plugin slash-command `/setup-global-settings` (see ADR 0003).
+Use **Claude Code's native marketplace + plugin system**. The repository *is* a marketplace; the root *is* the single plugin `bushin`. Installation and updates are done via `/plugin marketplace add`, `/plugin install`, and `/plugin update`. User-level globals (`CLAUDE.md`, `settings.json`, `.claudeignore`) — which the plugin system does not manage directly — are handled by an in-plugin slash-command `/setup-global-settings` (see ADR 0003).
 
 ## Rationale
 

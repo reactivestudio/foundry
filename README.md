@@ -1,6 +1,6 @@
-# bushin-skills
+# bushin
 
-Personal Claude Code marketplace shipping a single plugin `bushin-skills` for a solo Kotlin / Spring Boot engineer. Installed natively via `/plugin install`; updated via `/plugin update`.
+Personal Claude Code marketplace shipping a single plugin `bushin` for a solo Kotlin / Spring Boot engineer. Installed natively via `/plugin install`; updated via `/plugin update`.
 
 ## Philosophy
 
@@ -15,7 +15,7 @@ On a new machine:
 
 ```
 > /plugin marketplace add <repo-url-or-local-path>
-> /plugin install bushin-skills@reactivestudio
+> /plugin install bushin@reactivestudio
 > /setup-global-settings
 ```
 
@@ -28,17 +28,17 @@ Updates:
 > /sync-globals           # bring ~/.claude/ in line with refreshed plugin templates
 ```
 
-Per-project disable: use Claude Code's native `/plugin disable bushin-skills@reactivestudio` from inside the project, or edit `<project>/.claude/settings.json`. See [docs/per-project-disable.md](docs/per-project-disable.md).
+Per-project disable: use Claude Code's native `/plugin disable bushin@reactivestudio` from inside the project, or edit `<project>/.claude/settings.json`. See [docs/per-project-disable.md](docs/per-project-disable.md).
 
 ## What's inside
 
 - `.claude-plugin/marketplace.json` — marketplace catalog at the repo root.
-- `bushin-skills/` — the plugin itself (Claude Code's `${CLAUDE_PLUGIN_ROOT}` resolves here once installed):
+- `bushin/` — the plugin itself (Claude Code's `${CLAUDE_PLUGIN_ROOT}` resolves here once installed):
   - `.claude-plugin/plugin.json` — plugin manifest.
   - `agents/` — 10–15 agent definitions (architect, code-reviewer, security-reviewer, troubleshooter, specialists).
   - `commands/` — meta-commands (`/challenge`, `/plan`, `/explain`, `/postmortem`, `/review`) and tuning commands (`/setup-global-settings`, `/sync-globals`, `/show-globals`, `/configure`).
   - `skills/` — 50–80 skill directories, flat namespace, prefixed names (`kotlin`, `kotlin-coroutines`, `spring`, `spring-aop`, …). Top-level router skills point to siblings.
-  - `hooks/` — declarative event hooks (e.g. `stop.json` for end-of-turn sound).
+  - `hooks/` — declarative event hooks (e.g. `hooks.json` with a `Stop` event for end-of-turn sound).
   - `mcp/` — opt-in MCP server configs.
   - `assets/sounds/` — binary assets used by hooks via `${CLAUDE_PLUGIN_ROOT}/assets/sounds/...`
   - `.claude-global/` — `CLAUDE.md`, `settings.json`, `.claudeignore` source-of-truth templates, copied into `~/.claude/` by `/setup-global-settings` and `/sync-globals`. The only directory whose contents are *copied* anywhere.

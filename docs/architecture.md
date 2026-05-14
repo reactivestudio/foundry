@@ -2,7 +2,7 @@
 
 ## Mental model
 
-The repository is a **Claude Code marketplace** that ships **one plugin, `bushin-skills`**, containing all agents, commands, skills, hooks, MCP integrations and assets a solo Kotlin/Spring Boot engineer needs.
+The repository is a **Claude Code marketplace** that ships **one plugin, `bushin`**, containing all agents, commands, skills, hooks, MCP integrations and assets a solo Kotlin/Spring Boot engineer needs.
 
 ```
 ┌──────────────────────────────────────────────────┐
@@ -12,7 +12,7 @@ The repository is a **Claude Code marketplace** that ships **one plugin, `bushin
 │  docs/                                           │
 │  README.md                                       │
 │                                                  │
-│  bushin-skills/  (the plugin)                    │
+│  bushin/  (the plugin)                           │
 │    .claude-plugin/plugin.json                    │
 │    .claude-global/  ← copied into ~/.claude/     │
 │    agents/   commands/   skills/                 │
@@ -20,7 +20,7 @@ The repository is a **Claude Code marketplace** that ships **one plugin, `bushin
 │    assets/sounds/   ← referenced by hooks        │
 └────────────────────┬─────────────────────────────┘
                      │
-   /plugin marketplace add  /  install bushin-skills
+   /plugin marketplace add  /  install bushin
                      │
                      ▼
 ┌──────────────────────────────────────────────────┐
@@ -49,17 +49,17 @@ The repository is a **Claude Code marketplace** that ships **one plugin, `bushin
 
 ## Component contract
 
-All plugin paths below are inside `bushin-skills/`; `${CLAUDE_PLUGIN_ROOT}` resolves to that directory after `/plugin install`.
+All plugin paths below are inside `bushin/`; `${CLAUDE_PLUGIN_ROOT}` resolves to that directory after `/plugin install`.
 
-- **Marketplace manifest** (`.claude-plugin/marketplace.json`) — top-level descriptor listing the plugin(s) shipped from this repo. Source field is a relative path `./bushin-skills` per Claude Code's plugin-marketplace schema. Single source for `/plugin marketplace add <repo>`.
-- **Plugin manifest** (`bushin-skills/.claude-plugin/plugin.json`) — name, version, description, author, keywords. Claude Code reads this on install.
-- **Agent** (`bushin-skills/agents/<name>.md`) — one file. Frontmatter: `name`, `description`, optional `model` (defaults to current session's), optional `tools` (defaults to all). Body: role, scope of decisions, output format.
-- **Command** (`bushin-skills/commands/<name>.md`) — one file. Triggered by `/<name>`. Body is a prompt for Claude — at runtime Claude executes it using its available tools.
-- **Skill** (`bushin-skills/skills/<name>/SKILL.md`) — one directory per skill, flat namespace with prefixed names (`kotlin`, `kotlin-coroutines`, …). Frontmatter: `name`, `description` (the trigger). Body kept under ~150 lines; heavy material lives in `skills/<name>/resources/*.md`, loaded by Claude on demand.
-- **Hook** (`bushin-skills/hooks/<event>.json`) — declarative event → command(s). Commands may reference assets via `${CLAUDE_PLUGIN_ROOT}`.
-- **MCP fragment** (`bushin-skills/mcp/<server>.json`) — opt-in MCP server configs. Phase 6.
-- **Globals templates** (`bushin-skills/.claude-global/`) — `CLAUDE.md`, `settings.json`, `.claudeignore`. The **only** directory whose contents get *copied* anywhere — into `~/.claude/` by `/setup-global-settings`.
-- **Sound asset** (`bushin-skills/assets/sounds/...`) — referenced by hooks via `${CLAUDE_PLUGIN_ROOT}/assets/sounds/...`. Not copied.
+- **Marketplace manifest** (`.claude-plugin/marketplace.json`) — top-level descriptor listing the plugin(s) shipped from this repo. Source field is a relative path `./bushin` per Claude Code's plugin-marketplace schema. Single source for `/plugin marketplace add <repo>`.
+- **Plugin manifest** (`bushin/.claude-plugin/plugin.json`) — name, version, description, author, keywords. Claude Code reads this on install.
+- **Agent** (`bushin/agents/<name>.md`) — one file. Frontmatter: `name`, `description`, optional `model` (defaults to current session's), optional `tools` (defaults to all). Body: role, scope of decisions, output format.
+- **Command** (`bushin/commands/<name>.md`) — one file. Triggered by `/<name>`. Body is a prompt for Claude — at runtime Claude executes it using its available tools.
+- **Skill** (`bushin/skills/<name>/SKILL.md`) — one directory per skill, flat namespace with prefixed names (`kotlin`, `kotlin-coroutines`, …). Frontmatter: `name`, `description` (the trigger). Body kept under ~150 lines; heavy material lives in `skills/<name>/resources/*.md`, loaded by Claude on demand.
+- **Hook** (`bushin/hooks/hooks.json`) — declarative event → command(s). Commands may reference assets via `${CLAUDE_PLUGIN_ROOT}`.
+- **MCP fragment** (`bushin/mcp/<server>.json`) — opt-in MCP server configs. Phase 6.
+- **Globals templates** (`bushin/.claude-global/`) — `CLAUDE.md`, `settings.json`, `.claudeignore`. The **only** directory whose contents get *copied* anywhere — into `~/.claude/` by `/setup-global-settings`.
+- **Sound asset** (`bushin/assets/sounds/...`) — referenced by hooks via `${CLAUDE_PLUGIN_ROOT}/assets/sounds/...`. Not copied.
 
 ## Two paths into `~/.claude/`
 
@@ -70,7 +70,7 @@ Plugins do not touch `~/.claude/` directly. Two surfaces of the plugin do:
 
 ## Per-project disable
 
-Native Claude Code feature — no custom code required. To disable `bushin-skills` in a specific project, use `/plugin disable bushin-skills@reactivestudio` from inside that project, or add the equivalent key to `<project>/.claude/settings.json`. See `per-project-disable.md` for the exact key once verified.
+Native Claude Code feature — no custom code required. To disable `bushin` in a specific project, use `/plugin disable bushin@reactivestudio` from inside that project, or add the equivalent key to `<project>/.claude/settings.json`. See `per-project-disable.md` for the exact key once verified.
 
 ## Token economy
 
