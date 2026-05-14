@@ -7,11 +7,9 @@ description: "Adversarial Q&A to stress-test plan/design, one question at a time
 
 Interrogate the user about a plan or design until you reach shared understanding. Walk down each branch of the decision tree, resolving dependencies one-by-one. The goal is to find weak assumptions before they become weak code.
 
-_Adapted from Matt Pocock's [`grill-me`](https://github.com/mattpocock/skills/blob/main/skills/productivity/grill-me/SKILL.md) skill._
-
 ## When to use
 
-- User says "grill me", "interview me", "stress-test this plan", "challenge my design".
+- User says "interview me", "stress-test this plan", "challenge my design".
 - Plan mode in progress and you sense unresolved tradeoffs the user hasn't named.
 - Design review on a fresh spec — before any code is written.
 
