@@ -1,6 +1,7 @@
 ---
 name: setup
 description: "Seed <project>/.claude/ with bushin templates (CLAUDE.md, settings.json) + gitignore the dir. Idempotent. NOT for ~/.claude/."
+allowed-tools: Read Write Edit Bash(git rev-parse:*) Bash(mkdir:*) Bash(cmp:*) Bash(diff:*) Bash(grep:*) Bash(cat:*) Bash(echo:*) Bash(test:*) Bash(printf:*) Bash(pwd)
 ---
 
 Set up bushin plugin templates in the **current project's** `.claude/` directory. This command never touches `~/.claude/` — your global settings remain user-managed.
