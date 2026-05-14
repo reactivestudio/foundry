@@ -1,6 +1,6 @@
 ---
 name: clarifying-questions
-description: "Ask N targeted questions before coding when spec is ambiguous. NOT for clear trivial tasks."
+description: "Ask N targeted questions before coding when spec is vague/unscoped. NOT for trivial fixes."
 ---
 
 # Clarifying Questions

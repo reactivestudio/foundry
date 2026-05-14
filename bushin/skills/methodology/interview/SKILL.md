@@ -1,6 +1,6 @@
 ---
 name: interview
-description: "Adversarial Q&A to stress-test plan/design, one question at a time. NOT for shipping code."
+description: "Interview / stress-test plan or design with one-question-at-a-time Q&A. NOT for shipping code."
 ---
 
 # Interview

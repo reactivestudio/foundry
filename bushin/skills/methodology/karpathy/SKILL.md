@@ -1,6 +1,6 @@
 ---
 name: karpathy
-description: "LLM coding behavior: think, simplify, surgical changes, verifiable goals. NOT a debug guide."
+description: "Apply to all coding tasks: think, simplify, surgical changes, verify. NOT for debug or design Q&A."
 ---
 
 # Karpathy Guidelines
