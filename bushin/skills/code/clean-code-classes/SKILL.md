@@ -5,7 +5,7 @@ description: "Class design: size, cohesion, layout, when to split. NOT for SOLID
 
 # Clean Code — Classes
 
-A class is a noun in the system's story. Most long-lived codebases get painful at the class level — files that grew one method at a time, weasel-suffixed aggregations, anaemic data holders next to procedural services. This skill is the discipline for **class shape and size** — when to split, what belongs together, how much to expose. SOLID at principle scope (SRP/OCP/LSP/ISP/DIP) is covered separately in `solid/`.
+A class is a noun in the system's story. Most long-lived codebases get painful at the class level — files that grew one method at a time, weasel-suffixed aggregations, anaemic data holders next to procedural services. This skill is the discipline for **class shape and size** — when to split, what belongs together, how much to expose. SOLID at principle scope (SRP/OCP/LSP/ISP/DIP) is covered separately in `architecture/application/solid/`.
 
 ## When to use
 
@@ -20,7 +20,7 @@ A class is a noun in the system's story. Most long-lived codebases get painful a
 ## When NOT to use
 
 - The task is **inside a function** — defer to `code/clean-code-functions` (future skill).
-- SOLID-specific violations at principle scope — see `code/solid/`.
+- SOLID-specific violations at principle scope — see `architecture/application/solid/`.
 - The shape is framework-enforced (`@Entity`, gRPC stub, Jackson DTO) — accept the shape and isolate it.
 - The class is a one-line value wrapper or a generated class.
 - Cross-module / cross-context design — see `architecture/`.
@@ -104,4 +104,4 @@ Ten condensed. Full WHY in `resources/theory.md`.
 
 ## Source
 
-Adapted from R. C. Martin, *Clean Code*, ch. 10 "Classes". SOLID at principle scope (SRP/OCP/LSP/ISP/DIP) is covered in `code/solid/`. Stack-specific class shaping (Kotlin / Spring / JPA / DDD) deferred to skills in those categories.
+Adapted from R. C. Martin, *Clean Code*, ch. 10 "Classes". SOLID at principle scope (SRP/OCP/LSP/ISP/DIP) is covered in `architecture/application/solid/`. Stack-specific class shaping (Kotlin / Spring / JPA / DDD) deferred to skills in those categories.
