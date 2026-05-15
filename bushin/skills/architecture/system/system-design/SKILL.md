@@ -50,9 +50,9 @@ Each speculative shard / split / cache taxes every future read and write — ano
 
 ## Review output
 
-Three sections — the second is what separates careful review from naive review:
+**Before analysis, surface missing requirements** the design silently assumes (regional vs global? real p99 target? is consistency actually needed, or someone's instinct?). Otherwise the review chases ghosts. Then three sections — the second is what separates careful review from naive review:
 
-1. **Findings** — concrete gaps. NFRs without numbers; missing arithmetic; named bottlenecks; sync chains; missing idempotency on retried ops; hot-partition risk.
+1. **Findings** — concrete gaps. NFRs without numbers; missing arithmetic; named bottlenecks; sync chains; **at-least-once delivery (queue/Kafka) terminating in a state mutation (DB write, ZADD, counter) without an idempotency check**; hot-partition risk.
 2. **Non-findings** — what *looks* wrong but isn't. Always check: eventual consistency on a display path; 1-hour cache TTL on tolerable-staleness data; single-region for a 99.9% SLO; monolith for a small team.
 3. **Refactor sketch** — minimal change to address findings. Don't replatform.
 
@@ -60,9 +60,9 @@ Three sections — the second is what separates careful review from naive review
 
 - No capacity numbers — it's a vibe, not a design.
 - "We need microservices" stated as a goal (not derived from NFRs).
-- Strong consistency by default everywhere; cache with no staleness budget.
+- Strong consistency by default; cache with no staleness budget; "strong + multi-region + low latency" claimed together (CAP — pick two).
 - Synchronous chains 5 services deep — latency stacks; one slow dep takes them all.
-- "Exactly-once delivery" claimed, or retried ops without an idempotency key — both silent-duplicate traps.
+- "Exactly-once delivery" claimed, or queue/Kafka → state mutation without an idempotency key — both silent-duplicate traps.
 
 ## FAANG interview rubric
 
