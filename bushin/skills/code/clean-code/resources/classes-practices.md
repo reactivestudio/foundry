@@ -1,6 +1,6 @@
-# Clean Code — Classes Practices
+# Classes — bad/best examples
 
-Bad/best examples organised by topic. For the high-level checklist, see `../SKILL.md`.
+For the checklist, see `classes.md`. For the cadence rules, see `../SKILL.md`.
 
 Examples use plain Kotlin syntax — no language-specific idioms (no coroutines, sealed hierarchies, scope functions, extensions). Stack-specific class shapes live in `kotlin/`, `framework/`, `ddd/` skills.
 

@@ -1,25 +1,6 @@
----
-name: clean-code-classes
-description: "Use for any class review or split — size, cohesion, 25-word test. NOT for SOLID/functions."
----
+# Classes — size, cohesion, when to split
 
-# Clean Code — Classes
-
-Mechanical procedures for sizing and splitting classes. The value is in applying them consistently, not in their philosophy.
-
-## When to use
-
-- A class name ends in `Manager`, `Helper`, `Util`, `Processor`, `Super`, or bare `Service`.
-- A class has 20+ instance variables, 70+ public methods, or 500+ lines.
-- Private methods are called only by a subset of public methods — a class is trying to escape.
-- Reviewing a class for design, or auditing a module before merging.
-
-## When NOT to use
-
-- Task is **inside a function** → `code/clean-code-functions`.
-- SOLID at principle scope → `architecture/application/solid/`.
-- Framework-enforced shape (`@Entity`, gRPC stub, DTO) — accept the shape, isolate it.
-- Naming alone → `code/clean-code-naming`.
+Mechanical procedures for sizing and splitting classes. The value is in applying them consistently, not in their philosophy. For worked bad/best examples, see `classes-practices.md`.
 
 ## Output template — when reviewing a class
 
@@ -81,11 +62,3 @@ The vague name is the *result* of a vague concern — fix the concern, not the n
 5. **Rename** — extracted class shouldn't end in `Manager` / `Helper`.
 
 *Never change behaviour and structure in the same step.* Stop when each class passes the 25-word test — not when files are short.
-
-## Practices
-
-`resources/practices.md` — worked end-to-end review (`OrderService`) plus bad/best examples for the rules above.
-
-## Source
-
-R. C. Martin, *Clean Code*, ch. 10. SOLID at principle scope: `architecture/application/solid/`.
