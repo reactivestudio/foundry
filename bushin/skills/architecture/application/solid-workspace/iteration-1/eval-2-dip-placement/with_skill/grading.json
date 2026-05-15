@@ -1,0 +1,12 @@
+{
+  "eval_id": 2,
+  "config": "with_skill",
+  "score": "5/5",
+  "expectations": [
+    {"text": "Invokes DIP explicitly", "passed": true, "evidence": "\"The principle in play is DIP — Dependency Inversion\""},
+    {"text": "States that the domain (service) must not name PostgresClient directly", "passed": true, "evidence": "\"the service ... must depend only on stable abstractions. The moment PostgresClient(...) appears there, the service imports a volatile concrete\""},
+    {"text": "Distinguishes domain-owned interface from infrastructure implementation", "passed": true, "evidence": "Cites ReportGateway from the skill's example; repository as implementation of a domain-owned gateway interface"},
+    {"text": "Places new PostgresClient(...) at the composition root (Spring: @Configuration / @Bean)", "passed": true, "evidence": "\"A @Bean method that returns a PostgresClient ... is Spring's idiomatic composition root\""},
+    {"text": "Mentions 'crossing the curve' or directional inversion", "passed": true, "evidence": "\"crossing the curve... Source-code dependencies from the service and the repository point inward toward the stable ReportGateway interface; control flows outward at runtime ... That opposition is the inversion.\""}
+  ]
+}

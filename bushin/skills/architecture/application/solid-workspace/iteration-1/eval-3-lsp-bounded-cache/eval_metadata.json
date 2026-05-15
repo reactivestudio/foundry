@@ -1,0 +1,12 @@
+{
+  "eval_id": 3,
+  "eval_name": "lsp-bounded-cache",
+  "prompt": "I have a Cache interface with get(key): T and put(key, value): Unit. My BoundedCache implementation throws IllegalStateException from put() when the cache is full instead of evicting. Is this a SOLID violation, and if so which one?",
+  "rubric": [
+    "Identifies LSP violation",
+    "Explains precondition-strengthening: BoundedCache adds a precondition (cache not full) that Cache callers don't expect",
+    "Mentions that callers would need `instanceof`/`is BoundedCache` branches — the smell LSP prevents",
+    "Suggests fixing by either making put's contract explicit (return bool / evicted entry / documented eviction) OR splitting interfaces (Cache vs BoundedCache with different put semantics) per ISP",
+    "Does NOT claim this is purely an SRP or OCP problem"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "eval_id": 3,
+  "config": "without_skill",
+  "score": "4/5",
+  "expectations": [
+    {"text": "Identifies LSP violation", "passed": true, "evidence": "\"yes, this is a SOLID violation — specifically the Liskov Substitution Principle\""},
+    {"text": "Explains precondition-strengthening / postcondition-weakening", "passed": true, "evidence": "\"strengthened the preconditions ('only call when not full') and broadened the thrown exceptions beyond what the supertype promises\""},
+    {"text": "Mentions callers would need `instanceof`/`is BoundedCache` branches", "passed": false, "evidence": "Shows a forEach example that would blow up, but does not articulate the 'callers must branch on type' smell that LSP exists to prevent"},
+    {"text": "Suggests fixing by making put's contract explicit OR splitting interfaces per ISP", "passed": true, "evidence": "Three fixes: evict (recommended), change contract to PutResult, separate interface (RejectingStore)"},
+    {"text": "Does NOT claim this is purely SRP or OCP", "passed": true, "evidence": "Explicitly rules out: \"it is not SRP (one responsibility — caching) and not ISP\""}
+  ]
+}

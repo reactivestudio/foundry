@@ -1,0 +1,12 @@
+{
+  "eval_id": 2,
+  "eval_name": "dip-postgres-placement",
+  "prompt": "Where should `PostgresClient(...)` actually be constructed in a Spring application — inside the service class, inside the repository class, inside a @Configuration class, or somewhere else? Explain via dependency rules.",
+  "rubric": [
+    "Invokes DIP explicitly",
+    "States that the domain (service) must not name PostgresClient directly",
+    "Distinguishes domain-owned interface (e.g., ReportGateway / repository abstraction) from infrastructure implementation",
+    "Places `new PostgresClient(...)` at the composition root (in Spring: @Configuration / @Bean method)",
+    "Mentions 'crossing the curve' or the directional inversion (source-code deps cross toward abstraction; control flow crosses back at runtime)"
+  ]
+}

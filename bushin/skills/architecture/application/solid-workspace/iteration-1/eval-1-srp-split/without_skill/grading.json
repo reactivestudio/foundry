@@ -1,0 +1,12 @@
+{
+  "eval_id": 1,
+  "config": "without_skill",
+  "score": "3/5",
+  "expectations": [
+    {"text": "Names SRP and frames it as 'one actor' (not 'one reason to change')", "passed": false, "evidence": "Uses the older 'one reason to change' formulation that the skill explicitly warns against: \"SRP (Martin's formulation) says a module should have one reason to change\""},
+    {"text": "Identifies the distinct actors (5 stakeholder groups)", "passed": true, "evidence": "Table: Finance / Marketing / Warehouse / DBA / Accounting"},
+    {"text": "Proposes concrete split into OrderTotalCalculator / InventoryUpdater / ConfirmationNotifier / OrderRepository / InvoicePresenter", "passed": true, "evidence": "PricingCalculator, OrderRepository, InventoryService, OrderNotifier, InvoiceRenderer — close match"},
+    {"text": "Mentions accidental-duplication or merge-hotspot risk", "passed": false, "evidence": "Mentions 'merge conflicts' generically but does not name the accidental-duplication trap (shared helper drifting between actors)"},
+    {"text": "Mentions Facade as optional preservation of a single entry point", "passed": false, "evidence": "Keeps OrderService as a thin orchestrator — a different pattern, no Facade mentioned"}
+  ]
+}

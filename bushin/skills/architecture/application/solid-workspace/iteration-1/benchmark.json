@@ -1,0 +1,33 @@
+{
+  "skill_name": "solid",
+  "iteration": 1,
+  "configurations": [
+    {
+      "name": "with_skill",
+      "pass_rate": 1.0,
+      "mean_tokens": 25069,
+      "mean_duration_ms": 39237,
+      "evals": [
+        {"id": 1, "score": "5/5", "passed": 5, "total": 5, "tokens": 27063, "duration_ms": 45536},
+        {"id": 2, "score": "5/5", "passed": 5, "total": 5, "tokens": 23582, "duration_ms": 35564},
+        {"id": 3, "score": "5/5", "passed": 5, "total": 5, "tokens": 24562, "duration_ms": 36612}
+      ]
+    },
+    {
+      "name": "without_skill",
+      "pass_rate": 0.767,
+      "mean_tokens": 20097,
+      "mean_duration_ms": 31764,
+      "evals": [
+        {"id": 1, "score": "3/5", "passed": 3, "total": 5, "tokens": 20203, "duration_ms": 36438},
+        {"id": 2, "score": "4.5/5", "passed": 4.5, "total": 5, "tokens": 20052, "duration_ms": 28734},
+        {"id": 3, "score": "4/5", "passed": 4, "total": 5, "tokens": 20037, "duration_ms": 30119}
+      ]
+    }
+  ],
+  "delta": {
+    "pass_rate": "+0.233",
+    "tokens": "+24.7%",
+    "duration_ms": "+23.5%"
+  }
+}
