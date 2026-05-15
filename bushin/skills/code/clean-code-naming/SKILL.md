@@ -1,16 +1,16 @@
 ---
-name: naming
+name: clean-code-naming
 description: "Variable/function/class naming: intent-revealing, no noise, no puns. NOT for docs/UX copy."
 ---
 
-# Naming
+# Clean Code — Naming
 
 Names are how code talks to the next reader — often you, three months later. A name that needs a comment to be understood has already failed.
 
 ## When to use
 
-- Creating a new variable / function / class / file.
-- Reviewing or refactoring existing names.
+- Creating a name for a variable, argument, function, class, file, package, or directory.
+- Reviewing or refactoring existing names in PR or pre-commit.
 - Renaming during a refactor.
 
 ## Core rules
@@ -19,11 +19,11 @@ Names are how code talks to the next reader — often you, three months later. A
 
 2. **No disinformation.** Don't claim a type the value doesn't have — `accountList` that isn't a `List` should be `accounts`. Avoid abbreviations already owned by something else (`hp`, `aix`, `sco`). Ban `l` and `O` as identifiers — they look like `1` and `0`. Two names differing by one inner word (`...HandlingOfStrings` vs `...StorageOfStrings`) will hide bugs in autocomplete.
 
-3. **Make meaningful distinctions.** No number series (`a1`, `a2`). No noise suffixes — `Info`, `Data`, `Object`, `Variable`; if removing them changes nothing, they don't belong. `getActiveAccount()` / `getActiveAccounts()` / `getActiveAccountInfo()` is a trap — the caller can't choose.
+3. **Make meaningful distinctions.** No number series — `copyChars(a1, a2)` misses the chance to encode role, prefer `copyChars(source, destination)`. No noise suffixes — `Info`, `Data`, `Object`, `Variable`; if removing them changes nothing, they don't belong. `getActiveAccount()` / `getActiveAccounts()` / `getActiveAccountInfo()` is a trap — the caller can't choose. Don't misspell to dodge a keyword (`klass` for `class`) — pick a different concept-level name instead.
 
 4. **Pronounceable.** Programming is a social activity — names get said aloud in reviews. `genymdhms` → `generationTimestamp`. If you'd sound silly pronouncing it, rename.
 
-5. **Searchable. Length tracks scope.** Wide-scope variables and constants must be greppable: `7` → `MAX_CLASSES_PER_STUDENT`. Single letters and bare magic numbers are tolerated only inside a tight loop body.
+5. **Searchable. Length tracks scope.** Wide-scope variables and constants must be greppable: `7` → `MAX_CLASSES_PER_STUDENT`. Single letters and bare magic numbers are tolerated only inside a tight loop body. The worst single-letter choice is `e` — it's the most common letter in English, so it grep-matches every comment and string in the codebase.
 
 6. **No encodings.** No Hungarian (`phoneString` for a `PhoneNumber`). No field prefixes (`m_dsc`, `_field`). Leave interfaces unadorned (`ShapeFactory`, not `IShapeFactory`); if you must encode anything, mark the implementation (`ShapeFactoryImpl`).
 
@@ -51,6 +51,11 @@ Names are how code talks to the next reader — often you, three months later. A
 - **Group related variables into a class.** Standalone `state` is opaque; bundle `firstName`, `lastName`, `street`, `state` into an `Address` — the compiler then carries the context for you.
 - **Prefixes only as fallback.** `addrState` works if a class isn't justified, but a class is almost always better.
 - **No gratuitous prefix-spam.** Don't tag every class with `GSD…`. Differentiate only when types actually collide: `PostalAddress`, `MacAddress`, `WebAddress`.
+- **Side-effect of context:** once shared variables move into a class, the original function tends to shrink — handle the shrinking under function-design, not here.
+
+## Renaming
+
+Don't fear it. Readers don't memorize names — modern tooling makes the change cheap and atomic. A rename surprises someone exactly the way any improvement does; pay that cost and move on.
 
 ## Examples
 
