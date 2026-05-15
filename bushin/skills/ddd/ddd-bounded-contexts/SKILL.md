@@ -1,5 +1,5 @@
 ---
-name: bounded-contexts
+name: ddd-bounded-contexts
 description: "Design bounded contexts and integrations: language, splits, ACL/OHS/Conformist. NOT for aggregates."
 ---
 
