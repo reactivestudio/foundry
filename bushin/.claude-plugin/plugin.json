@@ -5,6 +5,16 @@
   "author": { "name": "Dmitriy Bushin" },
   "keywords": ["kotlin", "spring-boot", "ddd", "testing", "architecture"],
   "skills": [
-    "./skills/methodology/"
+    "./skills/methodology/",
+    "./skills/architecture/",
+    "./skills/code/",
+    "./skills/database/",
+    "./skills/diagnostic/",
+    "./skills/framework/",
+    "./skills/messaging/",
+    "./skills/observability/",
+    "./skills/performance/",
+    "./skills/qa/",
+    "./skills/verification/"
   ]
 }
