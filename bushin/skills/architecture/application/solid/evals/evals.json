@@ -18,6 +18,54 @@
       "prompt": "I have a Cache interface with get(key): T and put(key, value): Unit. My BoundedCache implementation throws IllegalStateException from put() when the cache is full instead of evicting. Is this a SOLID violation, and if so which one?",
       "expected_output": "Identifies LSP violation: BoundedCache strengthens the precondition of put() (callers must additionally guarantee the cache isn't full), so it's not a behavioral substitute for Cache. Callers would need `if (cache is BoundedCache)` branches — exactly the smell LSP prevents. Suggests either making the contract explicit (put returns a boolean / evicted entry, or contract documents eviction behavior) or splitting into two interfaces (Cache vs BoundedCache with put-with-rejection semantics) per ISP.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "I have a class `EmailValidator` with a single method `validate(email: String): Boolean` that runs a regex check. It's used in one place — the user registration handler. A teammate says I should introduce an `IEmailValidator` interface 'to follow SOLID / DIP'. Should I? Justify by SOLID, not by 'it depends'.",
+      "expected_output": "Recommends NOT introducing the interface. Applies DIP criterion: an interface earns its place when (a) it crosses an architectural boundary, OR (b) the concept is volatile (likely to swap). Neither holds — regex validator is stable, single client, same layer. The interface would be an *anemic abstraction* / pure indirection with no decoupling benefit. Mentions that 'could there be another implementation someday' is a vacuous test. Acceptable hedge: revisit if a second implementation becomes a real (not speculative) requirement.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Our `UserService` has four methods: register(), login(), updateProfile(), deleteAccount(). All four are maintained by the same auth team. A new engineer wants to split it into four separate classes (RegistrationService, LoginService, ProfileUpdater, AccountDeleter) 'to follow SRP'. Should we?",
+      "expected_output": "Recommends NOT splitting. SRP is about responsibility to actors, not method count. All four methods answer to one actor (auth team / same stakeholder), so the class already satisfies SRP. Splitting now is *speculative SRP* — splits done on speculation rather than evidence — and leaves the codebase worse (more files, more jumps, same change still touches everything). The right trigger to split is a real, divergent change request from a different stakeholder. Mentions: the misquote 'one reason to change' / 'class does one thing' (rule for functions, not classes) drives this kind of premature split.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "I extend Java's List<Integer> with a subclass `PositiveIntList` that throws IllegalArgumentException from add(value) when value < 0. Code compiles and tests on PositiveIntList pass. Is anything wrong from a SOLID perspective?",
+      "expected_output": "Identifies LSP violation. Names the specific mechanism: *strengthening preconditions* — the parent List<Integer> accepts any Integer for add(); the subtype rejects negatives. Callers written against List<Integer> (the parent contract) now break when handed a PositiveIntList, even though signatures match. Notes the compiler can't catch this since it only checks signatures, not contracts. Suggests either: not using inheritance (composition / a separate type with a narrower contract), or making the constraint explicit at the type level so callers see it.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "My `ReportGenerator` constructor takes 9 parameters: five repositories, two services, a logger, and a config object. The class is becoming unwieldy. A coworker suggests using a ServiceLocator or a builder to hide the parameters. Is that the right fix?",
+      "expected_output": "Identifies the diagnosis as misframed. 9 constructor parameters is not primarily a DIP / DI ergonomics smell — it is an *SRP smell*. The class collaborates with 9 things, which means it likely serves multiple actors. ServiceLocator and builders hide the symptom without fixing the underlying multi-actor responsibility. Correct fix: split ReportGenerator along actor / responsibility lines; each resulting class will have a small constructor naturally. Mentions: a fat constructor is a signal to investigate cohesion, not a problem to be hidden.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "What does 'high-level' actually mean in OCP's rule that 'higher-level components must be protected from changes in lower-level ones'? Some teammates say it means more generic / more reused; others say it means closer to business policy. Which is right? Give a concrete example of each interpretation applied to the same codebase.",
+      "expected_output": "Closer-to-business-policy interpretation wins. 'Level' in OCP/Clean Architecture = distance from I/O / from the system's input-output edges, NOT genericness or reuse count. Example: a business-rule class (deep in call graph, few callers) is *high*-level; a JSON-formatting utility called from everywhere is *low*-level despite being heavily reused. The protection direction is: don't let DB/UI/framework churn climb up into business rules. Genericness is a separate axis; conflating it with levelness leads to putting utility code 'above' policy code, which inverts the protection direction.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "I keep being told to 'just follow OCP — design for extension'. But concretely, what other SOLID principles does OCP depend on to actually work? Can OCP be achieved on its own?",
+      "expected_output": "OCP cannot stand alone. It is the *goal* (closed-for-modification, open-for-extension) with three load-bearing mechanisms: DIP (volatile dependencies must point at stable abstractions, otherwise closure is impossible), LSP (the polymorphism that lets new implementations slot in only works if subtypes are behaviorally substitutable — break LSP and OCP collapses), and SRP (you can't cleanly extend a class with mixed responsibilities — the seam to extend has to align with actor boundaries). Net: OCP is *what*, DIP is *how*, LSP underwrites the polymorphism, SRP gives the seam.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "I have a JavaFX controller that extends `BaseController` from the framework. My override of `initialize()` does work that doesn't make sense in tests — it touches the live UI, depends on framework lifecycle, and would throw if called in any other context. The base class's contract is being broken in my override. Is there a clean SOLID-aligned way to deal with this?",
+      "expected_output": "Names the Humble Object pattern. Split the class in two: a thin 'humble' shell that does only what the framework demands (the controller subclass, hard to test, may legitimately throw on operations the framework didn't invoke), and a plain object containing the actual logic (LSP-clean, framework-free, fully testable). The shell delegates to the plain object on every relevant call. The LSP violation is quarantined at the framework seam rather than leaking into business logic. Applicable whenever inheritance you don't control forces a contract break.",
+      "files": []
+    },
+    {
+      "id": 11,
+      "prompt": "My `UserService` class has 12 public methods — password reset, user search, account activation, deletion, profile updates, role assignment, audit-log access, etc. Different consumers use different subsets: the admin panel uses 4 of them, the password-reset email handler uses 2, the public profile page uses 3. How should I structure the interface(s) so this follows ISP?",
+      "expected_output": "Use *role interfaces*, not a single header interface. Define multiple small interfaces per consumer role (e.g., `PasswordResetter`, `UserSearcher`, `UserActivator`, `ProfileReader`), each with the 1–3 methods that role actually uses. `UserServiceImpl` implements all of them. Each consumer depends only on the interface for the role it plays. Contrast: a single `IUserService` mirroring the class one-to-one is a 'header interface' (Fowler) — useful for mocking but useless for ISP, because every client still sees the full surface. Names the header-vs-role distinction.",
+      "files": []
     }
   ]
 }

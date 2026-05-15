@@ -6,9 +6,15 @@ The common misquote: **"one reason to change."** Martin's final wording is sharp
 
 > A module should be responsible to **one, and only one, actor.**
 
-An *actor* is a group of stakeholders requesting the same kinds of changes. The actor framing is sharper because "reason to change" silently includes bug fixes and refactorings (vacuous), and "one thing" is the rule for *functions*, not modules.
+An *actor* is a group of stakeholders requesting the same kinds of changes. The actor framing is sharper because "one thing" is the rule for *functions*, not modules — and because **bug fixes and refactorings are not reasons to change** in the SRP sense. A class isn't violating SRP because it gets bugfixed often; it violates SRP when *different stakeholders* demand competing changes to it.
 
-Ask **to whom** the module answers, not **how many things** it does.
+Ask **to whom** the module answers, not **how many things** it does, and not **how often** it changes.
+
+## Accidental vs honest duplication
+
+When two methods serving different actors share a helper, the instinct is DRY → extract. **Don't.** That's *accidental* duplication — two algorithms that look alike today but answer to different masters tomorrow. Extracting locks them together; the first divergent requirement breaks the other actor silently.
+
+*Honest* duplication serves one actor in two places — safe to extract. The test is **who requests changes**, not **how the code looks right now**.
 
 ## Canonical violation
 
@@ -22,6 +28,10 @@ Ask **to whom** the module answers, not **how many things** it does.
 Split along actor lines over a passive data carrier: `PayCalculator`, `HourReporter`, `EmployeeRepository`, each over an `EmployeeData`. The shared "regular hours" calculation is now *allowed* to diverge — each actor's class computes it the way that actor needs. Deliberate, not accidental.
 
 If callers want one entry point, wrap them in an **`EmployeeFacade`** — convenience, not a return to the god class.
+
+## When NOT to split
+
+One actor today, no second actor on the roadmap → **don't split**. *Speculative SRP* — splitting "in case another stakeholder shows up" — leaves the codebase worse than a cohesive monolith: more files, more jumps, the same change still touches everything because the actors never diverged. Wait for the second actor to *actually* arrive (a real change request from a different stakeholder), then split along the seam the change reveals. SRP rewards splits done with evidence, punishes splits done on speculation.
 
 ## Red flags
 

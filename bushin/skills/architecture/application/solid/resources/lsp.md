@@ -13,8 +13,7 @@ Implementations of a contract must be **interchangeable by behavior**, not just 
 The reliable smell: **callers need `instanceof` / `is X` checks to use the abstraction correctly.** That's exactly what substitutability is supposed to make unnecessary. Also:
 
 - An override throws `UnsupportedOperationException` or no-ops.
-- A subtype **tightens preconditions** (callers must now ensure something the parent didn't require).
-- A subtype **weakens postconditions** (parent promised X; subtype delivers less than X).
+- A subtype tightens preconditions or weakens postconditions.
 - Two implementations of the same interface are chosen by per-name special cases.
 
 ## Architectural pollution

@@ -21,4 +21,3 @@ Generalize: **avoid depending on things that contain more than you need**, at ev
 - A consumer needs 2 of an interface's 12 methods.
 - A test double has to stub methods the SUT never calls.
 - A heavy dependency is pulled in to use one corner of it.
-- A single "header interface" exists where role-specific interfaces would fit each client.
