@@ -1,6 +1,6 @@
 # Clean Code — Classes Practices
 
-Bad/best examples organised by topic. Read this when you want concrete patterns. For the WHY, see `theory.md`. For the high-level checklist, see `../SKILL.md`.
+Bad/best examples organised by topic. For the high-level checklist, see `../SKILL.md`.
 
 Examples use plain Kotlin syntax — no language-specific idioms (no coroutines, sealed hierarchies, scope functions, extensions). Stack-specific class shapes live in `kotlin/`, `framework/`, `ddd/` skills.
 
@@ -131,37 +131,6 @@ class CustomerAuditor(
 
 The signal: `warmCache` and `sendWelcome` only use `cache` and `mailer`; `recordSignup` and `recordCancellation` only use `auditLog` and `clock`. Two clusters, two classes.
 
-## Stepdown layout
-
-```kotlin
-class OrderProjectionUpdater(
-    private val projections: OrderProjections,
-    private val clock: Clock,
-) {
-    // 1. Class-level constants
-    companion object {
-        private const val MAX_BATCH = 500
-    }
-
-    // 2. Public API — narrative order, what readers look for first
-    fun apply(event: OrderEvent) {
-        val current = loadProjection(event.orderId)
-        val next = current.apply(event, clock.now())
-        save(next)
-    }
-
-    // 3. Private helpers — each directly after its first caller
-    private fun loadProjection(id: OrderId): OrderProjection =
-        projections.findById(id) ?: OrderProjection.empty(id)
-
-    private fun save(projection: OrderProjection) {
-        projections.save(projection)
-    }
-}
-```
-
-The reader can stop after understanding `apply()` — the helpers are right where they're called.
-
 ## Visibility tree in practice
 
 ```kotlin
@@ -227,23 +196,3 @@ class Address(
 ```
 
 `Address` is now reusable (billing address, shipping address) and `Customer` is back to 5 fields.
-
-## Refactoring recipe — characterisation tests first
-
-```kotlin
-// Step 0: pin behaviour with tests BEFORE touching the class
-class SuperDashboardCharacterisationTest {
-    @Test fun `lastFocused tracking works`() { ... }
-    @Test fun `version numbers are exposed correctly`() { ... }
-    // ... cover every public method
-}
-
-// Step 1: run all tests, confirm green
-// Step 2: extract Version class — Dashboard now delegates to it temporarily
-// Step 3: run all tests, confirm green
-// Step 4: rename Dashboard methods if needed
-// Step 5: run all tests, confirm green
-// Step 6: stop — both classes pass the 25-word test
-```
-
-Never two refactors in one step. Never a behaviour change while structure is moving.
