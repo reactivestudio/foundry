@@ -33,6 +33,12 @@ If callers want one entry point, wrap them in an **`EmployeeFacade`** — conven
 
 One actor today, no second actor on the roadmap → **don't split**. *Speculative SRP* — splitting "in case another stakeholder shows up" — leaves the codebase worse than a cohesive monolith: more files, more jumps, the same change still touches everything because the actors never diverged. Wait for the second actor to *actually* arrive (a real change request from a different stakeholder), then split along the seam the change reveals. SRP rewards splits done with evidence, punishes splits done on speculation.
 
+## Passive data with cross-actor fields
+
+SRP is about **behavior** — methods that answer to actors. A passive data class with fields from multiple actors (`riskScore` set by fraud, `ledgerEntryId` set by accounting, the rest by payments) isn't strictly an SRP violation: no method serves two masters.
+
+**But.** It is a real **merge hotspot** — every actor's PR touches the same file. Often the lighter fix is CODEOWNERS or separate annotation stores keyed by entity ID, not splitting the data class. Split only when cross-team friction has empirically caused incidents — speculative split of passive data costs as much as any other speculative split.
+
 ## Red flags
 
 - One file shows up in PRs from teams in different domains.

@@ -26,11 +26,10 @@ Each `resources/<principle>.md` focuses on **what baseline knowledge of SOLID ge
 
 ## Procedure
 
-1. **Same level?** Distance from I/O determines level (UI ≪ use case ≪ domain). Things at different levels don't share an interface even if their surfaces look similar — a UI feature is not a new instance of an export strategy. ([ocp](resources/ocp.md))
-2. **Identify the actor.** Who requests changes to this module? Two actors in one file → SRP says split. ([srp](resources/srp.md))
-3. **Sort volatile vs. stable.** Frameworks, DB, UI = volatile. Business policy and core entities = stable. Mark each before drawing arrows.
-4. **Point dependencies toward stability.** Domain never imports infra by name; if it does, introduce an abstraction the domain owns. ([dip](resources/dip.md), [ocp](resources/ocp.md))
-5. **Keep contracts narrow and honest.** No `instanceof`/`is` to use an abstraction (LSP); no methods the client doesn't call (ISP). ([lsp](resources/lsp.md), [isp](resources/isp.md))
+1. **Identify the actor.** Who requests changes to this module? Two actors in one file → SRP says split. ([srp](resources/srp.md))
+2. **Sort volatile vs. stable.** Frameworks, DB, UI = volatile. Business policy and core entities = stable. Mark each before drawing arrows.
+3. **Point dependencies toward stability.** Domain never imports infra by name; if it does, introduce an abstraction the domain owns. ([dip](resources/dip.md), [ocp](resources/ocp.md))
+4. **Keep contracts narrow and honest.** No `instanceof`/`is` to use an abstraction (LSP); no methods the client doesn't call (ISP). ([lsp](resources/lsp.md), [isp](resources/isp.md))
 
 ## Restraint defaults
 
