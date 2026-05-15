@@ -176,6 +176,8 @@ order.pullEvents().forEach(publisher::publish)
 
 The fix is to lift the primitives that *mean something domain-specific* into value object types. Not every primitive needs lifting — only the ones whose meaning matters (IDs, currencies, money, emails). For *what* the type spelling looks like in Kotlin, see `code/clean-code/resources/objects-and-data.md`. For *which* primitives deserve it, the rule is: any primitive whose mix-up would survive review and explode in production.
 
+**Special case — multi-currency running totals.** If a `total*: Long` field accumulates across documents with different currencies (program A pays in USD, program B in EUR, summed into one Long) the field is already broken regardless of whether you lift it to `Money`. Combine with anti-pattern #11 — the field shouldn't live on the aggregate at all; it's a currency-aware projection on the read side. Single-currency totals can still be `Money` and live on the aggregate if the invariant requires write-time enforcement.
+
 ---
 
 ## 9. Cross-aggregate transactional save
@@ -191,3 +193,89 @@ There are three honest fixes, in order of typical effort:
 3. **You need a process manager / saga.** The aggregates stay separate, the write to one fires a domain event, a saga listens and triggers a compensating write to the other. The system is now eventually consistent and the business has to explicitly accept that.
 
 Cross-aggregate `@Transactional` doesn't make the data more correct; it makes the failure mode silent. The lock contention shows up later as a production incident, not at design time.
+
+---
+
+## 10. State-machine-as-dates fields
+
+**Signal:** an aggregate has 3+ nullable `*At: Instant?` fields (`submittedAt`, `acceptedAt`, `paidAt`, `rejectedAt`, `cancelledAt`) — the state machine is derived from "which timestamps are non-null".
+
+**Violates:** principle 3 (invariants live inside the aggregate). The state machine is implicit, undefended, and any caller can mutate any timestamp in any order. The aggregate cannot answer "what state am I in?" without inspecting null-patterns of unrelated fields.
+
+```kotlin
+// BAD — state is the null-pattern of 5 fields; no transition guard.
+class Report {
+    var submittedAt: Instant? = null
+    var acceptedAt: Instant? = null
+    var paidAt: Instant? = null
+    var rejectedAt: Instant? = null
+    var cancelledAt: Instant? = null
+}
+// Anyone can do: report.acceptedAt = Instant.now() then report.cancelledAt = Instant.now()
+//                without ever transitioning through a "valid" state.
+
+// GOOD — state is typed and guarded; timestamps live on events.
+enum class ReportStatus { SUBMITTED, ACCEPTED, PAID, REJECTED, CANCELLED }
+class Report private constructor(...) {
+    private var status: ReportStatus = SUBMITTED
+    fun accept(...) { check(status == SUBMITTED); status = ACCEPTED; events += ReportAccepted(at = clock.now(), ...) }
+}
+```
+
+**Restraint:** one immutable `createdAt` is metadata, not state. The smell triggers at **3+ co-existing optional timestamps** where their null-pattern carries lifecycle meaning.
+
+---
+
+## 11. Running scalar that should be projection
+
+**Signal:** an aggregate has a field accumulated via `+=` across multiple state-changing methods — `var totalEarned: Long`, `var totalRefundsIssued: Money`, `var lastSeenAt: Instant`. The field is derived from event history but stored as write-time aggregate state.
+
+**Violates:** principle 1 — the aggregate's consistency unit duplicates what already lives in payment / event history. Three failure modes that always follow:
+
+1. **Drift under partial failure.** Save fails midway; `totalEarned` updated, payout not created. Reconciliation job, support tickets, manual corrections.
+2. **Drift under retry.** Retry hits the increment again; total is double-counted.
+3. **Multi-source nonsense.** When the source is multi-currency / multi-tenant / multi-aggregate, a single Long collapses incompatible values.
+
+```kotlin
+// BAD — aggregate stores a running scalar derived from elsewhere.
+class Researcher {
+    var totalEarned: Long = 0   // sums payouts; drifts on every partial failure
+}
+service.acceptAndPay() {
+    researcher.totalEarned += amount   // race condition + drift waiting to happen
+}
+
+// GOOD — aggregate doesn't store it; read-side projects from events.
+class Researcher private constructor(...) { /* no totalEarned field */ }
+// Read model:
+class ResearcherEarningsProjection { /* updates on PayoutSent event, currency-aware */ }
+```
+
+**Restraint:** a derived field that is **never read outside one aggregate's own method** (e.g., a cache for performance within a single TX, recomputed on load) is not this smell. Test: does any code outside the aggregate read the field? If yes — projection.
+
+---
+
+## 12. Domain depends on framework
+
+**Signal:** aggregate classes carry persistence, DI, or serialization annotations — `@Entity`, `@OneToMany`, `@ManyToOne`, `@Component`, `@Service`, `@JsonProperty`, `@ConfigurationProperties`. Domain tests need to boot a database or DI container.
+
+**Violates:** principle 7 — domain is framework-free. The aggregate's shape is now governed by JPA's no-arg-ctor and mutable-field requirements; behavioural design has to bend around persistence concerns.
+
+The fix is the **two-class split** documented in `code/clean-code/resources/objects-and-data.md` (Option B):
+
+```kotlin
+// Domain — pure Kotlin in domain/, no framework imports.
+class Order private constructor(val id: OrderId, ...) {
+    fun submit() { /* invariants */ }
+}
+
+// Persistence — JPA-shaped, in persistence/.
+@Entity class OrderRow(@Id var id: String = "", var status: String = "", ...)
+
+// Mapper at the repository edge — translates between the two.
+class OrderMapper { fun toDomain(row: OrderRow): Order = ...; fun toRow(order: Order): OrderRow = ... }
+```
+
+**Sub-smell — double FK source-of-truth.** `var programId: String` *AND* `@ManyToOne var program: Program?` on the same class. Two sources of truth diverge on `merge()` / partial loads / lazy initialization. Pick one — and if you keep the JPA pointer, the class is **not** your domain aggregate; the domain aggregate is the separate class (Option B above).
+
+**Restraint:** for **read-only DTOs**, **projection rows**, and **event payloads on the wire**, framework annotations are appropriate — those classes are not aggregates. The smell triggers only when annotations land on a class that has **behaviour + invariants** (i.e., the aggregate itself).
