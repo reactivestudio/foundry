@@ -9,6 +9,17 @@ For each name in the diff:
 2. **Match against red list and stack-noise table** below.
 3. **Action.** Rename to a concrete domain word; expose hidden verbs; drop noise suffixes.
 
+## MUST-check before closing the review
+
+Pass through this list explicitly — don't stop after the obvious ones. These are the names that read past easily because the eye expects them.
+
+- [ ] Every `get*` is side-effect-free? (else rename `getOrCreate*` or restructure — Rule N7)
+- [ ] Conversion methods come in symmetric pairs? (`toDomain` ↔ `fromRow`, never `toDomain` + `mapBack`)
+- [ ] No double negation? (`isNotInactive`, `hasNoErrors` → `isActive`, `isValid`)
+- [ ] No `And`/`Or` conjunctions in class names? (split, or find a higher-level concept)
+- [ ] No stack-noise suffix (`*Entity`/`*Dto`/`*Manager`/`*Helper`/`*Impl`/`*Service` as default) in public API?
+- [ ] No empty placeholder names (`data`/`info`/`item`/`o`/`u`/`d`/`tmp`/`theList`)?
+
 ## House defaults
 
 The biggest naming smell is reaching wider than needed.

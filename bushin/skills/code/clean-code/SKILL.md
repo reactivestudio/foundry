@@ -28,6 +28,7 @@ Structure the review response as:
 2. **Diagnosis.** Why it's a smell *here* (not just "looks long"). Cite the relevant threshold or rule.
 3. **Action plan.** Numbered, execution order. **One smell, one fix, one commit.**
 4. **Cadence reminder.** Characterisation tests first if behaviour is at risk; never change behaviour and structure in the same step.
+5. **MUST-check sweep.** Before closing the review, walk through the MUST-check list in **every loaded resource file** (`naming.md`, `functions.md`, `objects-and-data.md`, ...). For each checkbox: either *"caught — see smell #N above with line reference"* or *"not applicable / not found in this diff"*. No silent skips. This is the safety net against burying tonkie smells (primitive obsession, entity-as-domain-return, `when (x: Any)`, side effects in `get*`) under more visible ones.
 
 If the code is clean, say so. Don't invent smells.
 

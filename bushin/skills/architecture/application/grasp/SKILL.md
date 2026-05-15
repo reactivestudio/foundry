@@ -51,7 +51,7 @@ Work through these when placing a new responsibility. The first to apply usually
 - **High Cohesion** — `*Util` / `*Helper` / `*Manager` accumulating unrelated methods; > 5 dependencies spanning concerns.
 - **Low Coupling** — direct downstream call for a side effect with ≥ 2 plausible consumers; train wrecks (`a.b.c.d()`).
 - **Polymorphism** — same `when (type)` chain in 3+ methods or files.
-- **Pure Fabrication** — domain entity orchestrating infrastructure; a fabrication with multiple unrelated methods.
+- **Pure Fabrication** — domain entity orchestrating infrastructure; a fabrication with multiple unrelated methods; decision tree on a counter / status / phase (retry, escalation, dunning) where no single entity owns the full chain — extract as `XxxPolicy` with one method.
 - **Protected Variations** — vendor SDK calls in business code; primitive `String` / `UUID` for domain IDs.
 
 ## Worked example — god-service refactor

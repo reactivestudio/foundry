@@ -8,6 +8,16 @@ For any class, the first question is: *behaviour-rich object* (data hidden, oper
 2. **If hybrid**, identify which two sides are tangled and how to split.
 3. **Look for train wrecks and feature envy** in callers.
 
+## MUST-check before closing the review
+
+Pass through this list explicitly — the eye reads past raw primitives and entity-shaped returns because they look familiar.
+
+- [ ] No domain concept carried as raw `Long`/`String`/`Double`? (`userId: Long`, `email: String`, `priceCents: Long` → `UserId`, `Email`, `Money` — primitive obsession)
+- [ ] No `@Entity` / `*Row` / `*Entity` type returned from or accepted by a domain-layer method? (entity stops at the repository edge)
+- [ ] No train wreck `a.b().c().d()` in callers? (push the operation onto the first object — Tell, don't ask)
+- [ ] No hybrid class (public/mutable state **and** business methods on the same type)?
+- [ ] No anaemic data with all logic living elsewhere in a `*Service`?
+
 ## The 5 forms
 
 | Form | Shape | When to use | Example |

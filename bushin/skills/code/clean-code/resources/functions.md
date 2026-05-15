@@ -8,6 +8,17 @@ For the cadence rules, see `../SKILL.md`.
 2. **Smells found.** From the lookup below.
 3. **Action plan.** Extract / split / replace flag with sealed type / lift try-catch to advice.
 
+## MUST-check before closing the review
+
+Pass through this list explicitly — short methods get buried under long ones, and these are the smells that hide in tiny `handle()` / `get*()` bodies.
+
+- [ ] No `when (x: Any)` or open-hierarchy `when` without a `sealed` root? (else-branch hides every new variant you forget to handle)
+- [ ] Every `get*` is a pure query — no cache mutation, no DB connection opening, no counter increments? (CQS)
+- [ ] No method that **both** answers a question **and** changes state? (split into `existsX` + `setX`)
+- [ ] No method exceeding **3** arguments? (4+ = missing argument object)
+- [ ] No `Boolean` flag parameter switching behaviour? (split into two methods, or sealed mode)
+- [ ] No nesting deeper than **2** indent levels? (guard clauses; lift inner block)
+
 ## Size thresholds
 
 | Metric | Target | Action when exceeded |
