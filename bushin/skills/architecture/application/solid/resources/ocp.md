@@ -29,7 +29,7 @@ Version 1: a financial summary as a web page — scrollable, negative numbers in
 
 ## Hierarchy of protection
 
-The further a component is from input/output, the more protected it is. "Level" = distance from inputs and outputs. Higher level ⇒ more abstract, more stable, closer to business rules. Organize components into a dependency hierarchy that **protects higher-level components from changes in lower-level components**.
+Arrange so **higher-level components are protected from changes in lower-level components**. "Level" = distance from input/output; higher = more stable, closer to business rules.
 
 ## Anti-pattern
 

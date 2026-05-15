@@ -70,7 +70,6 @@ class PostgresReportGateway(private val db: PostgresClient) : ReportGateway {
 fun main() {
     val gateway: ReportGateway = PostgresReportGateway(PostgresClient("..."))
     val interactor = ReportInteractor(gateway)
-    interactor.run(42)
 }
 ```
 
@@ -81,7 +80,3 @@ fun main() {
 - `new ConcreteThing()` appears outside the composition root.
 - The domain layer sees framework packages by name.
 - A subclass overrides a concrete method to customize behavior — prefer an abstract method with two implementations.
-
-## Higher-level echo
-
-DIP is the lever that makes OCP work. Lifted to architectural scale, "dependencies cross the boundary inward toward higher-level policy" becomes Clean Architecture's **Dependency Rule**.

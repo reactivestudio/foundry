@@ -12,23 +12,19 @@ Liskov's original (1988), quoted verbatim by Martin: *"If for each object o1 of 
 - Not confined to class inheritance. Any contract — interface, protocol, REST schema, RPC, message envelope — is in scope.
 - "Square IS-A Rectangle in math, therefore in code" — the principle is **behavioral** substitutability, not real-world taxonomy.
 
-## Beyond inheritance
-
-Martin widens LSP beyond class hierarchies. It applies to any substitutable contract: language-level interfaces, duck-typed objects, REST endpoints, gRPC schemas, message contracts. LSP is therefore an **architectural** principle — violations leak into architecture as workaround mechanisms.
-
 ## Good example — License hierarchy
 
 `License` is abstract with `calcFee()`. `PersonalLicense` and `BusinessLicense` compute fees differently. `Billing` depends only on `License`. Either subtype substitutes cleanly because both honor the same behavioral contract: given the inputs `License` defines, produce a valid fee.
 
-## Bad example — Square / Rectangle
-
-`Rectangle` has independently mutable width and height. `Square extends Rectangle` must keep `width == height`. A caller writes `r.setW(5); r.setH(2); assert r.area() == 10` — passes for `Rectangle`, fails for `Square`. The only defense is `if (r is Square)` — which is exactly what substitutability is supposed to make unnecessary.
-
 ## Architectural example — REST taxi dispatch
 
-A taxi aggregator dispatches to many companies via a uniform URI shape ending `.../destination/ORD`. Acme abbreviates `destination` to `dest`. The aggregator now needs `if (uri.startsWith("acme.com")) ...` branches, a configuration database mapping URIs to per-company quirks, and carries those forever — with the bugs and security gaps that come with them. Martin's lesson: a single substitutability violation can pollute an entire architecture with extra mechanisms.
+LSP applies to any substitutable contract — REST endpoints, gRPC schemas, message envelopes. Violations leak into architecture as workaround mechanisms.
 
-## Anti-pattern
+A taxi aggregator dispatches to many companies via a uniform URI shape ending `.../destination/ORD`. Acme abbreviates `destination` to `dest`. The aggregator now needs `if (uri.startsWith("acme.com")) ...` branches, a configuration database mapping URIs to per-company quirks, and carries those forever — with the bugs and security gaps that come with them. A single substitutability violation can pollute an entire architecture with extra mechanisms.
+
+## Anti-pattern — Square / Rectangle
+
+`Rectangle` has independently mutable width and height. `Square extends Rectangle` must keep `width == height`. A caller writes `r.setW(5); r.setH(2); assert r.area() == 10` — passes for `Rectangle`, fails for `Square`. The only defense is `if (r is Square)` — exactly what substitutability is supposed to make unnecessary.
 
 ```kotlin
 open class Rectangle {

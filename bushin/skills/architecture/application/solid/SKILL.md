@@ -1,6 +1,6 @@
 ---
 name: solid
-description: "Designing modules/classes or reviewing dependencies — SRP/OCP/LSP/ISP/DIP. NOT for component principles."
+description: "Design or review class/module structure via SRP/OCP/LSP/ISP/DIP. NOT for component principles."
 ---
 
 # SOLID
@@ -16,25 +16,22 @@ Five rules for arranging functions and data into classes so the system tolerates
 
 ## Principles at a glance
 
-| Principle | Core idea (Martin's framing) | Deep-dive |
+| Principle | Idea | More |
 |---|---|---|
-| **SRP** — Single Responsibility | A module is responsible to one and only one **actor** (group of stakeholders). Not "does one thing." | [resources/srp.md](resources/srp.md) |
-| **OCP** — Open-Closed | Behavior extends without modifying the artifact. The "most fundamental reason" for architecture. | [resources/ocp.md](resources/ocp.md) |
-| **LSP** — Liskov Substitution | Implementations of a contract must be **behaviorally** interchangeable, not just signature-compatible. | [resources/lsp.md](resources/lsp.md) |
-| **ISP** — Interface Segregation | Clients should not depend on methods they don't use. Holds for modules and services, not just OO. | [resources/isp.md](resources/isp.md) |
-| **DIP** — Dependency Inversion | Source-code dependencies point to **stable abstractions**, never volatile concretes. | [resources/dip.md](resources/dip.md) |
+| **SRP** | One module → one **actor** (stakeholder group). Not "does one thing." | [srp](resources/srp.md) |
+| **OCP** | Extend behavior without modifying the artifact. | [ocp](resources/ocp.md) |
+| **LSP** | Implementations must be **behaviorally** substitutable, not just signature-compatible. | [lsp](resources/lsp.md) |
+| **ISP** | Clients shouldn't depend on methods they don't use. Holds for modules and services too. | [isp](resources/isp.md) |
+| **DIP** | Source-code deps point to **stable abstractions**, never volatile concretes. | [dip](resources/dip.md) |
 
-The order is narratively load-bearing: SRP separates by actor → OCP arranges those pieces by direction of dependency → LSP keeps the substitutability OCP relies on → ISP keeps interfaces narrow so OCP/DIP can work → DIP picks where dependencies point.
+When working on a specific principle, **open its `resources/<principle>.md`**. The body here is the index; the resources are the depth.
 
 ## Procedure
 
-1. **Identify the actors.** For the module under design, who requests changes — which stakeholders or roles? If two answers point to two different humans, SRP says split. Open `resources/srp.md` when the boundary isn't obvious.
-2. **Find the volatile/stable axis.** UI, DB, framework concretes — volatile. Business policy and core entities — stable. Note which is which before drawing dependency arrows.
-3. **Point dependencies toward stability.** Apply DIP: domain code never imports framework or infra classes by name. If it does, introduce an abstraction the domain owns. Open `resources/dip.md` when unsure where a new boundary belongs.
-4. **Keep contracts honest.** Any subtype or interface implementer must be a drop-in for the abstraction. If callers need `instanceof`/`is`, the contract is broken. Open `resources/lsp.md` to spot subtler violations.
-5. **Trim interfaces to client roles.** No client should see methods it doesn't call (ISP); no extension should require editing existing code (OCP). Apply both at the boundary just drawn.
-
-When working on a specific principle, **read its `resources/<principle>.md` file**. The body here is the index; the resources are the depth.
+1. **Identify the actor.** Who requests changes to this module? Two actors in one file → SRP says split. ([srp](resources/srp.md))
+2. **Sort volatile vs. stable.** Frameworks, DB, UI = volatile. Business policy and core entities = stable. Mark each before drawing arrows.
+3. **Point dependencies toward stability.** Domain never imports infra by name; if it does, introduce an abstraction the domain owns. ([dip](resources/dip.md), [ocp](resources/ocp.md))
+4. **Keep contracts narrow and honest.** No `instanceof`/`is` to use an abstraction (LSP); no methods the client doesn't call (ISP). ([lsp](resources/lsp.md), [isp](resources/isp.md))
 
 ## Quick red flags
 
@@ -49,8 +46,6 @@ First-pass smell check. Open the matching resource for the full picture and reme
 ## When NOT to use
 
 - One-off scripts, prototypes, throwaway experiments — structural cost outweighs benefit.
-- Generated code — regeneration overwrites manual structure.
-- A module a single person owns end-to-end with no anticipated reuse.
 - Component-level cohesion/coupling (REP, CCP, CRP, ADP, SDP, SAP) — separate principles for grouping classes into deployable components; SOLID is the level below.
 - Architectural boundaries (Clean Architecture's circles, ports & adapters) — SOLID is the lever that lets those boundaries hold, not a substitute for them.
 

@@ -1,0 +1,23 @@
+{
+  "skill_name": "solid",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have a 600-line OrderService class. Its methods include calculateTotal(), sendConfirmationEmail(), updateInventory(), persistToDatabase(), and formatInvoicePdf(). Should I split this class? If so, by which principle and into what?",
+      "expected_output": "Identifies SRP violation — methods answer to different actors (sales/pricing, customer comms, warehouse, DBA, billing). Recommends splitting along actor boundaries (e.g., OrderTotalCalculator, OrderConfirmation, InventoryUpdater, OrderRepository, InvoiceFormatter) with optional Facade. Names the 'accidental duplication' and 'merge hotspot' risks of leaving as-is.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Where should `PostgresClient(...)` actually be constructed in a Spring application — inside the service class, inside the repository class, inside a @Configuration class, or somewhere else? Explain via dependency rules.",
+      "expected_output": "Invokes DIP. The domain (service) must not name PostgresClient directly. The repository owns a domain-defined interface (e.g., ReportGateway) and the Postgres implementation lives in the infrastructure layer. The `new PostgresClient(...)` call belongs at the composition root — in Spring that is a @Configuration / @Bean method, the only place that names volatile concretes. Mentions 'crossing the curve': source-code deps point toward abstractions, control flow crosses back at runtime.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I have a Cache interface with get(key): T and put(key, value): Unit. My BoundedCache implementation throws IllegalStateException from put() when the cache is full instead of evicting. Is this a SOLID violation, and if so which one?",
+      "expected_output": "Identifies LSP violation: BoundedCache strengthens the precondition of put() (callers must additionally guarantee the cache isn't full), so it's not a behavioral substitute for Cache. Callers would need `if (cache is BoundedCache)` branches — exactly the smell LSP prevents. Suggests either making the contract explicit (put returns a boolean / evicted entry, or contract documents eviction behavior) or splitting into two interfaces (Cache vs BoundedCache with put-with-rejection semantics) per ISP.",
+      "files": []
+    }
+  ]
+}

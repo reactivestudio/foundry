@@ -79,7 +79,3 @@ The shared "regular hours" calculation is now allowed to **diverge** — each ac
 - A private helper is called by methods that answer to different stakeholders.
 - "I'm afraid to change X because Y might break, and Y is owned by another team."
 - A merge conflict on a class recurs every release.
-
-## Higher-level echo
-
-At component level SRP becomes the **Common Closure Principle**: classes that change for the same reasons belong in the same component. At architectural level it becomes the **Axis of Change** — the system is laid out so each axis crosses as few boundaries as possible.
