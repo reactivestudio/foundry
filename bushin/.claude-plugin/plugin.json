@@ -6,7 +6,8 @@
   "keywords": ["kotlin", "spring-boot", "ddd", "testing", "architecture"],
   "skills": [
     "./skills/methodology/",
-    "./skills/architecture/",
+    "./skills/architecture/application/",
+    "./skills/architecture/system/",
     "./skills/code/",
     "./skills/database/",
     "./skills/diagnostic/",

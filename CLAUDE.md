@@ -59,16 +59,30 @@ Rules:
 - Categories themselves (`methodology/`, `kotlin/`, etc.) hold no `SKILL.md` — they're pure directories. No router skills.
 - kebab-case for both category and skill.
 
+### Exception: three-level for `architecture/`
+
+`architecture/` is split by scale because the principles inside it sit at two genuinely different levels:
+
+```
+bushin/skills/architecture/
+├── application/    # in-process design — SOLID, hexagonal, ports & adapters
+│   └── solid/
+└── system/         # cross-process — distributed systems, services, messaging
+```
+
+This is the only category with sub-categories. Don't introduce a third level elsewhere — flat `skills/<category>/<skill>/` stays the default. If another domain ever needs the same split, add it here and document why.
+
 ### Why this requires `skills` in plugin.json
 
-Claude Code's default skill loader scans `skills/<name>/SKILL.md` — **one level deep only**. Our nested layout (`skills/<category>/<skill>/SKILL.md`) is two levels deep, so each category must be explicitly registered in `bushin/.claude-plugin/plugin.json`:
+Claude Code's default skill loader scans `skills/<name>/SKILL.md` — **one level deep only**. Our nested layout is two levels deep (three under `architecture/`), so each **leaf** category must be explicitly registered in `bushin/.claude-plugin/plugin.json`:
 
 ```json
 {
   "skills": [
     "./skills/methodology/",
-    "./skills/kotlin/",
-    "./skills/spring/"
+    "./skills/architecture/application/",
+    "./skills/architecture/system/",
+    "./skills/kotlin/"
   ]
 }
 ```
