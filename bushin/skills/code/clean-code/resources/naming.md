@@ -18,6 +18,7 @@ The biggest naming smell is reaching wider than needed.
 - **No conjunctions in class names.** `OrderAndPaymentValidator` splits into two classes, or finds a higher-level concept (`CheckoutValidator`).
 - **Conversion methods come in pairs.** `toDomain` ↔ `fromRow`, never `toDomain` + `mapBack`. Symmetry signals the inverse.
 - **Side effects belong in the name.** A `get*` that opens a socket or constructs lies — make it `getOrCreate*` or restructure (lazy property, explicit factory).
+- **Match level of abstraction.** Name shouldn't commit to a specific implementation — `Modem.connect(locator)` outlives `Modem.dial(phoneNumber)` when cable arrives.
 - **Length tracks scope.** `i` in a tight loop is fine; a class field with the same name is not.
 
 ## Red list — words that promise nothing
@@ -46,26 +47,12 @@ Encode layer or container type — not intent.
 | `*Impl` | remove | two valid implementations; mark by specificity (`JpaOrderRepository`, not `OrderRepositoryImpl`) |
 | `*Service` | not as a default | genuine application-layer orchestrator (load → call → save) |
 
-## Core principles — sixteen condensed
+## Additional disciplines
 
-From R. C. Martin, *Clean Code* ch. 2 plus N7 / N2 from ch. 17.
-
-1. **Reveal intent.** If a comment is needed, the name failed.
-2. **No disinformation.** No `accountList` for a `Set`. No `l`/`O` identifiers.
-3. **Make meaningful distinctions.** No number series, no noise suffixes, no `klass`-tricks.
-4. **Pronounceable.** `genymdhms` → `generationTimestamp`.
-5. **Searchable. Length tracks scope.** `e` is the worst single letter — greps against every comment.
-6. **No encodings.** No Hungarian, no `m_`, no `I*` on interfaces.
-7. **No mental mapping.** Reader shouldn't translate `r` → "URL minus host/scheme".
-8. **Side effects in the name** (N7). `get*` that constructs is a lie.
-9. **Match level of abstraction** (N2). `connect(locator)` outlives `dial(phone)`.
-10. **Classes nouns; methods verbs.** Static factories with intent: `Complex.fromRealNumber(23.0)`.
-11. **Don't be cute.** `whack()` → `kill()`.
-12. **One word per concept.** Pick `find` *or* `fetch` *or* `get` — not all three.
-13. **Don't pun.** `add` for arithmetic ≠ `add` for "append".
-14. **Solution domain when applicable, problem domain otherwise.**
-15. **Add context via class extraction.** `state` alone is opaque → bundle into `Address`.
-16. **Don't add gratuitous context.** No `GSDFooBar`.
+- **One word per concept across the codebase.** Pick `find` *or* `fetch` *or* `get` — not all three for the same operation. Same for `controller` / `manager` / `driver` filling one role.
+- **Don't pun.** Same word, different semantics misleads. `add` for arithmetic ≠ `add` for "append to a collection" — the second should be `insert` or `append`.
+- **Add context via class extraction.** A bare `state` variable is opaque; inside an `Address` class the same field is obvious. Group via classes; prefix (`addrState`) only as a fallback.
+- **No gratuitous prefix-spam.** Don't tag every class with `GSD…` because the project is "Gas Station Deluxe". Differentiate only when types actually collide (`PostalAddress`, `MacAddress`, `WebAddress`).
 
 ## Renaming
 
