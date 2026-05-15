@@ -5,7 +5,9 @@ description: "Design or review class/module structure via SRP/OCP/LSP/ISP/DIP. N
 
 # SOLID
 
-Five rules for arranging functions and data into classes so the system tolerates change. SOLID sits above naming, below architectural boundaries. The unifying question: *which changes do you want to be cheap, and which are you willing to make expensive?*
+Five rules for arranging functions and data into modules so the system tolerates change. SOLID sits above naming, below architectural boundaries.
+
+Each `resources/<principle>.md` focuses on **what baseline knowledge of SOLID gets wrong** — Martin's sharper formulations, named smells, architectural-scale framing. Open the relevant resource when working on a principle.
 
 ## When to use
 
@@ -14,17 +16,13 @@ Five rules for arranging functions and data into classes so the system tolerates
 - Refactoring after structural pain: merge hotspots, shotgun edits, hidden coupling.
 - Deciding whether to introduce an interface, split a class, or invert a dependency.
 
-## Principles at a glance
+## Principles
 
-| Principle | Idea | More |
-|---|---|---|
-| **SRP** | One module → one **actor** (stakeholder group). Not "does one thing." | [srp](resources/srp.md) |
-| **OCP** | Extend behavior without modifying the artifact. | [ocp](resources/ocp.md) |
-| **LSP** | Implementations must be **behaviorally** substitutable, not just signature-compatible. | [lsp](resources/lsp.md) |
-| **ISP** | Clients shouldn't depend on methods they don't use. Holds for modules and services too. | [isp](resources/isp.md) |
-| **DIP** | Source-code deps point to **stable abstractions**, never volatile concretes. | [dip](resources/dip.md) |
-
-When working on a specific principle, **open its `resources/<principle>.md`**. The body here is the index; the resources are the depth.
+- **SRP** — [srp](resources/srp.md): actor framing (not "one reason to change"); accidental duplication; Facade.
+- **OCP** — [ocp](resources/ocp.md): directional control + information hiding; what "closed" really means.
+- **LSP** — [lsp](resources/lsp.md): behavioral substitutability; `instanceof` as the smell; architectural pollution.
+- **ISP** — [isp](resources/isp.md): segregate by client role, not by aesthetic; scales beyond OO.
+- **DIP** — [dip](resources/dip.md): four practices; crossing the curve; stability ≠ abstractness.
 
 ## Procedure
 
@@ -35,13 +33,11 @@ When working on a specific principle, **open its `resources/<principle>.md`**. T
 
 ## Quick red flags
 
-First-pass smell check. Open the matching resource for the full picture and remedies.
-
-- **SRP** — one file gets PRs from teams in different domains; a private helper is called by methods that answer to different stakeholders; "I'm scared to change X because Y might break, and Y is owned by another team."
-- **OCP** — adding a new output channel forces edits to domain classes; a DB schema change propagates up into use cases; use-case code `import`s from a web framework or ORM directly.
-- **LSP** — an override throws `UnsupportedOperationException`; callers branch on type name to use the abstraction; a subtype tightens preconditions or weakens postconditions vs. its parent.
-- **ISP** — a class no-ops or throws on half its interface's methods; a test double stubs methods the SUT never calls; a heavy dependency is pulled in to use one corner of it.
-- **DIP** — a use-case class names a concrete ORM/HTTP/framework type; `new ConcreteThing()` appears outside the composition root; the domain test can't run without infrastructure.
+- **SRP** — one file gets PRs from teams in different domains; a private helper is called by methods that answer to different stakeholders.
+- **OCP** — adding a new output channel forces edits to domain classes; use-case code imports a web framework or ORM directly.
+- **LSP** — callers need `instanceof`/`is` to use the abstraction; a subtype tightens preconditions or weakens postconditions.
+- **ISP** — a class no-ops or throws on half its interface's methods; a heavy dependency is pulled in to use one corner of it.
+- **DIP** — a use-case class names a concrete ORM/HTTP/framework type; `new ConcreteThing()` appears outside the composition root.
 
 ## When NOT to use
 
