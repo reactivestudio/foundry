@@ -1,6 +1,6 @@
 ---
 name: clean-code-naming
-description: "Variable/function/class naming: intent-revealing, no noise, no puns. NOT for docs/UX copy."
+description: "Name or rename variables/functions/classes: intent over comment. NOT for docs/UX/branches/commits."
 ---
 
 # Clean Code — Naming
@@ -13,123 +13,79 @@ Names are how code talks to the next reader — often you, three months later. A
 - Reviewing or refactoring existing names in PR or pre-commit.
 - Renaming during a refactor.
 
-## Core rules
-
-1. **Reveal intent.** A name answers *why it exists, what it does, how it's used*. If you'd need a comment to explain it, the name failed. `d` → `elapsedTimeInDays`.
-
-2. **No disinformation.** Don't claim a type the value doesn't have — `accountList` that isn't a `List` should be `accounts`. Avoid abbreviations already owned by something else (`hp`, `aix`, `sco`). Ban `l` and `O` as identifiers — they look like `1` and `0`. Two names differing by one inner word (`...HandlingOfStrings` vs `...StorageOfStrings`) will hide bugs in autocomplete.
-
-3. **Make meaningful distinctions.** No number series — `copyChars(a1, a2)` misses the chance to encode role, prefer `copyChars(source, destination)`. No noise suffixes — `Info`, `Data`, `Object`, `Variable`; if removing them changes nothing, they don't belong. `getActiveAccount()` / `getActiveAccounts()` / `getActiveAccountInfo()` is a trap — the caller can't choose. Don't misspell to dodge a keyword (`klass` for `class`) — pick a different concept-level name instead.
-
-4. **Pronounceable.** Programming is a social activity — names get said aloud in reviews. `genymdhms` → `generationTimestamp`. If you'd sound silly pronouncing it, rename.
-
-5. **Searchable. Length tracks scope.** Wide-scope variables and constants must be greppable: `7` → `MAX_CLASSES_PER_STUDENT`. Single letters and bare magic numbers are tolerated only inside a tight loop body. The worst single-letter choice is `e` — it's the most common letter in English, so it grep-matches every comment and string in the codebase.
-
-6. **No encodings.** No Hungarian (`phoneString` for a `PhoneNumber`). No field prefixes (`m_dsc`, `_field`). Leave interfaces unadorned (`ShapeFactory`, not `IShapeFactory`); if you must encode anything, mark the implementation (`ShapeFactoryImpl`).
-
-7. **No mental mapping.** The reader shouldn't translate `r` into "lowercased URL without host or scheme." Single-letter counters (`i`, `j`, `k`) are tolerated only as loop tradition. Clarity beats cleverness.
-
-## Classes & methods
-
-- **Classes are nouns.** `Customer`, `WikiPage`, `Account`. Avoid `Manager`, `Processor`, `Data`, `Info` — vague containers that hide the real responsibility.
-- **Methods are verbs.** `postPayment`, `deletePage`, `save`. Accessors: `get` / `set` / `is`.
-- **Overloaded constructors → static factories with intent.** `Complex.fromRealNumber(23.0)` reads better than `Complex(23.0)`. Make the constructor private to enforce it.
-- **Don't be cute.** `HolyHandGrenade` is a joke for one team for one week — rename to `deleteItems`. No slang (`whack()` → `kill()`), no culture-bound puns (`eatMyShorts()` → `abort()`).
-
-## Consistency
-
-- **One word per concept.** Pick `get` *or* `fetch` *or* `retrieve` across the codebase — not all three. Same for `controller` / `manager` / `driver`.
-- **Don't pun.** Reusing one word for two operations misleads. `add` for arithmetic and `add` for "append to a collection" — second one should be `insert` or `append`.
-
-## Domain
-
-- **Solution domain when available.** Your readers are programmers — `Visitor`, `Queue`, `EventBus`, `Adapter` carry precise meaning.
-- **Problem domain otherwise.** When no programmer-eese exists, use the business term so a maintainer can ask a domain expert.
-
-## Context
-
-- **Group related variables into a class.** Standalone `state` is opaque; bundle `firstName`, `lastName`, `street`, `state` into an `Address` — the compiler then carries the context for you.
-- **Prefixes only as fallback.** `addrState` works if a class isn't justified, but a class is almost always better.
-- **No gratuitous prefix-spam.** Don't tag every class with `GSD…`. Differentiate only when types actually collide: `PostalAddress`, `MacAddress`, `WebAddress`.
-- **Side-effect of context:** once shared variables move into a class, the original function tends to shrink — handle the shrinking under function-design, not here.
-
-## Renaming
-
-Don't fear it. Readers don't memorize names — modern tooling makes the change cheap and atomic. A rename surprises someone exactly the way any improvement does; pay that cost and move on.
-
-## Examples
-
-### Implicit context → intent-revealing
-
-```kotlin
-// Bad — what are these numbers? what is in theList?
-fun getThem(): List<IntArray> {
-    val list1 = mutableListOf<IntArray>()
-    for (x in theList) if (x[0] == 4) list1.add(x)
-    return list1
-}
-
-// Good
-fun getFlaggedCells(): List<Cell> {
-    val flaggedCells = mutableListOf<Cell>()
-    for (cell in gameBoard) if (cell.isFlagged()) flaggedCells.add(cell)
-    return flaggedCells
-}
-```
-
-### Magic numbers → named constants
-
-```kotlin
-// Bad
-for (j in 0..33) s += t[j] * 4 / 5
-
-// Good
-for (j in 0 until NUMBER_OF_TASKS) {
-    val realTaskDays = taskEstimate[j] * realDaysPerIdealDay
-    val realTaskWeeks = realTaskDays / workDaysPerWeek
-    sum += realTaskWeeks
-}
-```
-
-### Noise-word triplet → distinct verbs
-
-```kotlin
-// Bad — caller can't tell which to call
-fun getActiveAccount(): Account
-fun getActiveAccounts(): List<Account>
-fun getActiveAccountInfo(): AccountInfo
-
-// Good — verb encodes intent
-fun findActiveAccount(id: Long): Account
-fun listActiveAccounts(): List<Account>
-fun activeAccountSummary(id: Long): AccountSummary
-```
-
-### Cryptic / Hungarian → clean
-
-```kotlin
-// Bad
-class DtaRcrd102 {
-    private val genymdhms: Date = Date()
-    private val modymdhms: Date = Date()
-    private val pszqint: String = "102"
-}
-
-// Good
-class Customer {
-    val generationTimestamp: Date = Date()
-    val modificationTimestamp: Date = Date()
-    val recordId: String = "102"
-}
-```
-
 ## When NOT to use
 
-- Breaking-change renames of public API — handle as a migration, not naming.
-- Stack-specific idioms (Kotlin, Spring, JPA) — defer to the matching reference skill.
+- Breaking-change renames of public API — handle as a migration.
+- Stack-specific idioms (Kotlin, Spring, JPA, DDD) — defer to the matching reference skill in `kotlin/`, `framework/`, `ddd/`.
 - Documentation prose, UX copy, git branch names, commit messages.
 - Style nits in review when the existing name is already clear.
 
+## House defaults
+
+The biggest naming smell is reaching wider than needed.
+
+- **One word, then two.** Default to a single domain noun (`Order`, `Reservation`, `Payment`). A second word must add domain meaning, not synonym noise — `PurchaseOrder` vs `SalesOrder` is legitimate when both exist; `OrderEntity` is not. Three+ words is almost always a smell.
+- **No negated booleans.** `isEnabled`, not `isNotDisabled`. Double-negation in conditionals (`if (!isNotDisabled)`) is unforgivable.
+- **No conjunctions in class names.** `OrderAndPaymentValidator` splits into two classes, or finds a higher-level concept (`CheckoutValidator`).
+- **Conversion methods come in pairs.** `toDomain` ↔ `fromRow`, never `toDomain` + `mapBack`. Symmetry signals the inverse.
+- **Side effects belong in the name.** A `get*` that opens a socket or constructs lies — make it `getOrCreate*` or restructure (lazy property, explicit factory).
+- **Length tracks scope.** `i` in a tight loop is fine; a class field with the same name is not.
+
+## Red list — words that promise nothing
+
+Replace with a concrete domain term every time.
+
+| Forbidden | What it really says | Replace with |
+|---|---|---|
+| `Item` | "I didn't think about what this is" | `OrderLine`, `Reservation`, `MenuEntry` |
+| `Data` / `Info` / `Object` / `Thing` | empty noun, tautology | concrete domain word |
+| `Detail` / `Details` | usually = Info | `ShippingAddress`, not `ShippingDetails` |
+| `Element` | XML flashback | `Node`, `OrderLine` |
+| `Manager` / `Handler` / `Processor` | verb is hidden inside | `*er` from the verb: `Submitter`, `Reconciler`, `Approver` |
+| `Helper` / `Util` / `Utils` | bag of unrelated functions | extension functions or the missing class |
+| `Common` / `Base*` | dumping ground / inheritance for its own sake | distribute by topic; prefer composition |
+
+## Stack-noise suffixes (modern Hungarian)
+
+Encode layer or container type — not intent.
+
+| Suffix | Default action | Tolerated when |
+|---|---|---|
+| `*Entity` | remove | persistence row — prefer `*Row` |
+| `*Dto` | remove | pre-existing project-wide convention |
+| `*Model` / `*Bean` / `*Object` / `*Data` / `*Info` | always remove | — |
+| `*Impl` | remove | two valid implementations; mark by specificity (`JpaOrderRepository`, not `OrderRepositoryImpl`) |
+| `*Service` | not as a default | genuine application-layer orchestrator (load → call → save) |
+
+## Core principles
+
+Sixteen from ch.2 plus N7 / N2 from ch.17, condensed. Full WHY in `resources/theory.md`.
+
+1. **Reveal intent.** If a comment is needed, the name failed.
+2. **No disinformation.** No `accountList` for a `Set`. No `l`/`O` identifiers.
+3. **Make meaningful distinctions.** No number series, no noise suffixes, no `klass`-tricks.
+4. **Pronounceable.** `genymdhms` → `generationTimestamp`.
+5. **Searchable. Length tracks scope.** `e` is the worst single letter — greps against every comment.
+6. **No encodings.** No Hungarian, no `m_`, no `I*` on interfaces.
+7. **No mental mapping.** Reader shouldn't translate `r` → "URL minus host/scheme".
+8. **Side effects in the name** (N7). `get*` that constructs is a lie.
+9. **Match level of abstraction** (N2). `connect(locator)` outlives `dial(phone)`.
+10. **Classes nouns; methods verbs.** Static factories with intent: `Complex.fromRealNumber(23.0)`.
+11. **Don't be cute.** `whack()` → `kill()`.
+12. **One word per concept.** Pick `find` *or* `fetch` *or* `get` — not all three.
+13. **Don't pun.** `add` for arithmetic ≠ `add` for "append".
+14. **Solution domain when applicable, problem domain otherwise.**
+15. **Add context via class extraction.** `state` alone is opaque → bundle into `Address`.
+16. **Don't add gratuitous context.** No `GSDFooBar`.
+
+## Renaming
+
+Don't fear it. Tooling makes the change cheap and atomic. A rename surprises someone exactly the way any improvement does — pay that cost and move on.
+
+## Practices
+
+`resources/practices.md` — bad/best example catalog organised by topic (intent, magic numbers, noise words, side effects, level of abstraction, Hungarian, conjunctions, conversion pairs, one-word default).
+
 ## Source
 
-Adapted from R. C. Martin, *Clean Code*, ch. 2 "Meaningful Names" (Tim Ottinger).
+Adapted from R. C. Martin, *Clean Code*, ch. 2 "Meaningful Names" (Tim Ottinger) and ch. 17 §N1–N7. Stack-specific naming (Kotlin / Spring / JPA / DDD) deferred to skills in those categories.
