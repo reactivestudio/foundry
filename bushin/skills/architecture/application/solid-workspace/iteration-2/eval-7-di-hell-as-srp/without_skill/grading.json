@@ -1,0 +1,13 @@
+{
+  "eval_id": 7,
+  "config": "without_skill",
+  "expectations": [
+    {"text": "Rejects ServiceLocator / builder", "passed": true, "evidence": "'No. Hiding the parameters is treating the symptom. Split the class.'"},
+    {"text": "Reframes: 9 collaborators is SRP smell, not DI ergonomics", "passed": true, "evidence": "'A 9-arg constructor is not a DI-ergonomics problem. It's the compiler telling you ReportGenerator has too many reasons to change — i.e. it's violating SRP.'"},
+    {"text": "Connects parameter count to actor / multi-stakeholder responsibility", "passed": true, "evidence": "'Five repositories + two services in one class almost always means ReportGenerator is doing several jobs stacked on top of each other.' — frames as multi-job but doesn't say 'actor' explicitly"},
+    {"text": "Correct fix: split along actor / responsibility lines", "passed": true, "evidence": "Concrete 4-way split (DataLoader / Calculator / Renderer / orchestrator) with explicit dep-count reduction"},
+    {"text": "Hiding the parameters preserves the underlying problem", "passed": true, "evidence": "'ServiceLocator... make[s] the smell quieter without removing it' — explicitly names symptom-suppression"}
+  ],
+  "score": 5,
+  "total": 5
+}

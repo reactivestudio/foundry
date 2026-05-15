@@ -1,0 +1,13 @@
+{
+  "eval_id": 5,
+  "config": "with_skill",
+  "expectations": [
+    {"text": "Recommends NOT splitting", "passed": true, "evidence": "'No. Don't split.' (line 1)"},
+    {"text": "Applies actor framing — responsibility to actors, not method count", "passed": true, "evidence": "'Count actors, not methods' (line 11); Martin quote present"},
+    {"text": "Notes all four methods serve one actor", "passed": true, "evidence": "'That's one actor. SRP says: leave it alone.' (line 18)"},
+    {"text": "Names this as speculative / premature SRP", "passed": true, "evidence": "'textbook speculative SRP' (line 3) — exact named anti-pattern"},
+    {"text": "Right trigger: real change request from different stakeholder", "passed": true, "evidence": "'Split when a second actor actually arrives... not the seam the new engineer guessed at' with concrete examples (lines 32-39)"}
+  ],
+  "score": 5,
+  "total": 5
+}

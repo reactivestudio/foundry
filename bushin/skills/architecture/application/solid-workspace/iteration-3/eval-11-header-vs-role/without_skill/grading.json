@@ -1,0 +1,11 @@
+{
+  "eval_id": 11, "config": "without_skill",
+  "expectations": [
+    {"text": "Recommends role interfaces, NOT single header interface", "passed": true, "evidence": "'Split UserService into small role interfaces' + explicit rejection of fat IUserService"},
+    {"text": "Concrete role-interface examples from client perspective", "passed": true, "evidence": "UserAdministration, PasswordResetGateway, PublicProfileQuery with methods"},
+    {"text": "UserService implements all role interfaces", "passed": true, "evidence": "'class UserService implements UserAdministration, PasswordResetGateway, PublicProfileQuery'"},
+    {"text": "Consumers depend only on role they need", "passed": true, "evidence": "'Each consumer depends only on its narrow interface.'"},
+    {"text": "Names/describes header-interface anti-pattern", "passed": true, "evidence": "'role interfaces (as opposed to header interfaces that just mirror the implementation)' — uses Fowler's exact terms"}
+  ],
+  "score": 5, "total": 5
+}

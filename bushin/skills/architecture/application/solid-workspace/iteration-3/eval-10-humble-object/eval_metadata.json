@@ -1,0 +1,12 @@
+{
+  "eval_id": 10,
+  "eval_name": "humble-object",
+  "prompt": "I have a JavaFX controller that extends `BaseController` from the framework. My override of `initialize()` does work that doesn't make sense in tests — it touches the live UI, depends on framework lifecycle, and would throw if called in any other context. The base class's contract is being broken in my override. Is there a clean SOLID-aligned way to deal with this?",
+  "assertions": [
+    {"id": "a1", "text": "Names the Humble Object pattern explicitly"},
+    {"id": "a2", "text": "Prescribes a two-class split: thin shell doing framework-required work + plain object with the logic"},
+    {"id": "a3", "text": "Describes the shell as legitimately constrained (hard to test, may throw on inapplicable operations) — the LSP violation is quarantined there"},
+    {"id": "a4", "text": "Describes the plain object as testable and framework-free"},
+    {"id": "a5", "text": "Generalizes the pattern: applies whenever inheritance you don't control forces a contract break"}
+  ]
+}

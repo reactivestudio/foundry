@@ -1,0 +1,12 @@
+{
+  "eval_id": 8,
+  "eval_name": "ocp-hierarchy",
+  "prompt": "What does 'high-level' actually mean in OCP's rule that 'higher-level components must be protected from changes in lower-level ones'? Some teammates say it means more generic / more reused; others say it means closer to business policy. Which is right? Give a concrete example of each interpretation applied to the same codebase.",
+  "assertions": [
+    {"id": "a1", "text": "Picks the 'closer to business policy' interpretation as correct"},
+    {"id": "a2", "text": "Defines 'level' as distance from I/O / from the system's input-output edges (NOT genericness or reuse count)"},
+    {"id": "a3", "text": "Provides concrete examples: business-rule class as high-level vs heavily-reused utility as low-level"},
+    {"id": "a4", "text": "Explains protection direction: keep DB/UI/framework churn from climbing up into business rules"},
+    {"id": "a5", "text": "Explicitly cautions against conflating reuse-count or genericness with levelness"}
+  ]
+}

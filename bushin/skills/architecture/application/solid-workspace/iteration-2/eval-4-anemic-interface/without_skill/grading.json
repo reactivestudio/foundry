@@ -1,0 +1,13 @@
+{
+  "eval_id": 4,
+  "config": "without_skill",
+  "expectations": [
+    {"text": "Recommends NOT introducing the interface", "passed": true, "evidence": "'No. Don't add the interface.'"},
+    {"text": "Criterion: crosses boundary OR concept is volatile", "passed": true, "evidence": "Lists (1) volatile/replaceable, (2) crosses boundary, (3) has-or-will-have-multiple-impls (last is weaker but two criteria match)"},
+    {"text": "Names this as anemic abstraction", "passed": false, "evidence": "Uses 'ceremony, not inversion' and 'indirection that points at the same concrete class' — captures the idea but does not use the canonical term 'anemic abstraction'"},
+    {"text": "Rejects 'could there be another someday' as vacuous", "passed": true, "evidence": "'speculative generality — the YAGNI failure mode' (line 31) — explicitly rejects this reasoning"},
+    {"text": "Acceptable revisit trigger: real second implementation requirement", "passed": true, "evidence": "Whole 'When you would add it' section lists concrete triggers including second strategy"}
+  ],
+  "score": 4,
+  "total": 5
+}

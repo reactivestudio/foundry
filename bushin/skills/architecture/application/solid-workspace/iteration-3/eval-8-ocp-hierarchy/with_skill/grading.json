@@ -1,0 +1,11 @@
+{
+  "eval_id": 8, "config": "with_skill",
+  "expectations": [
+    {"text": "Picks 'closer to business policy' as correct", "passed": true, "evidence": "Line 1: 'closer to business policy' is right; 'more generic / more reused' is the common misconception"},
+    {"text": "Level = distance from I/O, not genericness", "passed": true, "evidence": "'level = distance from input/output, not generality or reuse count'"},
+    {"text": "Concrete examples: business class as high-level vs reused utility as low-level", "passed": true, "evidence": "PriceQuoteService high-level vs MoneyUtils low-level despite reuse"},
+    {"text": "Protection direction: keep DB/UI/framework churn from climbing up", "passed": true, "evidence": "'DB schema churn now climbs into pricing policy' red-flag cited"},
+    {"text": "Cautions against conflating reuse-count with levelness", "passed": true, "evidence": "'Reuse count is irrelevant to that question.'"}
+  ],
+  "score": 5, "total": 5
+}

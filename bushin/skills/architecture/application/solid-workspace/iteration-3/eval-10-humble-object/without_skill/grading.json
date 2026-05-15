@@ -1,0 +1,11 @@
+{
+  "eval_id": 10, "config": "without_skill",
+  "expectations": [
+    {"text": "Names Humble Object pattern explicitly", "passed": true, "evidence": "'Humble Object pattern (Meszaros, popularised by Feathers and the GOOS book)' — cites canonical sources"},
+    {"text": "Two-class split: shell + plain object", "passed": true, "evidence": "MyController (humble) + MyViewModel/MyPresenter (plain) diagram and concrete code"},
+    {"text": "Shell legitimately constrained, LSP quarantined", "passed": true, "evidence": "Controller 'contains only mechanical translations... nothing throws in a non-framework context'"},
+    {"text": "Plain object testable, framework-free", "passed": true, "evidence": "'This is the class you actually unit-test. No JavaFX, no initialize(), no lifecycle.'"},
+    {"text": "Generalizes: applies whenever inheritance forces contract break", "passed": true, "evidence": "LSP litmus test in closing: 'extract a Humble Object rather than push more logic into the override'"}
+  ],
+  "score": 5, "total": 5
+}

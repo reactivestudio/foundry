@@ -1,0 +1,13 @@
+{
+  "eval_id": 4,
+  "config": "with_skill",
+  "expectations": [
+    {"text": "Recommends NOT introducing the interface", "passed": true, "evidence": "Opens with 'No. Don't introduce IEmailValidator.'"},
+    {"text": "Criterion: crosses boundary OR concept is volatile", "passed": true, "evidence": "Both criteria stated verbatim (lines 9-11), then walked through case-by-case"},
+    {"text": "Names this as anemic abstraction", "passed": true, "evidence": "'That makes IEmailValidator an anemic abstraction' (line 17) — exact term"},
+    {"text": "Rejects 'could there be another someday' as vacuous", "passed": true, "evidence": "'test is vacuous' (line 15) — explicit rejection"},
+    {"text": "Acceptable revisit trigger: real second implementation requirement", "passed": true, "evidence": "Closing recommendation: 'If a second validation strategy ever appears, extract... then'"}
+  ],
+  "score": 5,
+  "total": 5
+}

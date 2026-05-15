@@ -1,0 +1,12 @@
+{
+  "eval_id": 9,
+  "eval_name": "interlock",
+  "prompt": "I keep being told to 'just follow OCP — design for extension'. But concretely, what other SOLID principles does OCP depend on to actually work? Can OCP be achieved on its own?",
+  "assertions": [
+    {"id": "a1", "text": "States that OCP cannot stand alone — it requires other SOLID principles"},
+    {"id": "a2", "text": "Identifies DIP as the mechanism: OCP needs dependencies inverted so volatile deps point at stable abstractions"},
+    {"id": "a3", "text": "Identifies LSP as underwriting OCP: polymorphism (OCP's main mechanism) collapses without behavioral substitutability"},
+    {"id": "a4", "text": "Identifies SRP as providing the seam: extending a class with mixed responsibilities is not cleanly possible"},
+    {"id": "a5", "text": "Articulates the relationship structure (e.g., OCP = what, DIP = how, LSP underwrites polymorphism, SRP gives the seam)"}
+  ]
+}

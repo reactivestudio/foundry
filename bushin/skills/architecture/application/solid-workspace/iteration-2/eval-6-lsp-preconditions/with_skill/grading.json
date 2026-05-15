@@ -1,0 +1,13 @@
+{
+  "eval_id": 6,
+  "config": "with_skill",
+  "expectations": [
+    {"text": "Identifies LSP violation", "passed": true, "evidence": "'Yes — this is a textbook LSP violation' (line 1)"},
+    {"text": "Names the mechanism: strengthening preconditions", "passed": true, "evidence": "'strengthens the precondition' and explicitly tags as 'mechanism #1 of the two ways LSP gets broken' (lines 5-7)"},
+    {"text": "Explains contract claim: parent accepts any, subtype rejects subset, callers break", "passed": true, "evidence": "Concrete code example showing fill(List<Integer>) calling xs.add(-1) blowing up at runtime"},
+    {"text": "Compiler cannot catch — signatures match, contracts diverge", "passed": true, "evidence": "Opening sentence: 'The compiler only checks signatures; LSP is about what callers can rely on after the call returns.'"},
+    {"text": "Suggests alternative: composition / non-inheriting type", "passed": true, "evidence": "Two named options, preferred is composition with concrete code example"}
+  ],
+  "score": 5,
+  "total": 5
+}

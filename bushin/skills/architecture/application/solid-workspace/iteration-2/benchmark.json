@@ -1,0 +1,38 @@
+{
+  "skill_name": "solid",
+  "iteration": 2,
+  "configs": ["with_skill", "without_skill"],
+  "evals": [
+    {
+      "eval_id": 4,
+      "eval_name": "anemic-interface",
+      "with_skill": {"score": 5, "total": 5, "pass_rate": 1.0, "tokens": 21567, "duration_ms": 33061},
+      "without_skill": {"score": 4, "total": 5, "pass_rate": 0.8, "tokens": 18287, "duration_ms": 36308}
+    },
+    {
+      "eval_id": 5,
+      "eval_name": "speculative-srp",
+      "with_skill": {"score": 5, "total": 5, "pass_rate": 1.0, "tokens": 21515, "duration_ms": 33742},
+      "without_skill": {"score": 4, "total": 5, "pass_rate": 0.8, "tokens": 18286, "duration_ms": 35539}
+    },
+    {
+      "eval_id": 6,
+      "eval_name": "lsp-preconditions",
+      "with_skill": {"score": 5, "total": 5, "pass_rate": 1.0, "tokens": 21511, "duration_ms": 42399},
+      "without_skill": {"score": 5, "total": 5, "pass_rate": 1.0, "tokens": 18138, "duration_ms": 33090}
+    },
+    {
+      "eval_id": 7,
+      "eval_name": "di-hell-as-srp",
+      "with_skill": {"score": 5, "total": 5, "pass_rate": 1.0, "tokens": 21570, "duration_ms": 36976},
+      "without_skill": {"score": 5, "total": 5, "pass_rate": 1.0, "tokens": 18076, "duration_ms": 30354}
+    }
+  ],
+  "summary": {
+    "with_skill": {"mean_pass_rate": 1.0, "mean_tokens": 21541, "mean_duration_ms": 36545},
+    "without_skill": {"mean_pass_rate": 0.9, "mean_tokens": 18197, "mean_duration_ms": 33823},
+    "delta_pass_rate_pp": 10.0,
+    "delta_tokens_pct": 18.4,
+    "delta_duration_pct": 8.1
+  }
+}
