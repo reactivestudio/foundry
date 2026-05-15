@@ -1,6 +1,6 @@
 ---
 name: clean-code
-description: "Code review/refactor: functions, classes, comments, errors, boundaries. NOT for naming or SOLID."
+description: "Code review/refactor: naming, functions, classes, comments, errors, boundaries. NOT for SOLID."
 ---
 
 # Clean Code
@@ -16,7 +16,6 @@ Router and cross-cutting rules for refactoring and code review. Topic-specific p
 
 ## When NOT to use
 
-- Naming alone → `code/clean-code-naming` (separate skill, more opinionated).
 - SOLID at principle scope → `architecture/application/solid/`.
 - New code from scratch → `methodology/karpathy` (think, simplify, surgical).
 - Framework-shaped types (`@Entity`, gRPC stub, DTO) — accept the shape, isolate it.
@@ -47,6 +46,7 @@ When you see this smell, read the linked resource for procedures and bad/best ex
 
 | Smell | Resource |
 |---|---|
+| `*Manager`/`*Helper`/`*Util`/`*Dto`/`*Impl` suffix, vague abstract names (`Item`, `Data`, `Info`), comment-instead-of-name, inconsistent vocabulary | `resources/naming.md` (+ `naming-practices.md`) |
 | Long method, deep nesting, flag arguments, `when` on type, side effects, CQS violations | `resources/functions.md` |
 | God class, weasel suffix (`*Manager`/`*Helper`/`*Util`), 25-word test failure, low cohesion | `resources/classes.md` (+ `classes-practices.md` for examples) |
 | Comment-as-failed-name, redundant KDoc, commented-out code, mumbling TODO | `resources/comments.md` |
@@ -68,4 +68,4 @@ When you see this smell, read the linked resource for procedures and bad/best ex
 
 ## Source
 
-R. C. Martin, *Clean Code* (2008), chapters 3–8, 10–11, 17. SOLID at principle scope is in `architecture/application/solid/`. Naming is in `code/clean-code-naming/`. Stack-specific idioms (Kotlin / Spring / JPA / DDD) live in their own categories.
+R. C. Martin, *Clean Code* (2008), chapters 2–8, 10–11, 17. SOLID at principle scope is in `architecture/application/solid/`. Stack-specific idioms (Kotlin / Spring / JPA / DDD) live in their own categories.

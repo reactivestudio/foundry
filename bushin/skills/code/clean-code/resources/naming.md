@@ -1,24 +1,13 @@
----
-name: clean-code-naming
-description: "Name or rename variables/functions/classes: intent over comment. NOT for docs/UX/branches/commits."
----
+# Naming — variables, functions, classes
 
-# Clean Code — Naming
+For bad/best examples, see `naming-practices.md`.
 
-Names are how code talks to the next reader — often you, three months later. A name that needs a comment to be understood has already failed.
+## Output template — when reviewing names
 
-## When to use
-
-- Creating a name for a variable, argument, function, class, file, package, or directory.
-- Reviewing or refactoring existing names in PR or pre-commit.
-- Renaming during a refactor.
-
-## When NOT to use
-
-- Breaking-change renames of public API — handle as a migration.
-- Stack-specific idioms (Kotlin, Spring, JPA, DDD) — defer to the matching reference skill in `kotlin/`, `framework/`, `ddd/`.
-- Documentation prose, UX copy, git branch names, commit messages.
-- Style nits in review when the existing name is already clear.
+For each name in the diff:
+1. **Does the name reveal intent?** (would a comment be needed?)
+2. **Match against red list and stack-noise table** below.
+3. **Action.** Rename to a concrete domain word; expose hidden verbs; drop noise suffixes.
 
 ## House defaults
 
@@ -57,9 +46,9 @@ Encode layer or container type — not intent.
 | `*Impl` | remove | two valid implementations; mark by specificity (`JpaOrderRepository`, not `OrderRepositoryImpl`) |
 | `*Service` | not as a default | genuine application-layer orchestrator (load → call → save) |
 
-## Core principles
+## Core principles — sixteen condensed
 
-Sixteen from ch.2 plus N7 / N2 from ch.17, condensed. Full WHY in `resources/theory.md`.
+From R. C. Martin, *Clean Code* ch. 2 plus N7 / N2 from ch. 17.
 
 1. **Reveal intent.** If a comment is needed, the name failed.
 2. **No disinformation.** No `accountList` for a `Set`. No `l`/`O` identifiers.
@@ -81,11 +70,3 @@ Sixteen from ch.2 plus N7 / N2 from ch.17, condensed. Full WHY in `resources/the
 ## Renaming
 
 Don't fear it. Tooling makes the change cheap and atomic. A rename surprises someone exactly the way any improvement does — pay that cost and move on.
-
-## Practices
-
-`resources/practices.md` — bad/best example catalog organised by topic (intent, magic numbers, noise words, side effects, level of abstraction, Hungarian, conjunctions, conversion pairs, one-word default).
-
-## Source
-
-Adapted from R. C. Martin, *Clean Code*, ch. 2 "Meaningful Names" (Tim Ottinger) and ch. 17 §N1–N7. Stack-specific naming (Kotlin / Spring / JPA / DDD) deferred to skills in those categories.

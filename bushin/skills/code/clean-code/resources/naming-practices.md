@@ -1,8 +1,8 @@
-# Clean Code — Naming Practices
+# Naming — bad/best examples
 
-Bad/best examples organised by topic. Read this when you want concrete patterns to copy. For the WHY behind each rule, see `theory.md`. For the high-level checklist, see `../SKILL.md`.
+For the checklist, see `naming.md`. For the cadence rules, see `../SKILL.md`.
 
-Examples use plain Kotlin syntax — no language-specific idioms (coroutines, scope functions, extensions). Stack-specific naming lives in `kotlin/`, `framework/`, `ddd/` skills.
+Examples use plain Kotlin syntax — no language-specific idioms.
 
 ## Implicit context → intent-revealing
 
