@@ -1,6 +1,6 @@
 {
   "name": "bushin",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "description": "Opinionated senior-engineer toolkit for Kotlin / Spring Boot: agents, methodology / clean-code / DDD / testing / architecture skills, adversarial review commands, end-of-turn sound hook.",
   "author": { "name": "Dmitriy Bushin" },
   "keywords": ["kotlin", "spring-boot", "ddd", "testing", "architecture"],
@@ -10,6 +10,7 @@
     "./skills/architecture/system/",
     "./skills/code/",
     "./skills/database/",
+    "./skills/ddd/",
     "./skills/diagnostic/",
     "./skills/framework/",
     "./skills/messaging/",
