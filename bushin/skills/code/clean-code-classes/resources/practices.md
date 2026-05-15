@@ -4,6 +4,74 @@ Bad/best examples organised by topic. Read this when you want concrete patterns.
 
 Examples use plain Kotlin syntax — no language-specific idioms (no coroutines, sealed hierarchies, scope functions, extensions). Stack-specific class shapes live in `kotlin/`, `framework/`, `ddd/` skills.
 
+## Worked review: `OrderService`
+
+The skill's `Output template` applied end-to-end on a realistic god-service.
+
+### Input
+
+```kotlin
+class OrderService(
+    private val orders: OrderRepository,
+    private val payment: PaymentGateway,
+    private val refunds: RefundGateway,
+    private val csv: CsvExporter,
+    private val stats: StatisticsCache,
+    private val audit: AuditLog,
+    private val clock: Clock,
+    private val mailer: Mailer,
+) {
+    fun submit(cmd: SubmitOrderCommand): OrderId { ... }   // uses orders, payment, audit, clock, mailer
+    fun cancel(cmd: CancelOrderCommand) { ... }            // uses orders, audit, clock
+    fun refund(cmd: RefundOrderCommand) { ... }            // uses orders, refunds, audit
+    fun exportToCsv(query: ExportQuery): CsvFile { ... }   // uses orders, csv
+    fun recomputeStats() { ... }                           // uses orders, stats, clock
+}
+```
+
+### 1. 25-word verdict
+
+> *"Orchestrates the Order lifecycle, **and** exports orders to CSV, **and** recomputes order statistics."*
+
+**Fails.** Two `and`s → three concerns: lifecycle, export, statistics.
+
+### 2. Size & cohesion summary
+
+- Public methods: **5**.
+- Instance variables: **8** (over the ~7 heuristic).
+- Cohesion clusters (by field usage):
+  - **Lifecycle:** `submit` / `cancel` / `refund` share `orders`, `audit`, `clock`. `submit` adds `payment`, `mailer`. `refund` adds `refunds`.
+  - **Export:** `exportToCsv` uses only `orders`, `csv`.
+  - **Statistics:** `recomputeStats` uses `orders`, `stats`, `clock`.
+
+`orders` is the only shared field across all three clusters; everything else cluster-local.
+
+### 3. Smells found
+
+- Plain `*Service` with no domain qualifier in the name (weasel red list).
+- 8 constructor dependencies (size table: target ~< 7).
+- 3 cohesion clusters in one class — fields used by only one method dominate.
+
+### 4. Action plan
+
+1. **Characterisation tests** for all 5 public methods. Green.
+2. **Extract `OrdersCsvExporter(orders, csv)`** — single use case, 2 deps. Re-run tests.
+3. **Extract `OrderStatisticsRecomputer(orders, stats, clock)`** — single use case, 3 deps. Re-run tests.
+4. **Split the lifecycle cluster by command** into `SubmitOrder`, `CancelOrder`, `RefundOrder`. Each gets only the deps it uses. Re-run tests after each split.
+5. **Delete `OrderService`** once callers migrate.
+
+### Final shape
+
+```kotlin
+class SubmitOrder(orders, payment, audit, clock, mailer)       // 5 deps, 1 use case
+class CancelOrder(orders, audit, clock)                        // 3 deps, 1 use case
+class RefundOrder(orders, refunds, audit)                      // 3 deps, 1 use case
+class OrdersCsvExporter(orders, csv)                           // 2 deps, 1 use case
+class OrderStatisticsRecomputer(orders, stats, clock)          // 3 deps, 1 use case
+```
+
+Each new class passes the 25-word test. Each has 2-5 dependencies. A new use case (`ReassignOrder`) is a new class — no existing class changes.
+
 ## The small-looking god class (size = concerns)
 
 ```kotlin
@@ -125,51 +193,6 @@ class Order private constructor(
 ```
 
 The test uses `rehydrate(...)` instead of mutating a public field; the invariant survives.
-
-## God service split by use case
-
-```kotlin
-// Bad — five unrelated use cases in one class, 8 dependencies
-class OrderService(
-    private val orders: OrderRepository,
-    private val payment: PaymentGateway,
-    private val refunds: RefundGateway,
-    private val csv: CsvExporter,
-    private val stats: StatisticsCache,
-    private val audit: AuditLog,
-    private val clock: Clock,
-    private val mailer: Mailer,
-) {
-    fun submit(...) { ... }        // uses orders, payment, audit, clock, mailer
-    fun cancel(...) { ... }        // uses orders, audit, clock
-    fun refund(...) { ... }        // uses orders, refunds, audit
-    fun exportToCsv(...) { ... }   // uses orders, csv
-    fun recomputeStats() { ... }   // uses orders, stats, clock
-}
-
-// Good — one use case per class, 3-5 dependencies each
-class SubmitOrder(
-    private val orders: OrderRepository,
-    private val payment: PaymentGateway,
-    private val audit: AuditLog,
-    private val clock: Clock,
-    private val mailer: Mailer,
-) {
-    fun handle(command: SubmitOrderCommand): OrderId = ...
-}
-
-class CancelOrder(
-    private val orders: OrderRepository,
-    private val audit: AuditLog,
-    private val clock: Clock,
-) {
-    fun handle(command: CancelOrderCommand) = ...
-}
-
-// ... RefundOrder, ExportOrdersToCsv, RecomputeOrderStatistics
-```
-
-Each new class passes the 25-word test; each has 3-5 dependencies (visibly cohesive); adding a new use case is a new class, not a new method on an existing god.
 
 ## Too many fields → value-object extraction
 

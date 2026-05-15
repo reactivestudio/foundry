@@ -1,6 +1,6 @@
 # Clean Code — Classes Theory
 
-Full reasoning behind each principle in `../SKILL.md`. Read this when you want the WHY. For concrete patterns, see `practices.md`. For SOLID at principle scope, see `architecture/application/solid/`.
+Full reasoning behind each principle in `../SKILL.md`. Read this when you want the WHY. For concrete patterns, see `practices.md`.
 
 ## T1. Newspaper / stepdown layout
 
