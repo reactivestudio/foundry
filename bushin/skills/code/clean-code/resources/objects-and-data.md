@@ -10,10 +10,10 @@ For any class, the first question is: *behaviour-rich object* (data hidden, oper
 
 ## MUST-check before closing the review
 
-Pass through this list explicitly — the eye reads past raw primitives and entity-shaped returns because they look familiar.
+Pass through this list **enumeratively** — not just principle-by-principle. Walk every signature; tick every parameter. The eye reads past raw primitives and entity-shaped returns because they look familiar.
 
-- [ ] No domain concept carried as raw `Long`/`String`/`Double`? (`userId: Long`, `email: String`, `priceCents: Long` → `UserId`, `Email`, `Money` — primitive obsession)
-- [ ] No `@Entity` / `*Row` / `*Entity` type returned from or accepted by a domain-layer method? (entity stops at the repository edge)
+- [ ] **Scan every public method signature.** List every parameter and return type that is `Long`/`String`/`Double`/`Int` — **including those hidden behind `typealias`**. `typealias UserId = Long` is **not encapsulation** — the compiler erases it to `Long`, and any `Long` can be passed where `UserId` is expected. Each raw-primitive (or typealiased-primitive) parameter is primitive obsession unless the value is truly a generic measurement with no domain identity. Fix: `@JvmInline value class UserId(val value: Long)`.
+- [ ] **Scan every public method return type and parameter type for persistence-shaped types.** If the type name ends in `Entity`/`Row`/`Document`/`Record`, OR lives in a `persistence.*` / `repository.*` / `dao.*` package, OR is annotated `@Entity`/`@Document`/`@Table` — flag it. Persistence types belong at the repository edge, never in domain method signatures. Fix: separate aggregate type with a mapper.
 - [ ] No train wreck `a.b().c().d()` in callers? (push the operation onto the first object — Tell, don't ask)
 - [ ] No hybrid class (public/mutable state **and** business methods on the same type)?
 - [ ] No anaemic data with all logic living elsewhere in a `*Service`?
