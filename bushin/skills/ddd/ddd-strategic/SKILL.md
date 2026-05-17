@@ -46,15 +46,16 @@ Each speculative context split, premature classification, or "build it ourselves
 
 ## Design output
 
-When proposing strategic structure (forward design, not review of existing), produce these five artifacts in order. A response missing any of them is incomplete.
+When proposing strategic structure (forward design, not review of existing), produce these six artifacts in order. A response missing any of them is incomplete.
 
 1. **Subdomain map** — table with columns `Capability | Type | Why (≤1 sentence tied to revenue or competitive advantage) | Revisit trigger (the event that flips the label)`. Every capability gets a row; absence of the *Why* column collapses to vibes-based classification.
-2. **Bounded context catalog** — per BC: `name | type | owner team | local model types (named in the BC's vocabulary, not generic 'User'/'Customer') | integration pattern with each neighbor`. Pattern names (Customer-Supplier, Conformist, ACL, OHS, Partnership, Shared Kernel, Separate Ways) — see `ddd-bounded-contexts` for mechanics.
-3. **Anti-term inventory** — table with columns `word | meaning per BC | healthy conflict (boundary surfaced) or harmful (semantic drift, needs rename)`. At least one entry. Absence of anti-terms in a multi-BC system is itself suspicious — it usually means BCs haven't actually been distinguished.
-4. **Considered-but-rejected** — ≥2 entries: "Considered X, rejected because Y." The design-time analog of `## Review output → Non-findings`. Cover at minimum: an alternative split, a build-vs-buy chosen against, and any stakeholder proposal pushed back on.
-5. **Leave-alone list** — capabilities or modules that are stable, agreed-on, and must not be touched. Strategic DDD protects what works as explicitly as it restructures what doesn't.
+2. **Distillation per Core entry** — for each capability classified Core in #1, identify the *Core core* (rules/data/signals nobody else gets right), the *Generic core* (solved mechanics it uses — date math, vendor data pulls, libraries), and the *Supporting core* (audit logs, admin tooling, configuration). Treating a Core BC as uniformly Core wastes best engineers on plumbing; treating it as uniformly Generic loses the moat to a library that almost-but-not-quite fits. ([theory](resources/theory.md) for the "what would a competitor copy us on if they saw the code" test.)
+3. **Bounded context catalog** — per BC: `name | type | owner team | local model types (named in the BC's vocabulary, not generic 'User'/'Customer') | integration pattern with each neighbor`. Pattern names (Customer-Supplier, Conformist, ACL, OHS, Partnership, Shared Kernel, Separate Ways) — see `ddd-bounded-contexts` for mechanics.
+4. **Anti-term inventory** — table with columns `word | meaning per BC | healthy conflict (boundary surfaced) or harmful (semantic drift, needs rename)`. At least one entry. Absence of anti-terms in a multi-BC system is itself suspicious — it usually means BCs haven't actually been distinguished.
+5. **Considered-but-rejected** — ≥2 entries: "Considered X, rejected because Y." The design-time analog of `## Review output → Non-findings`. Cover at minimum: an alternative split, a build-vs-buy chosen against, and any stakeholder proposal pushed back on.
+6. **Leave-alone list** — capabilities or modules that are stable, agreed-on, and must not be touched. Strategic DDD protects what works as explicitly as it restructures what doesn't.
 
-A response that does only #1–#2 produces classification without discipline. #3 (anti-terms), #4 (considered-rejected), and #5 (leave-alone) are the discriminators that distinguish a strategic-DDD proposal from generic architecture advice.
+A response that produces only #1 and #3 has classification and BC sketching without strategic discipline. The discriminators are #2 (distillation), #4 (anti-terms), #5 (considered-rejected), and #6 (leave-alone) — each is what distinguishes a strategic-DDD proposal from generic architecture advice.
 
 ## Review output
 
