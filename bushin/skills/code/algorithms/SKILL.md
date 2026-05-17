@@ -5,72 +5,73 @@ description: "Name Big-O complexity, pick collections, refactor quadratic loops.
 
 # Algorithms
 
-Backend engineers rarely *write* algorithms — they pick them, then live with the consequences. This skill is **complexity literacy**: naming the shape of a piece of code in seconds, choosing the standard-library primitive that matches it, and recognizing the small set of quadratic accidents that cause most real-world slowdowns.
+Backend engineers rarely write algorithms — they pick them, then live with the consequences. This skill enforces a **mechanical pre-flight audit** against any code-review prompt, plus a vocabulary of named patterns so catches are verifiable.
 
-Resources by axis: [theory](resources/theory.md) for complexity nuance beyond standard Big-O, [practices](resources/practices.md) for named anti-patterns with the one-line fix, [kotlin](resources/kotlin.md) for language-specific footguns (Sequence pitfalls, atomicity, data-class hashing). Open the relevant file when reasoning about a specific question.
+Resources by axis: [practices](resources/practices.md) for general algorithmic-shape patterns, [kotlin](resources/kotlin.md) for language-specific footguns, [spring](resources/spring.md) for JPA / Spring Data specifics, [persistence](resources/persistence.md) for cache and idempotency correctness, [theory](resources/theory.md) for residual nuance.
 
 ## When to use
 
-- Code review: "what's the complexity of this loop?" or "is this fast enough at production N?"
-- Picking a collection — when `List` / `Set` / `Map` / sorted / concurrent each fit differently.
-- Designing pagination, deduplication, top-K, or aggregation over expected-to-grow data.
-- Refactoring slow code where the **algorithm**, not the framework, is the bottleneck.
-- Capacity estimation — "if N goes from 10K to 1M, does this still work?"
+- Code review of services / handlers — catch algorithmic-shape bugs before merge.
+- Picking a collection, designing pagination, deduplication, top-K, or aggregation.
+- Refactoring slow code where the algorithm — not the framework or JVM — is the bottleneck.
+- Capacity estimation under realistic N.
 
-## The big four
+## Pre-flight checklist
 
-Acceptable backend complexities, in descending order of preference: **O(1) → O(log N) → O(N) → O(N log N)**. Anything worse — O(N²), O(N³), exponential — demands a written justification: bounded N, one-off batch, or a small known input. ([theory](resources/theory.md))
+For any code under review, walk this list. Each line is a mechanical audit, not a discipline. Route flagged items to the named pattern in resources.
 
-## Five shapes → library primitives
+1. **Every `repo.findAll()`** — name the production N or flag. Predicate that could go to SQL → `findAll-and-filter trap`.
+2. **Every loop containing a repo / service / HTTP call** — bulk variant exists? → `N+1 cascade` + `bulk-fetch missed`.
+3. **Every `repo.findAll()` inside a loop** → `cartesian repo dance`. Almost always the worst trap.
+4. **Every `list.first { f == x }` / `.any` / `.find` in a loop** → `list.first in loop`; index by `f` once outside.
+5. **Every `data class` used as Map / Set key** — all properties `val`? Any `var` → `mutable-key cache phantom`.
+6. **Every `ConcurrentHashMap.getOrPut`** → `getOrPut atomic illusion`; use `computeIfAbsent`.
+7. **Every `containsKey + put` / read-modify-write on a Map** → `containsKey-then-put`; use `merge` / `compute`.
+8. **Every `associateBy { f }`** — is `f` uniquely keyed? If not → `associateBy silent dataloss`; usually `groupBy`.
+9. **Every cache** — list every param the result depends on; each must be in the key. Missing → `cache-key incomplete`.
+10. **Every idempotency check** — keyed by *message* identity (event id / version), not aggregate identity. Else → `idempotency-key incomplete`.
+11. **Every `sort-then-take-K`** — is N bounded? Bounded → leave (false positive). Unbounded → top-K heap or push to DB.
+12. **Every `+=` in loop on String / List / Set** — quadratic; mutable accumulator / `buildString` / `joinToString`.
+13. **Every `.asSequence()` already in code** — chain ≤ 2 steps over bounded N → remove the wrap → `sequence-reflex removal`.
+14. **Every `@Transactional` on a read** — has `readOnly = true`? Else → `@Transactional readOnly missing`.
+15. **Every `@Transactional` over a save-loop** — chunked / `flush + clear`? Else → `Hibernate session swell`.
+16. **Every `Pageable` + `JOIN FETCH`** → `Pageable in-memory fallback`.
+17. **Every nested loop over the same collection with time-proximity check** → `time-window pairs`; sort + sliding window.
+18. **Every nested loop where N is provably small (≤ 100)** — false positive; **document the bound** at the call site.
 
-Most backend code is one of these. Map the shape to the primitive **before** writing anything custom.
+## Named patterns by resource
 
-| Shape | Primitive | Cost |
-|---|---|---|
-| Lookup by key / membership | `HashMap` / `HashSet` (`Tree*` if sorted) | O(1) avg / O(log N) |
-| Pagination over a growing table | Keyset / cursor (not offset) | O(log N + limit) |
-| Deduplication | `distinct()` / `toSet()` | O(N) |
-| Top-K from N | `PriorityQueue` of size K | O(N log K) |
-| Group + aggregate | `groupBy { }.mapValues { }` or SQL `GROUP BY` | O(N + groups) |
+Use names verbatim in output — verifiable catches.
 
-Re-implementing any of these is almost always a mistake. ([practices](resources/practices.md))
+- [practices](resources/practices.md): *findAll-and-filter trap, N+1 cascade, bulk-fetch missed, cartesian repo dance, cartesian-with-filter, list.first in loop, findAll-then-first, sort-then-take-K (active vs bounded-N false positive), bounded-O(N²) acceptable, time-window pairs.*
+- [kotlin](resources/kotlin.md): *getOrPut atomic illusion, containsKey-then-put, mutable-key cache phantom, associateBy silent dataloss, sequence-reflex removal.*
+- [spring](resources/spring.md): *Hibernate session swell, @Transactional readOnly missing, @Transactional batch scope, Pageable in-memory fallback, stream-doesnt-push, top-N derived method, Sort.by without index, lazy-init-on-serialize, Specifications count-query.*
+- [persistence](resources/persistence.md): *cache-key incomplete, idempotency-key incomplete, cache write-through staleness, N+1 across DTO graph, cache-unbounded.*
 
-## Procedure
+## Common false positives — leave them
 
-1. **Name the largest plausible N.** If you can't, stop — you don't know the algorithm yet. Worst case in production, not the test fixture.
-2. **Identify the hot operation.** What runs once per outer iteration? Lookup, comparison, write, round-trip? That's the cost driver.
-3. **Read the container's API contract.** `List.contains` is O(N); `Set.contains` is O(1). Same call, different shape. ([theory](resources/theory.md))
-4. **If the shape is wrong, change the container — not the algorithm.** `List` → `Set` is one line and turns O(N²) into O(N). ([practices](resources/practices.md))
+Tempting refactors that **don't earn their cost**:
 
-## Restraint defaults
+- `sort-then-take-K` on bounded N (page size, items per order) — heap is slower at small N.
+- Bounded `O(N²)` over ≤ 100 elements — leave; document the bound.
+- Simple `when` / `if-else` over a small enum — don't refactor to strategy.
+- Clear averaging / null-check idioms (`if (xs.isEmpty()) 0.0 else xs.sumOf { … } / xs.size`) — don't replace with `takeIf` chains.
+- Plain `for` over `.forEach` when the body has side effects or early returns.
+- `.map { … }.toList()` on a small list — don't add `.asSequence()`.
 
-Most "performance work" makes code busier without making it faster. Default answers when tempted:
+If review time goes to these, the review is over-fitting.
 
-- **Optimize a slow loop?** No, until you've **profiled** it. The hot path is rarely where you think. Optimizing the wrong loop costs reading effort and buys nothing.
-- **Suggest `asSequence()` / `stream()` "for performance"?** No. Sequences change *allocation*, not time complexity. Only win: large N + many steps + early termination. ([theory](resources/theory.md))
-- **Replace a clear O(N²) when N is bounded and small?** No. Tight nested loops over 10–100 items are fine and readable. Document the bound (`// at most 100 items per order`); don't refactor. ([practices](resources/practices.md))
-- **Switch `List` to `Set` "to be safe"?** No, unless you actually do `contains` / `find` on it. A `Set` you only iterate is a `List` with weaker ordering guarantees and more hashing.
+## Beyond the algorithmic axis — flag, don't suppress
 
-Asymptotics always win at scale; constants always win at small N. Don't conflate the two regimes.
-
-## Anti-pattern signatures
-
-One-line smell each. Full fix in [practices.md](resources/practices.md). Listed in order of how often they slip past code review.
-
-- `list.first { it.id == other.id }` (or `.any { it.x == y }`) inside a loop → O(N×M). Build an indexed `Map` / `Set` once outside.
-- `sortedBy { keyDependentOnLoopVar }` inside a loop → re-sorts every iteration. Top-K heap if you only need K.
-- Offset pagination on a table that will exceed ~1K rows → O(offset + limit). Use keyset/cursor.
-- N round-trips (DB / HTTP / MQ) inside a loop → N+1, even when each call is O(1). Bulk-fetch.
-- `repo.findAll().filter { ... }` → O(rows in table). Push the predicate to SQL/index.
-- `list.contains` / `list.removeAll(otherList)` / `result = result + x` / string concat in a loop → all O(N²); reach for `Set`, `removeIf`, mutable accumulator, `buildString`.
+This skill is narrow. Adjacent concerns will surface in the same code: API-contract leaks (audit log returned in response DTO), magic strings, security, durability of in-process state, broken `equals` on non-data classes. **Flag each in one sentence and defer; don't try to solve them here, and don't suppress them.** A review that catches every algorithmic trap but misses an obvious contract bug is a worse review.
 
 ## When NOT to use
 
-- **True algorithm problems** (Dijkstra, segment trees, FFT, graph isomorphism) — rare in backend; reach for a library (JGraphT, etc.) when they appear.
-- **JVM tuning** — GC, JIT, escape analysis. Different skill; complexity is fine but constants kill.
-- **Database tuning** — query plans, indexes, statistics. The DB has its own Big-O story; this skill stops at "push the predicate to SQL".
-- **Concurrency design** — thread pools, lock-freedom, backpressure. Algorithmic shape matters there too, but isn't the primary concern.
+- True algorithm problems (Dijkstra, segment trees, FFT) — use a library.
+- JVM tuning (GC, JIT, escape analysis) — different skill.
+- Database tuning (query plans, indexes, statistics) — DB has its own Big-O story.
+- Concurrency primitives design (thread pools, lock-freedom, backpressure) — adjacent skill.
 
 ## Source
 
-Distilled from S. Skiena, *The Algorithm Design Manual* 3e (2020); T. Roughgarden, *Algorithms Illuminated* (2017–2020); M. Kleppmann, *Designing Data-Intensive Applications* (2017); J. Bloch, *Effective Java* 3e (2018), items on collections and streams.
+Distilled from S. Skiena, *The Algorithm Design Manual* 3e (2020); T. Roughgarden, *Algorithms Illuminated* (2017–2020); M. Kleppmann, *Designing Data-Intensive Applications* (2017); J. Bloch, *Effective Java* 3e (2018). Spring/JPA section informed by the Hibernate User Guide and V. Schreiner's *High-Performance Java Persistence* 3e.

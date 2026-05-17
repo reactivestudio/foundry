@@ -1,6 +1,6 @@
 # Theory — strategic DDD beyond the body
 
-Six framings that don't fit in `SKILL.md` but tip the procedure into working / not working.
+Seven framings that don't fit in `SKILL.md` but tip the procedure into working / not working.
 
 ## Discovery walk — start from where the business lives
 
@@ -24,6 +24,18 @@ Subdomains are not "modules" or "services". They're capability clusters. The rul
 **Too fine**: "Profile Avatar Upload" is a feature, not a subdomain — no outcome, no investment decision, no team.
 
 Test: can you write a one-sentence "why this is Core / Supporting / Generic" tied to revenue or competitive position? If yes, granularity is right. If the sentence has to mention multiple unrelated outcomes, split. If you can't write a coherent sentence at all, you have a feature, not a subdomain.
+
+## Distillation — finding the Core inside a Core
+
+A Core BC is rarely uniformly Core. Inside it, the same three labels apply recursively:
+
+- **Core core** — the rules nobody else gets right (per-jurisdiction accrual policies; per-segment risk scoring with proprietary signals; pricing elasticity model trained on internal data). Best engineers, deepest iteration, slowest external dependencies.
+- **Generic core** — solved mechanics the Core uses but doesn't differentiate on (date arithmetic, balance arithmetic, basic credit-bureau wrappers, document storage, ML training infrastructure). Libraries, vendors, OSS — same investment rules as any Generic.
+- **Supporting core** — necessary plumbing inside the Core BC (audit logging, internal admin tooling, configuration management). Solid build, no gold-plating.
+
+The investment rule recurses. Treating the whole Core BC as uniformly Core wastes best engineers on date math; treating it as uniformly Generic loses the moat to a library that almost-but-not-quite fits.
+
+Test: take any Core BC, ask *"what part of this would a competitor copy us on if they saw the code?"* That part is the Core core. The rest is plumbing that happens to live in a Core context.
 
 ## A bounded context contains exactly three things
 

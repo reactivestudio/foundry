@@ -25,6 +25,26 @@ If you build a pipeline and consume it more than once, materialise it first (`.t
 
 If the chain has any of these mid-way and the motivation for `asSequence()` was "stream to save memory," the saving is already gone. Use a `List` and accept the eager allocations — simpler and no clearer regression.
 
+## Remove `.asSequence()` from short eager chains
+
+When you see `.asSequence()` already in code, check the chain. If **any one** holds, remove the wrap:
+
+- Chain ≤ 2 intermediate steps.
+- Input is small (≤ ~100 elements) or bounded by definition (page size, items per order).
+- No early termination — chain ends in `.toList()` / `.toSet()` / `.sumOf` / `.count`.
+
+```kotlin
+// SMELL — wrapping adds Sequence overhead without saving allocations
+val ids = enriched.asSequence()
+    .flatMap { it.product.tagIds }
+    .toSet()
+
+// FIX — eager is faster and clearer at this scale
+val ids = enriched.flatMap { it.product.tagIds }.toSet()
+```
+
+Sequence has real costs: per-step lambda boxing, iterator state, no random access. On a 5-element page with a 2-step chain, eager wins. Only re-add `.asSequence()` when the chain hits the three-condition bar (large N + ≥3 steps + early termination).
+
 ## `getOrPut` is NOT atomic on `ConcurrentHashMap`
 
 The classic race:
@@ -43,6 +63,34 @@ cache.computeIfAbsent(key) { compute(key) }   // atomic on ConcurrentHashMap
 ```
 
 Same trap with `put(key, value)` after a manual `containsKey` check. `getOrPut` is fine on non-concurrent maps; on a `ConcurrentHashMap` it silently breaks the atomicity guarantee the container offers.
+
+## `containsKey` + `put` (and read-modify-write) → `merge` / `compute`
+
+Two lookups where one would do, plus a race window on `ConcurrentHashMap`:
+
+```kotlin
+// SMELL — two ops per increment, racy if map is concurrent
+if (counters.containsKey(id)) {
+    counters[id] = counters[id]!! + 1
+} else {
+    counters[id] = 1
+}
+
+// FIX — one atomic op, one lookup
+counters.merge(id, 1, Int::plus)
+```
+
+Same shape for accumulation, append-to-list, or any read-modify-write:
+
+```kotlin
+// SMELL
+byCurrency[c] = (byCurrency[c] ?: BigDecimal.ZERO) + amount
+
+// FIX
+byCurrency.merge(c, amount, BigDecimal::plus)
+```
+
+Use `compute` for transformations, `merge` for combine-with-default, `computeIfAbsent` for memoize. All three are atomic on `ConcurrentHashMap`. On a plain `HashMap` they're still preferable — half the lookups, no `!!`.
 
 ## `data class` auto-hashes every property — including `var`
 

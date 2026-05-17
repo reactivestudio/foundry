@@ -7,7 +7,7 @@ description: "Subdomains (Core/Supporting/Generic), bounded contexts, ubiquitous
 
 Three decisions about where the lines fall: what to invest in (**subdomain classification**), where boundaries sit (**bounded contexts**), and what each boundary speaks (**ubiquitous language**). Strategic DDD sits above tactical patterns and below organizational strategy. Wrong lines, and the tactical code is well-built around the wrong shape.
 
-[theory](resources/theory.md) deepens the discovery walk, granularity rule, and BC↔subdomain mapping. [practices](resources/practices.md) shows three bad/good pairs. Stack-specific boundary enforcement: [kotlin](resources/kotlin.md), [spring](resources/spring.md).
+[theory](resources/theory.md) deepens discovery, granularity, distillation (Core inside Core), and BC↔subdomain mapping. [practices](resources/practices.md) shows three bad/good pairs. Stack-specific boundary enforcement: [kotlin](resources/kotlin.md), [spring](resources/spring.md).
 
 ## When to use
 
@@ -23,13 +23,13 @@ Three decisions about where the lines fall: what to invest in (**subdomain class
 - **Supporting** — necessary but not differentiating; company-specific, simple. Solid build, no gold-plating.
 - **Generic** — solved problem, commodity. Buy / OSS / SaaS; custom code only at the seams.
 
-Classification determines investment, not technology. ([theory](resources/theory.md))
+Classification determines investment, not technology. **Inside a Core subdomain, recurse**: the *Core core* is the moat-within-the-moat (rules nobody else gets right); the rest is Generic mechanics (date math, basic vendor wrappers) and Supporting plumbing (audit logs, admin) that happen to live there. ([theory](resources/theory.md))
 
 ## Procedure
 
 1. **Discover and classify subdomains.** Walk from public material → org chart → capabilities; for each, ask "would the company exist without this?" Each capability gets one of three labels and a one-sentence "why" tied to revenue or competitive advantage. ([theory](resources/theory.md))
 2. **Design bounded contexts.** Default one BC per subdomain; one team owns each BC. A BC contains: one model, one ubiquitous language, one public contract. ([practices](resources/practices.md))
-3. **Lock the ubiquitous language per BC.** Same word can — and often should — mean different things in different contexts. Document the conflicts explicitly as anti-terms.
+3. **Lock the ubiquitous language per BC.** Capture what business stakeholders (CRO/CFO/customers/domain experts) actually say for each capability — contrast against engineering vocabulary; gaps are UL signals. Then **inventory anti-terms**: every business noun that means different things across BCs (`Loan`, `Customer`, `Order`, `Employee`). Each entry: word → meaning per BC → healthy conflict (boundary surfaced) or harmful (semantic drift, needs rename).
 4. **Set revisit triggers.** Classification is current-strategy, not permanent. Name the event that flips each entry: "promote to Core when it appears in the sales pitch", "downgrade to Generic when a vendor catches up".
 
 ## Restraint defaults
@@ -44,9 +44,21 @@ Most strategic-DDD damage is eager classification or eager splitting, not omissi
 
 Each speculative context split, premature classification, or "build it ourselves" decision taxes every future change: another team to coordinate, another model to keep in sync, a piece of competitive advantage diluted. Wait for evidence — a real second team, real divergence, a real moat.
 
+## Design output
+
+When proposing strategic structure (forward design, not review of existing), produce these five artifacts in order. A response missing any of them is incomplete.
+
+1. **Subdomain map** — table with columns `Capability | Type | Why (≤1 sentence tied to revenue or competitive advantage) | Revisit trigger (the event that flips the label)`. Every capability gets a row; absence of the *Why* column collapses to vibes-based classification.
+2. **Bounded context catalog** — per BC: `name | type | owner team | local model types (named in the BC's vocabulary, not generic 'User'/'Customer') | integration pattern with each neighbor`. Pattern names (Customer-Supplier, Conformist, ACL, OHS, Partnership, Shared Kernel, Separate Ways) — see `ddd-bounded-contexts` for mechanics.
+3. **Anti-term inventory** — table with columns `word | meaning per BC | healthy conflict (boundary surfaced) or harmful (semantic drift, needs rename)`. At least one entry. Absence of anti-terms in a multi-BC system is itself suspicious — it usually means BCs haven't actually been distinguished.
+4. **Considered-but-rejected** — ≥2 entries: "Considered X, rejected because Y." The design-time analog of `## Review output → Non-findings`. Cover at minimum: an alternative split, a build-vs-buy chosen against, and any stakeholder proposal pushed back on.
+5. **Leave-alone list** — capabilities or modules that are stable, agreed-on, and must not be touched. Strategic DDD protects what works as explicitly as it restructures what doesn't.
+
+A response that does only #1–#2 produces classification without discipline. #3 (anti-terms), #4 (considered-rejected), and #5 (leave-alone) are the discriminators that distinguish a strategic-DDD proposal from generic architecture advice.
+
 ## Review output
 
-When reviewing existing strategic decisions, produce three sections — the second is the discriminator that separates careful review from naive labeling:
+When reviewing existing strategic decisions (not designing new structure), produce three sections — the second is the discriminator that separates careful review from naive labeling:
 
 1. **Findings** — actual classification or boundary violations, cited from code or org structure. Each: which thesis is broken, evidence (file, team, capability), risk if left.
 2. **Non-findings** — looks like a violation, isn't. Always check at least:
@@ -54,7 +66,7 @@ When reviewing existing strategic decisions, produce three sections — the seco
    - One BC owning multiple subdomains → fine when starting; cost-justified split only when language genuinely diverges.
    - Same term meaning different things in two team docs → that's the boundary signal, not a bug.
    - One subdomain split across two BCs → sometimes legitimate (Core too big to own), often not. Default-suspicious.
-3. **Boundary sketch** — for real findings only: which BC absorbs the capability, who owns it, what's in the public contract, which boundary pattern the pair uses (Partnership, Customer-Supplier, Conformist, Anti-Corruption Layer, Open-Host Service, Separate Ways, Shared Kernel — mechanics in `ddd-context-mapping`).
+3. **Boundary sketch** — for real findings only: which BC absorbs the capability, who owns it, what's in the public contract, which boundary pattern the pair uses (Partnership, Customer-Supplier, Conformist, Anti-Corruption Layer, Open-Host Service, Separate Ways, Shared Kernel — mechanics in `ddd-bounded-contexts`).
 
 A review that lists only findings encourages premature splits and unnecessary renames. The non-findings section is what stops the review from making the architecture worse.
 
