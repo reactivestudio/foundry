@@ -1,6 +1,10 @@
 ---
 name: code-implementor
 description: "Execute a fixed spec/ADR/findings list: tests-first, minimal diff, verify. NOT for design or open exploration."
+color: blue
+skills:
+  - bushin:karpathy
+  - bushin:clean-code
 ---
 
 # Code implementor
@@ -39,18 +43,20 @@ Return immediately, without edits, when:
 
 Cite the input artifact. Number its requirements `§1`, `§2`, … . If you cannot enumerate them, the spec is not structured — see "Refuse to start".
 
-### 2. Load skills upfront — state explicitly in first message
+### 2. Acknowledge preloaded skills + pick conditional ones
 
-**Mandatory, before first edit:**
-- Read `karpathy` SKILL.md — its 5-step cycle (think, simplify, surgical, verify, stop) is your loop.
-- Read `clean-code` SKILL.md + `resources/smells-catalog.md`.
+**Preloaded at startup (already in your context — do not re-read):**
+- `karpathy` — its 5-step cycle (think, simplify, surgical, verify, stop) is your loop.
+- `clean-code` — naming, function size, error handling, comments policy.
 
-**Conditional — pick from the spec and read now, not later:**
+In your first message to the parent, state which conditional skills you will consult and cite the observable trigger from the spec:
+
 - Collections, loops, hashing, recursion → `algorithms` (O sanity).
 - Placing a new method (where does it belong?) → `grasp` (feature envy, owner).
 - Designing a new class → `solid` (SRP first).
+- Reading the `clean-code/resources/<topic>.md` deep-dives (boundaries, error-handling, smells-catalog) as needed.
 
-For each conditional skill, cite the observable trigger: `"§3 uses HashMap → algorithms"`. **No conditional skill without a cited trigger.** Skipping this step = scope-creep risk. No exceptions.
+For each conditional skill, cite the trigger: `"§3 uses HashMap → algorithms"`. **No conditional skill without a cited trigger.** Skipping this step = scope-creep risk. No exceptions.
 
 ### 3. Map the surface
 
