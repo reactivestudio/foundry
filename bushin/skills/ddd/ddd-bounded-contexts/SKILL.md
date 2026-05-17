@@ -77,13 +77,14 @@ Default answers when tempted ([practices](resources/practices.md) shows what evi
 - **Conformist to a vendor?** Almost always no — vendor models are not your domain. ACL.
 - **Published Language for two internal consumers?** No — overhead beats benefit. PL pays off with many downstreams or cross-org exchange.
 - **Equate BC with microservice?** No — service boundary is implementation; context boundary is language. One BC can be one or several services.
+- **Build an ACL as permanent?** Decide explicitly. Some ACLs are bridges during migration (legacy → new, vendor swap) — decommission after cutover. Others are forever (vendor will not be replaced). Mixing the two creates dead code or surprise lock-in.
 
 ## Red flags
 
-- Vendor types (`StripeCustomer`, `GitHubUser`) in domain code — ACL is leaking or absent.
+- Vendor types in domain code — fields, return positions, or parameter signatures (`StripeCustomer`, `com.stripe.model.Refund`) — inbound ACL leak.
+- Raw vendor identifiers (`stripeChargeId: String`, `githubIssueNumber: Long`) as parameters of domain methods — outbound ACL leak; pass a domain ref (`PaymentRef`), let the adapter translate.
 - A glossary entry needs "here this word means…" — implicit context boundary, make it explicit.
 - A BC with one entity and three CRUD endpoints — that's a module; merge or rename.
-- Inbound translation present, outbound calls send domain types raw to the vendor — bidirectional leak.
 - Context map mixes subdomains (problem) and contexts (solution) on the same nodes — the map is meaningless.
 - "We have their SDK so we're Conformist" — SDK is implementation, pattern is power. SDK lives inside an ACL.
 - `WebContext` / `DbContext` / `UiContext` — slicing by technical layer, not by domain.

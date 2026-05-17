@@ -95,6 +95,20 @@ The ACL is the natural home for **failure semantics**: retries, exponential back
 
 ACLs are sometimes **temporary** — bridges during migration from legacy to new. Decommission them when the legacy is gone. Other ACLs are permanent (vendor will not be replaced soon). Decide which kind you're building when you build it.
 
+## Directional pitfalls
+
+A late-stage mistake: a Customer-Supplier edge is set up correctly, then someone extracts shared logic from the upstream into the downstream's module *"because that's where it's used most now."* The direction has just flipped — the upstream now depends on the downstream.
+
+Signal: a module that was clearly downstream (`:returns` consuming `:orders`) starts being imported by its former upstream (`:orders` now imports `:returns`). Even if the Gradle cycle is broken via an interface, the *language* has flipped — the original upstream now speaks the downstream's vocabulary.
+
+Three healthy responses, in order of preference:
+
+1. **Keep the logic in the upstream.** The downstream calls via a port. Direction stays, no module change.
+2. **Recognize a third context.** If the logic genuinely belongs to neither (e.g., a `:pricing` capability both consume), extract it as its own upstream. Both original contexts become downstream of the new module.
+3. **Duplicate the logic.** If the two contexts mean different things by the same word (`Refund` in `:orders` = refund-on-cancellation vs `Refund` in `:returns` = refund-on-return), duplicate. Two contexts, two calculators. Shared code would be the mistake.
+
+Anti-response: let the original downstream become the upstream because "it grew faster." The team that built it last quarter now owns vocabulary for the team that built the upstream three years ago — the most common cause of *"why does `:orders` depend on this random `:returns` thing?"* auditing later.
+
 ## Practical heuristics not in the SKILL.md body
 
 - **Start with wide BC boundaries**; narrow as conflicts surface. Splitting later is cheap; merging two drifted contexts is expensive.
