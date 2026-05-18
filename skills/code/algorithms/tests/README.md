@@ -10,8 +10,8 @@ Each `scenario-*.md` is a self-contained code-review test:
 
 For each scenario:
 
-1. **Baseline run** — fresh Claude Code session, `bushin` plugin **disabled** (or run in a session where it isn't installed). Paste the **Prompt** block verbatim. Save the output.
-2. **Skill run** — fresh session with `bushin` enabled. Paste the same prompt. Save the output.
+1. **Baseline run** — fresh Claude Code session, `foundry` plugin **disabled** (or run in a session where it isn't installed). Paste the **Prompt** block verbatim. Save the output.
+2. **Skill run** — fresh session with `foundry` enabled. Paste the same prompt. Save the output.
 3. **Score** each output against the rubric. Mark each trap as ✅ caught / ⚠️ partial / ❌ missed.
 4. **Record** in `tests/results-iteration-<N>.md` with the date, version of skill under test (v1 / v2 / etc.), and per-trap scores.
 

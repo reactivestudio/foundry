@@ -1,10 +1,10 @@
 ---
 name: setup
-description: "Seed <project>/.claude/ with bushin templates (CLAUDE.md, settings.json) + gitignore the dir. Idempotent. NOT for ~/.claude/."
+description: "Seed <project>/.claude/ with foundry templates (CLAUDE.md, settings.json) + gitignore the dir. Idempotent. NOT for ~/.claude/."
 allowed-tools: Read Write Edit Bash(git rev-parse:*) Bash(mkdir:*) Bash(cmp:*) Bash(diff:*) Bash(grep:*) Bash(cat:*) Bash(echo:*) Bash(test:*) Bash(printf:*) Bash(pwd)
 ---
 
-Set up bushin plugin templates in the **current project's** `.claude/` directory. This command never touches `~/.claude/` — your global settings remain user-managed.
+Set up foundry plugin templates in the **current project's** `.claude/` directory. This command never touches `~/.claude/` — your global settings remain user-managed.
 
 ## What gets installed
 
@@ -12,7 +12,7 @@ Set up bushin plugin templates in the **current project's** `.claude/` directory
 - `${CLAUDE_PLUGIN_ROOT}/.claude-template/settings.json` → `<project>/.claude/settings.json`
 - Entry `.claude/` appended to `<project>/.gitignore` if absent.
 
-Plugin **hooks** (sound on `Stop` etc.) are NOT copied — they live in `bushin/hooks/hooks.json` and Claude Code auto-loads them when the plugin is active in the session. Toggle per-project with `/plugin disable bushin@reactivestudio`.
+Plugin **hooks** (sound on `Stop` etc.) are NOT copied — they live in `hooks/hooks.json` at the plugin root and Claude Code auto-loads them when the plugin is active in the session. Toggle per-project with `/plugin disable foundry@reactivestudio`.
 
 ## Procedure
 
@@ -40,7 +40,7 @@ Plugin **hooks** (sound on `Stop` etc.) are NOT copied — they live in `bushin/
 ## Final summary
 
 ```
-bushin:setup complete:
+foundry:setup complete:
   written: N
   identical: M
   overwritten: K

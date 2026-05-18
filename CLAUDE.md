@@ -1,8 +1,8 @@
-# Repo memory — bushin marketplace + plugin
+# Repo memory — foundry marketplace + plugin
 
-Project-scope rules for editing this repository. Auto-loaded by Claude Code when working inside `/Volumes/Work/www/VL/claude`.
+Project-scope rules for editing this repository. Auto-loaded by Claude Code when working inside `/Volumes/Work/www/VL/foundry`.
 
-The repo is a Claude Code marketplace shipping a single plugin `bushin`. Marketplace manifest at `.claude-plugin/marketplace.json`; plugin content under `bushin/`. `${CLAUDE_PLUGIN_ROOT}` resolves to `bushin/` once installed.
+The repo is a Claude Code marketplace shipping a single plugin `foundry`. Both manifests live in `.claude-plugin/` at the repo root: `marketplace.json` and `plugin.json`. Plugin content (`agents/`, `skills/`, `commands/`, `hooks/`, `assets/`, `.claude-template/`) sits directly at the repo root — `${CLAUDE_PLUGIN_ROOT}` resolves to the repo root once installed.
 
 ## Token budget
 
@@ -35,7 +35,7 @@ Not in always-on prompt: `SKILL.md` bodies (loaded on activation), `skills/<cate
 Two-level nested directory under `skills/`. Category dir groups related skills; skill name is short (no category prefix). No router skills.
 
 ```
-bushin/skills/
+skills/
 ├── methodology/
 │   ├── karpathy/
 │   ├── clarifying-questions/
@@ -49,8 +49,8 @@ bushin/skills/
 │   ├── aop/
 │   └── …
 
-bushin/agents/<name>.md                # flat
-bushin/commands/<name>.md              # flat
+agents/<name>.md                # flat
+commands/<name>.md              # flat
 ```
 
 Rules:
@@ -64,7 +64,7 @@ Rules:
 `architecture/` is split by scale because the principles inside it sit at two genuinely different levels:
 
 ```
-bushin/skills/architecture/
+skills/architecture/
 ├── application/    # in-process design — SOLID, hexagonal, ports & adapters
 │   └── solid/
 └── system/         # cross-process — distributed systems, services, messaging
@@ -74,7 +74,7 @@ This is the only category with sub-categories. Don't introduce a third level els
 
 ### Why this requires `skills` in plugin.json
 
-Claude Code's default skill loader scans `skills/<name>/SKILL.md` — **one level deep only**. Our nested layout is two levels deep (three under `architecture/`), so each **leaf** category must be explicitly registered in `bushin/.claude-plugin/plugin.json`:
+Claude Code's default skill loader scans `skills/<name>/SKILL.md` — **one level deep only**. Our nested layout is two levels deep (three under `architecture/`), so each **leaf** category must be explicitly registered in `.claude-plugin/plugin.json`:
 
 ```json
 {
@@ -146,7 +146,7 @@ If body grows past 150 lines, split into `resources/<concern>.md` and route from
 
 ## Hooks
 
-`bushin/hooks/hooks.json` — single file, all events keyed inside an outer `hooks` wrapper:
+`hooks/hooks.json` — single file, all events keyed inside an outer `hooks` wrapper:
 ```json
 {
   "hooks": {
@@ -166,7 +166,7 @@ Trailing `&` so the hook doesn't block the next turn; `>/dev/null 2>&1` to suppr
 
 ## MCP
 
-One file per server in `bushin/mcp/<server>.json`. Each MCP server burns tokens for its tool schemas — measure cost when adding.
+One file per server in `mcp/<server>.json`. Each MCP server burns tokens for its tool schemas — measure cost when adding.
 
 ## Pre-commit checklist
 

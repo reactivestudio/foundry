@@ -3,8 +3,8 @@ name: code-implementor
 description: "Execute a fixed spec/ADR/findings list: tests-first, minimal diff, verify. NOT for design or open exploration."
 color: blue
 skills:
-  - bushin:karpathy
-  - bushin:clean-code
+  - foundry:karpathy
+  - foundry:clean-code
 ---
 
 # Code implementor

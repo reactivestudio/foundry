@@ -1,6 +1,6 @@
-# bushin
+# foundry
 
-Personal Claude Code marketplace shipping a single plugin `bushin` for a solo Kotlin / Spring Boot engineer. Installed natively via `/plugin install`; updated via `/plugin update`.
+Personal Claude Code marketplace shipping a single plugin `foundry` for a solo Kotlin / Spring Boot engineer. Installed natively via `/plugin install`; updated via `/plugin update`.
 
 ## Philosophy
 
@@ -15,7 +15,7 @@ On a new machine:
 
 ```
 > /plugin marketplace add <repo-url-or-local-path>
-> /plugin install bushin@reactivestudio
+> /plugin install foundry@reactivestudio
 ```
 
 Agents, commands, skills, hooks become available immediately on install. Nothing is copied to `~/.claude/` — your user-level config is untouched.
@@ -23,7 +23,7 @@ Agents, commands, skills, hooks become available immediately on install. Nothing
 In each project where you want the plugin's settings/memory templates:
 
 ```
-> /bushin:setup
+> /foundry:setup
 ```
 
 This creates `<project>/.claude/CLAUDE.md` and `<project>/.claude/settings.json` from the plugin's templates and adds `.claude/` to `<project>/.gitignore`. Idempotent — re-run after `/plugin update` to pick up new template defaults.
@@ -34,30 +34,31 @@ The plugin is active in every project by default. To turn it off in a specific p
 
 ```
 cd ~/work/some-non-kotlin-project
-> /plugin disable bushin@reactivestudio
+> /plugin disable foundry@reactivestudio
 ```
 
-Claude Code writes the disable flag into the project's `.claude/settings.json` (exact key TBD — verify when first used). Re-enable with `/plugin enable bushin@reactivestudio`.
+Claude Code writes the disable flag into the project's `.claude/settings.json` (exact key TBD — verify when first used). Re-enable with `/plugin enable foundry@reactivestudio`.
 
 ## What's inside
 
+The marketplace and the plugin share this repository — both manifests live in `.claude-plugin/`, and the plugin content sits directly at the repo root. Claude Code's `${CLAUDE_PLUGIN_ROOT}` resolves to the repo root once installed.
+
 - `.claude-plugin/marketplace.json` — marketplace catalog (this repo).
+- `.claude-plugin/plugin.json` — plugin manifest.
 - `CLAUDE.md` — project memory: token budget, naming conventions, frontmatter rules, pre-commit checklist. Auto-loaded by Claude Code when editing the plugin itself.
-- `bushin/` — the plugin (Claude Code's `${CLAUDE_PLUGIN_ROOT}` resolves here once installed):
-  - `.claude-plugin/plugin.json` — plugin manifest.
-  - `agents/` — agent definitions (architect, code-reviewer, security-reviewer, troubleshooter, specialists).
-  - `commands/` — meta-commands (`/challenge`, `/plan`, `/explain`, `/postmortem`, `/review`) and `setup`.
-  - `skills/` — skill directories, flat namespace, prefixed names (`kotlin`, `kotlin-coroutines`, `spring`, `spring-aop`, …). Top-level router skills point to siblings.
-  - `hooks/hooks.json` — declarative event hooks (Stop event plays end-of-turn sound). Auto-loaded by Claude Code when plugin is active.
-  - `mcp/` — opt-in MCP server configs.
-  - `assets/sounds/` — binary assets used by hooks via `${CLAUDE_PLUGIN_ROOT}/assets/sounds/...`.
-  - `.claude-template/` — `CLAUDE.md` and `settings.json` source-of-truth templates, copied into `<project>/.claude/` by `/bushin:setup`. The **only** directory whose contents get *copied* anywhere; everything else stays in place and is read by Claude Code directly.
+- `agents/` — agent definitions (architect, code-reviewer, security-reviewer, troubleshooter, specialists).
+- `commands/` — meta-commands (`/challenge`, `/plan`, `/explain`, `/postmortem`, `/review`) and `setup`.
+- `skills/` — skill directories, two-level nested namespace (`skills/<category>/<skill>/`).
+- `hooks/hooks.json` — declarative event hooks (Stop event plays end-of-turn sound). Auto-loaded by Claude Code when plugin is active.
+- `mcp/` — opt-in MCP server configs.
+- `assets/sounds/` — binary assets used by hooks via `${CLAUDE_PLUGIN_ROOT}/assets/sounds/...`.
+- `.claude-template/` — `CLAUDE.md` and `settings.json` source-of-truth templates, copied into `<project>/.claude/` by `/foundry:setup`. The **only** directory whose contents get *copied* anywhere; everything else stays in place and is read by Claude Code directly.
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
-| `/bushin:setup` | Seed `<project>/.claude/` with plugin templates (CLAUDE.md, settings.json) and gitignore the dir. Idempotent. Never touches `~/.claude/`. |
+| `/foundry:setup` | Seed `<project>/.claude/` with plugin templates (CLAUDE.md, settings.json) and gitignore the dir. Idempotent. Never touches `~/.claude/`. |
 
 ## Model routing
 
