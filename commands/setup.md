@@ -1,7 +1,7 @@
 ---
 name: setup
 description: "Init <project>/.claude/ for foundry: templates, gitignore, optional openspec + MCP servers. Idempotent. NOT for ~/.claude/."
-allowed-tools: Read Write Edit Bash(git rev-parse:*) Bash(mkdir:*) Bash(cmp:*) Bash(diff:*) Bash(grep:*) Bash(cat:*) Bash(echo:*) Bash(test:*) Bash(printf:*) Bash(pwd) Bash(command:*) Bash(npx openspec:*)
+allowed-tools: Read Write Edit Bash(git rev-parse:*) Bash(mkdir:*) Bash(cmp:*) Bash(diff:*) Bash(grep:*) Bash(cat:*) Bash(echo:*) Bash(test:*) Bash(printf:*) Bash(pwd) Bash(command:*) Bash(npx:*)
 ---
 
 Set up foundry in the **current project**. Templates land in `<project>/.claude/`; optional integrations (openspec, MCP) land in the project root. This command never touches `~/.claude/` or user-scope MCP config — your global settings remain user-managed.
@@ -16,7 +16,7 @@ Always (mandatory, with diff-prompt on conflict):
 
 Optional (asked only when absent — silent skip on re-run if already in place):
 
-- `<project>/openspec/` via `npx openspec@latest init --tools claude --skip-existing` — **project-scope only**, never global.
+- `<project>/openspec/` via `npx -y @fission-ai/openspec@latest init --tools claude --force` — **project-scope only**, never global. The npm package is `@fission-ai/openspec` (the bare name `openspec` on npm is an unrelated empty placeholder).
 - `<project>/.mcp.json` entries for any subset of: `context7`, `serena` — **project-scope** MCP servers.
 
 Plugin **hooks** (sound on `Stop` etc.) are NOT copied — they live in `hooks/hooks.json` at the plugin root and Claude Code auto-loads them when the plugin is active in the session. Toggle per-project with `/plugin disable foundry@reactivestudio`.
@@ -47,7 +47,7 @@ Plugin **hooks** (sound on `Stop` etc.) are NOT copied — they live in `hooks/h
 5. **openspec (optional, project-scope).** Check `test -d <project>/openspec`:
    - Already present → record `openspec: already present`. Do NOT prompt, do NOT re-run init.
    - Absent → AskUserQuestion: **Install openspec into this project?** [Yes / No]. The user decides per-project; never install globally.
-     - On Yes: verify `command -v node` (record `openspec: failed (node not found)` and continue if missing — don't abort the whole setup). Then run `npx openspec@latest init --tools claude --skip-existing` from the project root. Stream output. Record `openspec: installed` or `openspec: failed: <stderr tail>`.
+     - On Yes: verify `command -v node` (record `openspec: failed (node not found)` and continue if missing — don't abort the whole setup). Then run `npx -y @fission-ai/openspec@latest init --tools claude --force` from the project root. Stream output. Record `openspec: installed` or `openspec: failed: <stderr tail>`. NOTE: the npm package is `@fission-ai/openspec` — the bare-name `openspec` package is an unrelated empty placeholder, do not use it.
      - On No: record `openspec: skipped`.
 
 6. **MCP servers (optional, project-scope).** Read `<project>/.mcp.json` if it exists, else start with `{"mcpServers":{}}`. Determine which canonical servers (`context7`, `serena`) are already registered — collect their names into `present`.
