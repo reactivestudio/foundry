@@ -1,6 +1,6 @@
 {
   "name": "foundry",
-  "version": "0.3.0",
+  "version": "0.2.2",
   "description": "Opinionated senior-engineer toolkit for Kotlin / Spring Boot: agents, methodology / clean-code / DDD / testing / architecture skills, adversarial review commands, end-of-turn sound hook.",
   "author": { "name": "Dmitriy Bushin" },
   "keywords": ["kotlin", "spring-boot", "ddd", "testing", "architecture"],
