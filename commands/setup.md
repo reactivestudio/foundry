@@ -21,7 +21,14 @@ Optional (asked only when absent — silent skip on re-run if already in place):
 
 Plugin **hooks** (sound on `Stop` etc.) are NOT copied — they live in `hooks/hooks.json` at the plugin root and Claude Code auto-loads them when the plugin is active in the session. Toggle per-project with `/plugin disable foundry@reactivestudio`.
 
-## Procedure
+## Progress reporting (writer guidance)
+
+The user shouldn't see raw shell diagnostics. Follow these rules:
+
+- **Bash `description`** is mandatory and human-readable: `"Check current project state"`, `"Compare templates"`, `"Install openspec"`. Never let the bare command be the only thing the user sees.
+- **Collapse diagnostics** into one batched Bash per phase — one for state checks, one for templates, etc. Don't fire many small `cmp` / `test` / `grep` calls one-by-one.
+- **Don't `ls ${CLAUDE_PLUGIN_ROOT}/.claude-template/`** to "verify" templates — the paths are known constants; if absent, the later `Read` or `cmp` fails loudly. Same for printing `echo "---"` separators: they're shell noise, not UX.
+- **After each step**, emit one human line to the user (not a `cat` of shell output): `Templates: 2 identical · gitignore: already covers .claude/ · openspec: absent (will ask)`. Save raw command output for failures only.
 
 1. Resolve the project root: use the closest enclosing `.git/` directory as anchor (`git rev-parse --show-toplevel`). If not inside a git repo, ask the user via AskUserQuestion whether to use the current working directory.
 
@@ -45,17 +52,31 @@ Plugin **hooks** (sound on `Stop` etc.) are NOT copied — they live in `hooks/h
    - If already present, record `gitignore: already present`.
 
 5. **openspec (optional, project-scope).** Check `test -d <project>/openspec`:
-   - Already present → record `openspec: already present`. Do NOT prompt, do NOT re-run init.
-   - Absent → AskUserQuestion: **Install openspec into this project?** [Yes / No]. The user decides per-project; never install globally.
+   - Already present → record `openspec: already present`. Do NOT prompt, do NOT re-run init. Still proceed to step 5b to verify gitignore policy if `.gitignore` lacks any opinion about `openspec/`.
+   - Absent → AskUserQuestion: **"Install openspec into this project?"** with these options (each gets a `description` so the user knows what they're agreeing to):
+     - **Yes, install** — `description: "Adds @fission-ai/openspec to <project>/openspec/. Spec-driven flow: you write a change proposal, Claude implements against it, you archive when done. Project-scope only — never installed globally."`
+     - **No, skip** — `description: "Don't install openspec. You can run /setup again later to add it; nothing is locked in."`
      - On Yes: verify `command -v node` (record `openspec: failed (node not found)` and continue if missing — don't abort the whole setup). Then run `npx -y @fission-ai/openspec@latest init --tools claude --force` from the project root. Stream output. Record `openspec: installed` or `openspec: failed: <stderr tail>`. NOTE: the npm package is `@fission-ai/openspec` — the bare-name `openspec` package is an unrelated empty placeholder, do not use it.
-     - On No: record `openspec: skipped`.
+     - On No: record `openspec: skipped`. Skip step 5b.
+
+5b. **openspec gitignore policy (only if openspec was just installed OR is present and `.gitignore` says nothing about `openspec/`).** Check `grep -Fx 'openspec/' <project>/.gitignore`:
+   - Already listed → record `openspec gitignore: already ignored`. Don't prompt.
+   - Not listed → AskUserQuestion: **"Commit `openspec/` to git, or keep it local?"** with options:
+     - **Commit (recommended)** — `description: "Treat specs as project artifacts: PRs review proposals, git history tracks decisions. Best when the team adopts spec-driven workflow together."`
+     - **Add to .gitignore** — `description: "Keep openspec/ local-only. Pick this if you're experimenting solo or the team hasn't bought in yet."`
+     - On Commit → record `openspec gitignore: committed`.
+     - On Add → append `openspec/` to `<project>/.gitignore`. Record `openspec gitignore: added`.
 
 6. **MCP servers (optional, project-scope).** Read `<project>/.mcp.json` if it exists, else start with `{"mcpServers":{}}`. Determine which canonical servers (`context7`, `serena`) are already registered — collect their names into `present`.
    - If `present` covers both canonical servers → record `mcp: already configured (context7, serena)`. Do NOT prompt.
-   - Else AskUserQuestion (multiSelect, exclude already-present entries from the options): **Register MCP servers in this project's `.mcp.json`?** Options: any of `Context7`, `Serena`, plus `None`. The user picks zero or more; selecting None (or no options) skips the step.
+   - Else AskUserQuestion (multiSelect, exclude already-present entries from the options): **"Register MCP servers in this project's `.mcp.json`?"** Each option carries a `description` explaining what the server does:
+     - **Context7** — `description: "Real-time, version-aware library docs (React, Vue, Tailwind, Spring, etc.) fetched on demand. Useful when the LLM's training data is stale or you need exact API signatures."`
+     - **Serena** — `description: "Code intelligence: symbolic navigation, find-references, refactor across the project. Requires \`pip install serena-agent\` + Python on PATH — surface this in the summary."`
+     - **None** — `description: "Skip MCP for this project. You can re-run /setup later."`
+     - The user picks zero or more; selecting None (or no options) skips the step.
      - For each selected server, add the canonical entry:
        - `context7` → `{"command":"npx","args":["-y","@context7/mcp@latest"]}`
-       - `serena` → `{"command":"python","args":["-m","serena.mcp"],"env":{"SERENA_PROJECT_DIR":"."}}`. Note: requires Python + the `serena` package on PATH — surface this in the summary notes.
+       - `serena` → `{"command":"python","args":["-m","serena.mcp"],"env":{"SERENA_PROJECT_DIR":"."}}`
      - Write `<project>/.mcp.json` back with 2-space indent. Preserve any pre-existing keys untouched. Record per-server: `added` or `already present`.
    - If the user picks None, record `mcp: skipped`.
 
@@ -70,6 +91,7 @@ foundry:setup complete:
     kept: L
   gitignore: <added | already present>
   openspec: <installed | already present | skipped | failed: …>
+  openspec gitignore: <committed | added | already ignored | n/a>
   mcp:
     context7: <added | already present | skipped>
     serena:   <added | already present | skipped>
