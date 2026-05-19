@@ -53,20 +53,37 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
    - Present without exact-match line `.claude/` → `Edit` to append. Record `gitignore: added`.
    - Already contains `.claude/` → silent skip. Record `gitignore: already present`.
 
-4. **`.spec/` (optional, project-scope).** One Bash call to probe: `test -d R/.spec`.
-   - Exit 0 (present) → record `.spec: already present`. Proceed to step 5 (gitignore policy) only if `.gitignore` lacks any opinion about `.spec/`.
+4. **`.spec/` (optional, project-scope).** Probe in two stages.
+
+   **4a. Top-level probe.** One Bash call: `test -d R/.spec`.
    - Exit non-zero (absent) → AskUserQuestion: **"Bootstrap `.spec/` (local spec-driven workflow) in this project?"**
      - **Yes, bootstrap** — `description: "Scaffolds <project>/.spec/ with project.md, config.yaml, standards/ (long-lived rules), and empty specs/, changes/ folders. The 10 /spec-* commands operate here. No external deps."`
      - **No, skip** — `description: "Don't bootstrap. You can re-run /setup later to add it."`
-     - On Yes:
-       - One Bash call: `mkdir -p R/.spec/specs R/.spec/changes R/.spec/changes/archive R/.spec/standards`.
-       - For each `(src, dst)`:
-         - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/project.md`             → `R/.spec/project.md`
-         - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/config.yaml`            → `R/.spec/config.yaml`
-         - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/standards/README.md`    → `R/.spec/standards/README.md`
-         `Read` source, `Write` destination verbatim.
-       - Record `.spec: bootstrapped (3 files + standards/README.md)`.
+     - On Yes: bootstrap full scaffold (see 4c). Record `.spec: bootstrapped (3 files + dirs)`. Proceed to step 5.
      - On No: record `.spec: skipped`. Skip step 5.
+   - Exit 0 (present) → continue to 4b for completeness check.
+
+   **4b. Completeness probe (when `.spec/` already exists).** Attempt `Read` of each scaffold target — if `Read` errors with "file not found", the file is missing. Targets:
+   - `R/.spec/project.md`
+   - `R/.spec/config.yaml`
+   - `R/.spec/standards/README.md`
+
+   Also check (Bash `test -d`) the empty-dir markers:
+   - `R/.spec/specs`, `R/.spec/changes`, `R/.spec/changes/archive`, `R/.spec/standards`.
+
+   - All present → record `.spec: already present (complete)`. Proceed to step 5 (gitignore policy) only if `.gitignore` lacks any opinion about `.spec/`.
+   - Any missing → AskUserQuestion: **"Found `.spec/` but scaffold is incomplete (missing: <list>). Top up missing files?"**
+     - **Yes, top up** — write only the missing files / mkdir the missing dirs (see 4c). Don't touch existing files. Record `.spec: topped up (<n> files written)`.
+     - **No, leave as is** — record `.spec: already present (incomplete, user declined top-up)`.
+
+   **4c. Bootstrap / top-up file operations** (referenced by 4a and 4b):
+   - `Bash`: `mkdir -p R/.spec/specs R/.spec/changes R/.spec/changes/archive R/.spec/standards` (idempotent — safe to run unconditionally).
+   - For each `(src, dst)` pair where `dst` does NOT exist:
+     - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/project.md`           → `R/.spec/project.md`
+     - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/config.yaml`          → `R/.spec/config.yaml`
+     - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/standards/README.md`  → `R/.spec/standards/README.md`
+
+     `Read` source, `Write` destination verbatim. **Never overwrite an existing file** — only write the ones the user is missing.
 
 5. **`.spec/` gitignore policy** (only if `.spec/` was just bootstrapped, OR exists and `.gitignore` has no opinion). `Read` `R/.gitignore`, look for exact line `.spec/`.
    - Already listed → record `.spec gitignore: already ignored`. Don't prompt.
@@ -94,7 +111,7 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
 foundry:setup complete:
   templates: written=N, identical=M, overwritten=K, kept=L
   gitignore: <added | already present>
-  .spec: <bootstrapped | already present | skipped>
+  .spec: <bootstrapped | topped up: N files | already present (complete) | already present (incomplete, declined) | skipped>
   .spec gitignore: <committed | added | already ignored | n/a>
   mcp:
     context7: <added | already present | skipped>

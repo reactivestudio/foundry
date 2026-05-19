@@ -8,9 +8,21 @@ Create a change folder and author all four artifacts (`proposal.md`, `specs/<cap
 
 Argument: `<description>` (required, sentence or short paragraph).
 
-Activate skills `spec-format`, `spec-delta-format`, `spec-lifecycle`, `spec-conventions`, `spec-standards`, `spec-validation` while running.
-
 ## Procedure
+
+0. **Load format rules first (MANDATORY).** Before any other step, `Read` these skill bodies into the current context — they encode the exact markdown shape the generated artifacts MUST take. Without this step Claude will guess the delta format wrong and the structural validator will reject your output:
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/format/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/delta-format/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/conventions/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/lifecycle/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/standards/SKILL.md`
+
+   Hard rules to internalise from these reads (sanity check before writing):
+   - Delta sections are exactly `## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements`, `## RENAMED Requirements` (each section header includes the word "Requirements").
+   - Requirement header is `### Requirement: <Name>` — **exactly three** `#` characters.
+   - Scenario header is `#### Scenario: <Name>` — **exactly four** `#` characters.
+   - ADDED / MODIFIED bodies MUST contain `SHALL` / `MUST` / `SHOULD` / `MAY`.
+   - RENAMED entries are `- FROM: \`### Requirement: <Old>\`` and `- TO: \`### Requirement: <New>\``.
 
 1. **Derive change name.** Convert `<description>` to kebab-case (lowercase letters/digits/hyphens; start with a letter). Examples: `"Add dark mode"` → `add-dark-mode`. If the derived name is awkward, AskUserQuestion offering 2–3 alternatives.
 

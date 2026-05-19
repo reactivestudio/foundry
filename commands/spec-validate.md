@@ -8,9 +8,12 @@ Validate one or more `.spec/` artifacts. Structural pass via bash; semantic pass
 
 Arguments: `<id>` (capability or change name) | `--all` | `--specs` | `--changes`. Optional: `--strict` (promotes WARNINGs to ERRORs).
 
-Activate skill `spec-validation` for the rule reference and severity table.
-
 ## Procedure
+
+0. **Load rule reference first (MANDATORY).** `Read` these skill bodies before evaluating any file — they list every ERROR/WARNING code, severity, and how `--strict` promotes warnings:
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/validation/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/format/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/delta-format/SKILL.md`
 
 1. **Resolve target list** based on arguments:
    - `<id>` and `test -d .spec/specs/<id>` → single canonical spec: `.spec/specs/<id>/spec.md`.

@@ -8,9 +8,15 @@ Complete a change: validate, merge deltas into canonical specs, and relocate the
 
 Arguments: `<change-name>` (or several, with `--bulk`). Flags: `-y`/`--yes`, `--bulk`, `--skip-specs`, `--no-validate`.
 
-Activate skills `spec-archive`, `spec-validation`, `spec-delta-format`.
-
 ## Procedure
+
+0. **Load merge + validation rules first (MANDATORY).** `Read` these skill bodies before touching any canonical spec or moving any directory:
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/archive/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/delta-format/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/validation/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/format/SKILL.md`
+
+   Critical rules from the reads: merge order is **RENAMED → REMOVED → MODIFIED → ADDED**; line-based merge preserves nested `####`/`#####` inside requirement bodies; if canonical spec is missing for a capability, create it from scratch with `# <Cap> Specification` + `## Purpose` + `## Requirements` + ADDED requirements appended; force flags (`--no-validate`, `--skip-specs`, `--bulk`, `-y`) each have specific semantics — see the skill.
 
 1. **Parse args**. Determine target list. With `--bulk`, every positional argument after `--bulk` is a target. Otherwise, single target (or AskUserQuestion if absent and there's ambiguity).
 

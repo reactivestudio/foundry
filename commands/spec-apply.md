@@ -43,7 +43,7 @@ Argument: `<change-name>` (optional; inferred when only one active change has pe
 6. **Working principles during implementation** (current assistant or delegated agent):
    - Tests-first when behaviour changes (characterisation tests if legacy code; TDD if greenfield).
    - Minimal diff per task.
-   - After each task, run the project's test / typecheck / lint commands; mark `[x]` only when green.
+   - **MUST mark `[x]` immediately after each task's verification passes — BEFORE starting the next task.** Concretely: finish task §N → run tests/typecheck/lint for the surface of §N → if green, `Edit` `tasks.md` to flip `- [ ] <N>` → `- [x] <N>` → only then start task §N+1. **Do NOT batch updates at the end.** Batched updates lie to the user about pace and break interrupt-resume correctness (a re-run of `/spec-apply` reads `tasks.md` as source-of-truth for pending work).
    - Do not touch out-of-scope files unless tasks explicitly demand it.
    - When something contradicts standards/ — STOP and surface the conflict; do not silently violate.
 

@@ -8,9 +8,16 @@ Generate **exactly one** missing artifact (the next in dependency order `proposa
 
 Argument: `<change-name>` (optional; inferred when only one active change exists).
 
-Activate `spec-format`, `spec-delta-format`, `spec-lifecycle`, `spec-conventions`, `spec-standards`, `spec-validation`.
-
 ## Procedure
+
+0. **Load format rules first (MANDATORY).** `Read` these skill bodies before generating any artifact — they fix the exact markdown shape required by the structural validator:
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/format/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/delta-format/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/conventions/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/lifecycle/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/standards/SKILL.md`
+
+   Sanity checks before writing: delta sections are `## ADDED Requirements` (not `## ADDED`); requirement headers are `### Requirement:` (3 `#`); scenarios are `#### Scenario:` (4 `#`); ADDED/MODIFIED bodies include `SHALL`/`MUST`/`SHOULD`/`MAY`; RENAMED uses `- FROM: \`### Requirement: ...\`` / `- TO: \`### Requirement: ...\``.
 
 1. **Resolve change name.**
    - Supplied → use.

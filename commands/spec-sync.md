@@ -8,9 +8,15 @@ Merge a change's delta specs into the canonical `.spec/specs/<cap>/spec.md` file
 
 Argument: `<change-name>` (optional).
 
-Activate skills `spec-archive`, `spec-delta-format`, `spec-validation`.
-
 ## Procedure
+
+0. **Load merge + validation rules first (MANDATORY).** `Read` these skill bodies before touching any canonical spec — they define merge order, block-boundary semantics, idempotency caveats, and the validation rule set:
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/archive/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/delta-format/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/validation/SKILL.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/spec/format/SKILL.md`
+
+   Critical rules from the reads: merge order is **RENAMED → REMOVED → MODIFIED → ADDED**; line-based merge (nested `####` inside requirement bodies are preserved verbatim); ADDED is not idempotent on repeat sync (would duplicate); no locking — last-writer-wins.
 
 1. **Resolve change name** (same logic as `/spec-apply`).
 
