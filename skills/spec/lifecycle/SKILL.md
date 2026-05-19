@@ -1,93 +1,103 @@
 ---
 name: spec-lifecycle
-description: "Feature-change artifact graph + states; vs long-lived standards/. NOT for archive merge semantics."
+description: "Per-stage state machine + bucket derivation for .spec/changes/. NOT for artifact content rules — see spec-workflow."
 ---
 
 # spec-lifecycle
 
-Two kinds of artifacts live inside `.spec/`:
-
-1. **Feature specs** — pass through a change-lifecycle (`proposal → specs → design → tasks → implementation → archive`). They evolve via delta operations.
-2. **Long-lived specs** (`.spec/standards/*.md`) — freeform documents that persist for the project's lifetime. Edited directly. No lifecycle, no archival. See `spec-standards`.
-
-This skill describes the **feature-change lifecycle**.
+A change in `.spec/changes/` has **5 stages** (`analysis`, `architecture`, `decomposition`, `implementation`, `verification`), each with its own state. The directory `<change>/` lives in one of 4 buckets (`backlog/`, `sprint/`, `done/`, `declined/`). The bucket is **derived** from the stages — not stored independently.
 
 ## When to use
 
-- Implementing `/spec-new`, `/spec-continue`, `/spec-status`, `/spec-list`.
-- Deciding which artifact to generate next for a partially-filled change.
-- Explaining to a user why a status reports `[ ]` vs `[-]`.
+- Implementing any `/track`, `/backlog-*`, `/sprint-*`, `/accept`, `/decline` command.
+- Reasoning about why a change is in `backlog/` vs `sprint/`.
+- Understanding what a stage's `pause` / `need-approve` status means.
 
-## Artifact dependency graph (feature changes only)
+## Stage state machine
+
+Each stage has one of 6 states:
+
+| State | Meaning |
+|---|---|
+| `pending` | Not started. |
+| `in-progress` | Active work by the owning agent. |
+| `need-approve` | Artifact ready, awaiting user review. |
+| `approved` | User approved; downstream stages may proceed. |
+| `pause` | Deferred — we'll come back later. Does **not** trigger bucket change. |
+| `skipped` | Stage deemed unnecessary for this change (e.g. bugfix may skip `architecture`). |
+
+Allowed transitions (enforced by `tracking-validate-stage-transition.sh`):
 
 ```
-proposal.md  ──►  specs/<cap>/spec.md  ──►  design.md  ──►  tasks.md  ──►  implementation
+pending      → in-progress | skipped
+in-progress  → need-approve | pause | skipped
+pause        → in-progress | skipped
+need-approve → approved | in-progress     (in-progress = rework after rejection)
+approved     → in-progress | skipped       (back-edge: later stage flags rework)
+skipped      → in-progress                 (rare: stage reclassified as needed)
 ```
 
-- `proposal.md` — why & what. No upstream dependency.
-- `specs/<cap>/spec.md` (delta) — what changes. Depends on proposal (uses rationale to scope deltas).
-- `design.md` — how. Depends on the deltas (knows what behaviour is changing).
-- `tasks.md` — concrete checklist. Depends on design.
-- Implementation — depends on tasks.
+`pending` is only reachable as initial state — no transition returns to it.
 
-## Status states
+## Bucket derivation
 
-For each artifact in an active change, `scripts/spec/status.sh <name>` reports one of:
+Bucket is computed from `stages.implementation` + `stages.verification`:
 
-- `[x]` — artifact file exists.
-- `[ ]` — dependencies satisfied, artifact file missing (this is the *next* artifact to create).
-- `[-]` — dependency missing; cannot create yet.
+| Condition | Bucket |
+|---|---|
+| `implementation` ∈ {in-progress, need-approve} OR `verification` ∈ {in-progress, need-approve} | `sprint` |
+| `implementation` ∈ {approved, skipped} AND `verification` ∈ {approved, skipped} | `done` |
+| otherwise (analysis/architecture/decomposition active, or everything paused/pending) | `backlog` |
+| explicit `/decline` | `declined` (terminal, manual only) |
 
-These states apply **only** to feature-change artifacts. `.spec/standards/*.md` files have no lifecycle and never appear in `status.sh` output.
+`pause` is a **marker**, not a bucket trigger — a paused change stays where it is. To remove a long-paused change from active listings, run `/decline <name> "paused indefinitely"`.
 
-Examples:
+After any stage state change via `/track <name> <stage> <state>`, the command:
+1. Calls `tracking-set-stage.sh` (writes new state + history entry).
+2. Calls `tracking-derive-bucket.sh` (computes desired bucket).
+3. If desired ≠ current → `change-move.sh` + appends `{ stage: _meta, status: moved-to-<bucket>, by: auto }` history entry.
 
-| proposal | specs | design | tasks | meaning |
-|---|---|---|---|---|
-| `[ ]` | `[-]` | `[-]` | `[-]` | freshly-scaffolded change |
-| `[x]` | `[ ]` | `[-]` | `[-]` | proposal done; specs next |
-| `[x]` | `[x]` | `[x]` | `[ ]` | tasks next |
-| `[x]` | `[x]` | `[x]` | `[x]` | ready for `/spec-apply` |
+## Back-edges (rework loops)
 
-## Workflow
+When a later stage detects upstream issues, set the upstream stage from `approved` → `in-progress` (or `need-approve` → `in-progress` if it hasn't been approved yet):
 
-**One-shot (default):**
-```
-/spec-propose <description>   # creates all four artifacts in current context
-/spec-apply <change>          # loads context for implementation (no auto-delegation)
-/spec-archive <change> -y     # validate → merge deltas → relocate to archive
-```
+- `architect` realises requirement R is unimplementable → `/track <n> analysis in-progress` → analyst revises requirements.md → `/track <n> analysis need-approve` → user approves → analyst's fix propagates downstream.
+- `teamlead` finds the design has no realistic decomposition → similar loop for `architecture`.
 
-**Stepwise (for high-stakes changes):**
-```
-/spec-new <change-name>        # empty scaffold
-/spec-continue <change>        # generate next missing artifact (repeat)
-/spec-apply <change>
-/spec-archive <change> -y
-```
+History preserves the full trail (each state flip is one entry).
 
-`/spec-sync` may be inserted before archive for stacking (merge deltas without archiving — see `spec-archive`).
+## `decline` and `pause`
 
-Both flows can be mixed.
+| | `decline` | `pause` |
+|---|---|---|
+| Scope | whole change | per stage |
+| Bucket effect | move to `declined/` | stay |
+| Terminal? | yes | no (resume any time) |
+| Reason field | yes (`decline_reason:`) | no |
+| Audit | `_meta/declined` history entry | per-stage history entry |
 
-## Procedure (next-artifact selection)
+## Procedure (manual workflow drive)
 
-1. Run `scripts/spec/status.sh <change>` → TSV of per-artifact state.
-2. Find the first artifact in `proposal → specs → design → tasks` order with state `[ ]`. That is the next artifact.
-3. If all four are `[x]`, the change is implementation-ready (call `/spec-apply`).
-4. If any state is `[-]`, the upstream dependency is missing; create that first.
+1. Create: `/backlog-add "<title>"` → scaffold in `backlog/`, all stages = `pending`.
+2. Start analysis: `/track <name> analysis in-progress`.
+3. Agent writes `requirements.md`, calls `tracking-set-scope.sh ... <scope> ...` (via Bash), then `/track <name> analysis need-approve`.
+4. User reviews → `/track <name> analysis approved` (or `/track <name> analysis in-progress` to send back for rework).
+5. Repeat for `architecture` (writes system-design.md + application-design.md) and `decomposition` (writes roadmap.md).
+6. `/track <name> implementation in-progress` → auto-move to `sprint/`. Implementor flips roadmap tasks via `roadmap-set-task-state.sh`.
+7. When all main roadmap tasks done: `/track <name> implementation need-approve` → user approves.
+8. `/track <name> verification in-progress` → verifier runs Q-tasks. When all green: `/track <name> verification need-approve` → user approves → auto-move to `done/`.
 
 ## When NOT to use
 
-- Long-lived `.spec/standards/*.md` → `spec-standards` skill.
-- Archival merge order / collision handling → `spec-archive` skill.
-- Spec / delta format rules → `spec-format`, `spec-delta-format`.
-- Validation severity → `spec-validation`.
+- Artifact content / per-stage authorship → `spec-workflow`.
+- Roadmap.md syntax + Quality gates → `spec-roadmap`.
+- Standards files / long-lived rules → `spec-standards`.
+- Naming + tracking.yaml schema → `spec-conventions`.
 
 ## Anti-patterns
 
-- Skipping `proposal.md` "to save time" — every other artifact loses context.
-- Filling `tasks.md` before `design.md` exists — tasks reference design decisions.
-- Treating `[x]` as "frozen". Any artifact can be re-edited; status only tracks existence.
-- Hardcoding the dependency graph in command bodies — always defer to `status.sh`.
-- Putting long-lived project rules inside a feature change's `design.md`. They belong in `.spec/standards/*.md`.
+- Manually editing `tracking.yaml` instead of using helpers — bash parsers depend on strict schema; one stray quote breaks `tracking-get-stage`.
+- Skipping `need-approve` step — flipping straight from `in-progress` → `approved` loses the human checkpoint. Allowed by state machine, but defeats the purpose.
+- Using `pause` instead of `decline` for "we'll never do this" — `pause` keeps the change in active listings forever.
+- Hardcoding bucket name in agent prompts — always derive via `tracking-derive-bucket.sh` to stay consistent.
+- Renumbering history entries or rewriting old `{ stage, status, by }` lines — history is append-only audit.
