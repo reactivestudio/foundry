@@ -1,7 +1,7 @@
 {
   "name": "foundry",
-  "version": "0.4.3",
-  "description": "Opinionated senior-engineer toolkit for Kotlin / Spring Boot: agents, methodology / clean-code / DDD / testing / architecture skills, adversarial review commands, end-of-turn sound hook, multi-agent-friendly spec-driven workflow (.spec/) with long-lived standards/.",
+  "version": "0.5.0",
+  "description": "Opinionated senior-engineer toolkit for Kotlin / Spring Boot: agents, methodology / clean-code / DDD / testing / architecture skills, adversarial review commands, end-of-turn sound hook, 4-bucket change workflow (.spec/changes/{backlog,sprint,done,declined}/) with per-stage tracking and long-lived standards/.",
   "author": { "name": "Dmitriy Bushin" },
   "keywords": ["kotlin", "spring-boot", "ddd", "testing", "architecture", "spec-driven"],
   "skills": [

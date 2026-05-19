@@ -1,10 +1,91 @@
 # foundry-plugin — Claude Code Plugin for Palantir Foundry
 
-> A Claude Code plugin for senior engineers and solution architects working on Palantir Foundry.
-> Provides a three-layer system of **skills** (knowledge), **agents** (roles), and **commands** (workflows)
-> that self-organises around your project specs and resolves skill conflicts with ADR-backed decisions.
+> **⚠ Status: aspirational vision document.**
+> Most of what follows describes an unbuilt Palantir Foundry–oriented plugin
+> (orchestrator agent, skill-resolver, conflict-resolver, ADR loop, Foundry MCP, …)
+> that has never been implemented in this repository.
+>
+> The **current** `foundry` plugin (v0.5.0) is a Kotlin / Spring Boot engineer's toolkit.
+> See [README.md](./README.md) for installed commands. The actually-shipping `.spec/`
+> subsystem is summarised in the [Current `.spec/` subsystem](#current-spec-subsystem-v050)
+> section below; the rest of this file is roadmap material kept for reference.
 
 ---
+
+## Current `.spec/` subsystem (v0.5.0)
+
+A change in `.spec/changes/` flows through 4 bucket directories (`backlog/`, `sprint/`, `done/`, `declined/`) and 5 stages (`analysis`, `architecture`, `decomposition`, `implementation`, `verification`), each with its own state (`pending | in-progress | need-approve | approved | pause | skipped`).
+
+### State machine (per stage)
+
+```
+pending → in-progress → need-approve → approved
+   │         ▲   │           │              │
+   │         │   ▼           ▼              ▼
+   │         │  pause     in-progress   in-progress    (back-edges)
+   │         └───┘
+   └──► skipped ◄── (any state, when stage is unnecessary)
+```
+
+### Bucket derivation (auto)
+
+| Condition | Bucket |
+|---|---|
+| `implementation` ∈ {in-progress, need-approve} OR `verification` ∈ same | `sprint` |
+| `implementation` ∈ {approved, skipped} AND `verification` ∈ same | `done` |
+| otherwise | `backlog` |
+| explicit `/decline` | `declined` (terminal) |
+
+`pause` does not move the change — it stays where it is.
+
+### Artifacts (filled by agents)
+
+| Stage | Artifact | Owner role |
+|---|---|---|
+| (initial) | `tracking.yaml` + `proposal.md` | `/backlog-add` (scaffold only) |
+| analysis | `requirements.md` | system-analyst |
+| architecture | `system-design.md` + `application-design.md` | architect |
+| decomposition | `roadmap.md` | teamlead |
+| implementation | code in project tree | code-implementor |
+| verification | (runs Quality gates from roadmap.md) | verifier |
+
+Spec-commands (`/backlog-add`, `/track`, `/accept`, `/decline`, etc.) are **state API only** — they don't generate content. Agents write content via Write/Edit on the appropriate file.
+
+### Commands (9 + setup)
+
+| Command | Purpose |
+|---|---|
+| `/backlog-add "<title>"` | Scaffold new change in backlog (auto-slug from title). |
+| `/backlog-list` · `/sprint-list` · `/done-list` · `/declined-list` | Per-bucket listings. |
+| `/sprint-add <name>` | Manual move backlog → sprint. |
+| `/accept <name>` | Manual move sprint → done. |
+| `/decline <name> <reason>` | Terminal move ANY → declined. |
+| `/track <name>` · `<name> <stage>` · `<name> <stage> <state>` | Unified tracker — 3 forms. |
+| `/foundry:setup` | Scaffold `.spec/` (4 buckets + standards/ + _template/) and project `.claude/`. |
+
+### Bash helpers (14, all in `scripts/spec/`)
+
+- **tracking**: `tracking-{validate-stage-transition,get-stage,set-stage,set-scope,derive-bucket,active-stage,decline}.sh`
+- **roadmap**: `roadmap-{parse,status,ready,set-task-state}.sh`
+- **change**: `change-{name-validate,locate,move,new}.sh`, `list-changes.sh`
+
+All pure-bash, portable awk (no gawk extensions, no `yq` dep). The `tracking.yaml` schema is the contract these helpers depend on — see `skills/spec/conventions/SKILL.md`.
+
+### Role agents — not yet shipped
+
+Stages reference role agents (`system-analyst`, `architect`, `teamlead`, `code-implementor`, `verifier`). Only `code-implementor` exists today; the rest are placeholders for a follow-up phase where workflow commands orchestrate them end-to-end.
+
+### Skills
+
+- `spec-lifecycle` — state machine + bucket derivation
+- `spec-conventions` — directory layout, naming, tracking.yaml schema
+- `spec-standards` — long-lived project rules (`.spec/standards/*.md`)
+- `spec-workflow` — stages → artifacts → agents mapping
+- `spec-roadmap` — roadmap.md task syntax + Quality gates
+
+---
+
+## Legacy vision (unimplemented — kept for reference)
 
 ## Table of contents
 

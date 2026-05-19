@@ -56,9 +56,26 @@ The marketplace and the plugin share this repository — both manifests live in 
 
 ## Commands
 
+### Project setup
+
 | Command | Purpose |
 |---|---|
-| `/foundry:setup` | Seed `<project>/.claude/` with plugin templates (CLAUDE.md, settings.json) and gitignore the dir. Idempotent. Never touches `~/.claude/`. |
+| `/foundry:setup` | Seed `<project>/.claude/` with plugin templates (CLAUDE.md, settings.json), bootstrap optional `.spec/` 4-bucket workflow scaffold, optional MCP servers. Idempotent. Never touches `~/.claude/`. |
+
+### `.spec/` change workflow (4 buckets + per-stage tracking)
+
+A change moves through 4 directories — `backlog/` → `sprint/` → `done/` (or `→ declined/`). Each change has 5 stages (`analysis`, `architecture`, `decomposition`, `implementation`, `verification`), each with its own state (`pending | in-progress | need-approve | approved | pause | skipped`). Bucket is derived automatically from stages. Spec-commands are **state API only** — they don't generate content (agents do).
+
+| Command | Purpose |
+|---|---|
+| `/backlog-add "<title>"` | Scaffold new change in backlog from title (auto-slug). |
+| `/backlog-list` · `/sprint-list` · `/done-list` · `/declined-list` | List changes in each bucket. |
+| `/sprint-add <name>` | Manual move backlog → sprint (usually auto on `implementation in-progress`). |
+| `/accept <name>` | Manual move sprint → done (warns if stages not green). |
+| `/decline <name> <reason>` | Terminal move ANY → declined with required reason. |
+| `/track <name>` · `<name> <stage>` · `<name> <stage> <state>` | Unified tracker: 3 forms — summary, single-stage detail, setter (with auto-bucket-move). |
+
+The `0.5.0` model is a breaking change from the openspec-style delta/canonical model used in `0.4.x`. Legacy `.spec/specs/` and `.spec/changes/archive/` are detected by `/setup` but not migrated automatically — copy what you need into the new structure manually (or, if low-stakes, just start fresh).
 
 ## Model routing
 
