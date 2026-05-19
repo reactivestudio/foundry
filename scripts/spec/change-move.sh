@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Usage: change-move.sh <name> <to-bucket>
+# Usage: change-move.sh <name> <to-bucket> [<by>]
 # Moves a change from its current bucket to <to-bucket>.
 # Valid buckets: backlog | sprint | done | declined.
 # Locates the source via change-locate.sh; destination collision = error.
+# After a successful move (when bucket actually changes), appends a history
+# entry `{ stage: _meta, status: moved-to-<bucket>, by: <by|auto> }` to
+# tracking.yaml in the new location.
 # Output: absolute path to the new location.
 # Exit 0 ok; 1 collision (destination exists); 2 bad args; 3 source not found.
 
@@ -10,8 +13,9 @@ set -eu
 
 name=${1:-}
 to=${2:-}
+by=${3:-auto}
 if [ -z "$name" ] || [ -z "$to" ]; then
-  echo "change-move: missing args (need <name> <to-bucket>)" >&2
+  echo "change-move: missing args (need <name> <to-bucket> [<by>])" >&2
   exit 2
 fi
 
@@ -52,4 +56,11 @@ if [ -e "$dest" ]; then
 fi
 
 mv "$src" "$dest"
+
+# Append history entry to tracking.yaml in the new location (if present).
+if [ -f "$dest/tracking.yaml" ]; then
+  now=$(date '+%Y-%m-%d %H:%M')
+  printf '  - { at: "%s", stage: _meta, status: "moved-to-%s", by: %s }\n' "$now" "$to" "$by" >> "$dest/tracking.yaml"
+fi
+
 echo "$dest"
