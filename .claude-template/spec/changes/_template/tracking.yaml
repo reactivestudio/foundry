@@ -1,0 +1,11 @@
+id: {{id}}
+title: "{{title}}"
+scope: ""
+stages:
+  analysis:       pending
+  architecture:   pending
+  decomposition:  pending
+  implementation: pending
+  verification:   pending
+history:
+  - { at: "{{now}}", stage: _meta, status: created, by: workflow }
