@@ -41,7 +41,12 @@ Argument: `<description>` (required, sentence or short paragraph).
    - `proposal.md` — sections: **Problem**, **Proposed solution**, **Affected capabilities** (list of capability names), **Non-goals**. Cite which standards rules constrained design choices.
    - For each affected capability, `specs/<cap>/spec.md` — **delta** spec using ADDED / MODIFIED / REMOVED / RENAMED sections per `spec-delta-format` skill. RFC 2119 keyword (`SHALL`/`MUST`/`SHOULD`/`MAY`) in every ADDED/MODIFIED body. `#### Scenario:` with exactly four `#`.
    - `design.md` — sections: **Architecture**, **Technical approach**, **Key decisions** (cite trade-offs), **Risks**, **Testing strategy**. Skip sections that aren't load-bearing for this change.
-   - `tasks.md` — phases (typical: Setup / Implementation / Integration / Testing / Documentation), numbered tasks (`- [ ] 1.1 …`), one focused work session per task.
+   - `tasks.md` — phases (typical: Setup / Implementation / Integration / Testing / Documentation), numbered tasks (`- [ ] 1.1 …`), one focused work session per task. **MUST include a final `## Quality gates` phase** with explicit task per applicable check. Detect commands from `CLAUDE.md`, build files (`build.gradle.kts`, `pom.xml`, `package.json`, `Makefile`, `Cargo.toml`, etc.); only include checks the project actually has:
+     - `- [ ] N.1 Run \`<test command>\` — confirm green` (Gradle: `./gradlew test`; npm: `npm test`; Cargo: `cargo test`; …).
+     - `- [ ] N.2 Run \`<lint command>\` — confirm clean` (Gradle: `./gradlew lintKotlin` / `ktlintCheck`; npm: `npm run lint`; …).
+     - `- [ ] N.3 Run \`<typecheck command>\` — confirm zero errors` (Gradle: `./gradlew compileKotlin` if separate; npm: `npm run typecheck` / `tsc --noEmit`; …).
+     - `- [ ] N.4 Run \`<format command>\` if mutating — confirm idempotent` (optional; Gradle: `./gradlew formatKotlin`).
+     If a project has no detectable command for a check, omit that line — do NOT invent commands. These quality-gate tasks are flipped to `[x]` by `/spec-apply` only after the actual command exits green.
 
 6. **Self-check structurally.** For each `specs/<cap>/spec.md` you wrote, `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/validate-structural.sh <file> --kind delta`. On any ERROR, fix the file and re-validate before the report.
 

@@ -43,7 +43,13 @@ Argument: `<change-name>` (optional; inferred when only one active change has pe
 6. **Working principles during implementation** (current assistant or delegated agent):
    - Tests-first when behaviour changes (characterisation tests if legacy code; TDD if greenfield).
    - Minimal diff per task.
-   - **MUST mark `[x]` immediately after each task's verification passes — BEFORE starting the next task.** Concretely: finish task §N → run tests/typecheck/lint for the surface of §N → if green, `Edit` `tasks.md` to flip `- [ ] <N>` → `- [x] <N>` → only then start task §N+1. **Do NOT batch updates at the end.** Batched updates lie to the user about pace and break interrupt-resume correctness (a re-run of `/spec-apply` reads `tasks.md` as source-of-truth for pending work).
+   - **MUST mark `[x]` immediately after each task's PRIMARY ACTION is done — BEFORE starting the next task.** Primary action = the file-creating/editing step the task names. Examples:
+     - Task "Create `GreetingController`" → primary action = `Write GreetingController.kt`. Mark `[x]` right after the Write succeeds, even though tests for it run later.
+     - Task "Write `GreetingControllerTest`" → primary action = `Write GreetingControllerTest.kt`. Mark `[x]` after Write, even if the test is currently red because production code isn't written yet.
+     - Task "Refactor `LoginService` to use Repository" → primary action = the Edit(s) to LoginService.kt. Mark `[x]` after the refactor edits, before running tests.
+     - Task "Run `./gradlew test`" (Quality-gates phase) → primary action **IS** running the command. Mark `[x]` only after the command exits green.
+   - **Do NOT batch `[x]` updates at the end.** Batched updates lie about pace and break interrupt-resume correctness — a re-run of `/spec-apply` reads `tasks.md` as source-of-truth for pending work; if you implemented 3 files but didn't flip `[x]` yet and the user interrupts, the re-run will redo all 3.
+   - Verification (test runs, typecheck, lint) belongs to the **Quality gates phase** — separate tasks with their own `[ ]`/`[x]` cycle. If those tasks don't exist in `tasks.md`, surface the gap and offer to add them. Do NOT silently run verification as a hidden step.
    - Do not touch out-of-scope files unless tasks explicitly demand it.
    - When something contradicts standards/ — STOP and surface the conflict; do not silently violate.
 

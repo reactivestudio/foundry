@@ -68,12 +68,34 @@ Everything under `changes/` (except `archive/`) is transient.
 ## Phase 2: <Theme>
 - [ ] 2.1 <Step>
 - [ ] 2.2 <Step>
+
+## Phase N: Quality gates
+- [ ] N.1 Run `<test command>` — confirm green
+- [ ] N.2 Run `<lint command>` — confirm clean
+- [ ] N.3 Run `<typecheck command>` — confirm zero errors
 ```
 
 - Top-level grouped by phase (Setup / Implementation / Integration / Testing / Documentation is a common pattern but not mandatory).
 - Numbering: `<phase>.<task>[.<subtask>]`. Stable across edits; new tasks get fresh numbers, don't renumber.
 - Each task is one verifiable step a person could check off after a focused work session.
 - `- [ ]` = pending, `- [x]` = done (also `- [X]` accepted by `tasks-progress.sh`).
+
+### Quality gates phase (MANDATORY)
+
+The **final phase** of every `tasks.md` MUST be `## Quality gates` (or `## Quality checks` / `## CI gates` — name flexible, content fixed). One task per check the project actually has:
+
+- run the test suite (Gradle: `./gradlew test`; npm: `npm test`; Cargo: `cargo test`; Go: `go test ./...`; …),
+- run linters (Gradle: `./gradlew lintKotlin` / `ktlintCheck`; npm: `npm run lint`; Cargo: `cargo clippy`; Go: `golangci-lint run`; …),
+- run typecheck if separate from compile (npm: `npm run typecheck` / `tsc --noEmit`; Python: `mypy`; …),
+- run format check if mutating tools are present (Gradle: `./gradlew formatKotlin`; npm: `prettier --check`; …).
+
+Detection: read `CLAUDE.md`, root build manifests (`build.gradle.kts`, `pom.xml`, `package.json`, `Cargo.toml`, `Makefile`, etc.) at authoring time and pick the commands the project actually uses. Do **not** invent commands the project doesn't have. If a project genuinely has zero of these (rare — pure docs repo), the Quality gates phase may be empty with a note `(no quality gates configured)`.
+
+### `[x]` discipline (also documented in `/spec-apply`)
+
+- Implementation tasks (`create`, `write`, `refactor`, `edit`) — flip `[x]` immediately after the Write/Edit action, even before tests are run. Test status is the next task's concern.
+- Quality-gates tasks — flip `[x]` **only after** the actual command exits green. Failing run = stays `[ ]`, surface the failure.
+- Never batch `[x]` updates at the end of a session — breaks interrupt-resume correctness and lies to the user about pace.
 
 ## Procedure (naming new artifacts)
 
