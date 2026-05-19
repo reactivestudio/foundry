@@ -1,10 +1,10 @@
 ---
 name: setup
-description: "Init <project>/.claude/ for foundry: templates, gitignore, optional openspec + MCP servers. Idempotent. NOT for ~/.claude/."
-allowed-tools: Read Write Edit Bash(git rev-parse:*) Bash(test:*) Bash(command:*) Bash(npx:*) Bash(pwd)
+description: "Init <project>/.claude/ for foundry: templates, gitignore, optional .spec/ + MCP servers. Idempotent. NOT for ~/.claude/."
+allowed-tools: Read Write Edit Bash(git rev-parse:*) Bash(test:*) Bash(command:*) Bash(mkdir:*) Bash(pwd)
 ---
 
-Set up foundry in the **current project**. Templates land in `<project>/.claude/`; optional integrations (openspec, MCP) land in the project root. Never touches `~/.claude/` or user-scope MCP config.
+Set up foundry in the **current project**. Templates land in `<project>/.claude/`; optional integrations (`.spec/` spec-driven workflow, MCP servers) land in the project root. Never touches `~/.claude/` or user-scope MCP config.
 
 ## What gets installed
 
@@ -16,7 +16,7 @@ Always (mandatory, with diff-prompt on conflict):
 
 Optional (asked only when absent — silent skip on re-run):
 
-- `<project>/openspec/` via `npx -y @fission-ai/openspec@latest init --tools claude --force <project_root>` — **project-scope only**. The npm package is `@fission-ai/openspec` (bare `openspec` on npm is an unrelated empty placeholder).
+- `<project>/.spec/` — scaffolded **locally** from `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/`. Bash-only file ops; no `npx`, no external dependencies. The 10 `/spec-*` commands (propose / new / continue / apply / sync / archive / list / show / status / validate) operate on this directory. Includes a `standards/` folder for long-lived project rules (stack, architecture, anti-patterns…).
 - `<project>/.mcp.json` with any subset of `context7`, `serena`.
 
 Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. Toggle per-project with `/plugin disable foundry@reactivestudio`.
@@ -26,13 +26,14 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
 **The user must NOT see raw shell diagnostics.** These rules are non-negotiable:
 
 - **Use `Read` / `Write` / `Edit` for everything you can.** Comparing files? `Read` both, compare in your head. Checking if `.gitignore` has an entry? `Read` it, look at the lines. Writing templates? `Write`. Appending to `.gitignore`? `Edit`. **Never** use `cmp`, `diff`, `grep`, `cat`, `cp`, `printf >>`, or `echo >>` from Bash for these.
-- **Bash is allowed only for these three operations** — nothing else:
+- **Bash is allowed only for these four operations** — nothing else:
   1. `git rev-parse --show-toplevel` (resolve project root, once).
-  2. `test -d <abs-path>/openspec` (existence probe for openspec dir).
-  3. `npx -y @fission-ai/openspec@latest init --tools claude --force <abs-path>` (install openspec; pass the absolute project root as the trailing positional arg so it doesn't land in CWD).
+  2. `test -d <abs-path>/.spec` (existence probe for .spec dir).
+  3. `mkdir -p <abs-path>/.spec/specs <abs-path>/.spec/changes <abs-path>/.spec/changes/archive` (create scaffold dirs).
+  4. `pwd` (fallback when not in a git repo).
 - **No shell operators in Bash calls.** No `&&`, `||`, `;`, `|`, `>>`, `<<`, backticks, or `\`-continuations. Each Bash call must be a single clean command. Operators trigger Claude Code's "shell operators require approval" prompt — that's the noise the user is angry about.
-- **Every Bash call carries a short human `description`.** Example: `"Resolve project root"`, `"Check if openspec exists"`, `"Install openspec into <path>"`. Never let bare shell be the only thing the user reads.
-- **Report progress as one human line per phase.** E.g. `Templates: 2 identical · .gitignore: already covers .claude/ · openspec: absent (will ask)`. Don't dump shell stdout to chat.
+- **Every Bash call carries a short human `description`.** Example: `"Resolve project root"`, `"Check if .spec exists"`, `"Create .spec scaffold dirs"`. Never let bare shell be the only thing the user reads.
+- **Report progress as one human line per phase.** E.g. `Templates: 2 identical · .gitignore: already covers .claude/ · .spec: absent (will ask)`. Don't dump shell stdout to chat.
 
 ## Procedure
 
@@ -52,21 +53,28 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
    - Present without exact-match line `.claude/` → `Edit` to append. Record `gitignore: added`.
    - Already contains `.claude/` → silent skip. Record `gitignore: already present`.
 
-4. **openspec (optional, project-scope).** One Bash call to probe: `test -d R/openspec`.
-   - Exit 0 (present) → record `openspec: already present`. Proceed to step 5 (gitignore policy) only if `.gitignore` lacks any opinion about `openspec/`.
-   - Exit non-zero (absent) → AskUserQuestion: **"Install openspec into this project?"**
-     - **Yes, install** — `description: "Adds @fission-ai/openspec to <project>/openspec/. Spec-driven flow: you write a change proposal, Claude implements against it, you archive when done. Project-scope only — never installed globally."`
-     - **No, skip** — `description: "Don't install openspec. You can re-run /setup later."`
-     - On Yes: one Bash call `command -v node` (record `openspec: failed (node not found)` and continue if missing). Then one Bash call `npx -y @fission-ai/openspec@latest init --tools claude --force R` (R = absolute project root, passed as positional arg). Stream output. Record `openspec: installed` or `openspec: failed: <stderr tail>`.
-     - On No: record `openspec: skipped`. Skip step 5.
+4. **`.spec/` (optional, project-scope).** One Bash call to probe: `test -d R/.spec`.
+   - Exit 0 (present) → record `.spec: already present`. Proceed to step 5 (gitignore policy) only if `.gitignore` lacks any opinion about `.spec/`.
+   - Exit non-zero (absent) → AskUserQuestion: **"Bootstrap `.spec/` (local spec-driven workflow) in this project?"**
+     - **Yes, bootstrap** — `description: "Scaffolds <project>/.spec/ with project.md, config.yaml, standards/ (long-lived rules), and empty specs/, changes/ folders. The 10 /spec-* commands operate here. No external deps."`
+     - **No, skip** — `description: "Don't bootstrap. You can re-run /setup later to add it."`
+     - On Yes:
+       - One Bash call: `mkdir -p R/.spec/specs R/.spec/changes R/.spec/changes/archive R/.spec/standards`.
+       - For each `(src, dst)`:
+         - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/project.md`             → `R/.spec/project.md`
+         - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/config.yaml`            → `R/.spec/config.yaml`
+         - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/standards/README.md`    → `R/.spec/standards/README.md`
+         `Read` source, `Write` destination verbatim.
+       - Record `.spec: bootstrapped (3 files + standards/README.md)`.
+     - On No: record `.spec: skipped`. Skip step 5.
 
-5. **openspec gitignore policy** (only if openspec was just installed, OR exists and `.gitignore` has no opinion). `Read` `R/.gitignore`, look for exact line `openspec/`.
-   - Already listed → record `openspec gitignore: already ignored`. Don't prompt.
-   - Not listed → AskUserQuestion: **"Commit `openspec/` to git, or keep it local?"**
-     - **Commit (recommended)** — `description: "Treat specs as project artifacts: PRs review proposals, git history tracks decisions."`
-     - **Add to .gitignore** — `description: "Keep openspec/ local-only. Pick this if you're experimenting solo or the team hasn't bought in yet."`
-     - On Commit → record `openspec gitignore: committed`.
-     - On Add → `Edit` `.gitignore` to append `openspec/`. Record `openspec gitignore: added`.
+5. **`.spec/` gitignore policy** (only if `.spec/` was just bootstrapped, OR exists and `.gitignore` has no opinion). `Read` `R/.gitignore`, look for exact line `.spec/`.
+   - Already listed → record `.spec gitignore: already ignored`. Don't prompt.
+   - Not listed → AskUserQuestion: **"Commit `.spec/` to git, or keep it local?"**
+     - **Commit (recommended)** — `description: "Treat specs as project artifacts: PRs review proposals, git history tracks decisions, archive/ preserves history."`
+     - **Add to .gitignore** — `description: "Keep .spec/ local-only. Pick this if you're experimenting solo or the team hasn't bought in yet."`
+     - On Commit → record `.spec gitignore: committed`.
+     - On Add → `Edit` `.gitignore` to append `.spec/`. Record `.spec gitignore: added`.
 
 6. **MCP servers (optional, project-scope).** Attempt `Read` of `R/.mcp.json`. If missing, treat as `{"mcpServers":{}}`. Note which canonical servers (`context7`, `serena`) are already registered.
    - Both already present → record `mcp: already configured`. Don't prompt.
@@ -86,19 +94,20 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
 foundry:setup complete:
   templates: written=N, identical=M, overwritten=K, kept=L
   gitignore: <added | already present>
-  openspec: <installed | already present | skipped | failed: …>
-  openspec gitignore: <committed | added | already ignored | n/a>
+  .spec: <bootstrapped | already present | skipped>
+  .spec gitignore: <committed | added | already ignored | n/a>
   mcp:
     context7: <added | already present | skipped>
     serena:   <added | already present | skipped>
 ```
 
-Omit the `openspec` / `mcp` lines if they were never relevant on this run (both already present and silently skipped). If Serena was added, add a note: `serena requires Python + serena package on PATH`. If any MCP was added, add: `restart the session for new MCP servers to load`.
+Omit the `.spec` / `mcp` lines if they were never relevant on this run (both already present and silently skipped). If Serena was added, add a note: `serena requires Python + serena package on PATH`. If any MCP was added, add: `restart the session for new MCP servers to load`. After a fresh `.spec` bootstrap, suggest: `next: fill in .spec/project.md and any .spec/standards/*.md, then /spec-propose "<description>"`.
 
 ## Important
 
 - Writes only inside `R/`. Never touches `~/.claude/` or user-scope MCP config.
 - The project-scope `settings.json` does NOT contain plugin-management state (`enabledPlugins`, `extraKnownMarketplaces` etc.) — that lives in user-scope. Plain copy is safe.
-- openspec and MCP are **opt-in per-project**. Always ask before installing, and only when absent.
+- `.spec/` and MCP are **opt-in per-project**. Always ask before installing, and only when absent.
+- `.spec/standards/` is a long-lived freeform directory (stack / architecture / best-practices / anti-patterns / glossary). Edited directly; never archived. The 10 `/spec-*` commands read every `.spec/standards/*.md` when loading context.
 - `.mcp.json` is project-scope and conventionally checked in. For private config, the user should use `.mcp.local.json` (gitignored) — mention this when MCP is selected for the first time.
-- Idempotent: re-run after `/plugin update` to refresh templates, or anytime to top-up. Already-present openspec/MCP entries are skipped silently.
+- Idempotent: re-run after `/plugin update` to refresh templates, or anytime to top-up. Already-present `.spec/` / MCP entries are skipped silently.
