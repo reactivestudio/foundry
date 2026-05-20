@@ -88,7 +88,7 @@ Render:
 
 ## Important
 
-- Form 3 NEVER moves to/from `declined/` — use `/decline` for that.
+- Form 3 NEVER moves to/from `declined/`. To decline a change: invoke `tracking.sh decline --change $CP --reason "<reason>" --by user` then `change.sh move --name <name> --to declined --by user` directly (see `spec-lifecycle`).
 - Form 3's auto-move uses `change.sh move` which itself appends a `_meta/moved-to-*` history entry.
 - Skill reads in step 0 are optional in Forms 1 and 2 (read-only summaries); recommended for Form 3 because that's where state validation matters.
 - For a quick "what's next" answer without setting anything, prefer `/track <name>` (Form 1).

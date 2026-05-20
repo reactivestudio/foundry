@@ -34,7 +34,7 @@ pending → in-progress → need-approve → approved
 | `implementation` ∈ {in-progress, need-approve} OR `verification` ∈ same | `sprint` |
 | `implementation` ∈ {approved, skipped} AND `verification` ∈ same | `done` |
 | otherwise | `backlog` |
-| explicit `/decline` | `declined` (terminal) |
+| explicit decline (bash) | `declined` (terminal, manual only) |
 
 `pause` does not move the change — it stays where it is.
 
@@ -42,26 +42,31 @@ pending → in-progress → need-approve → approved
 
 | Stage | Artifact | Owner role |
 |---|---|---|
-| (initial) | `tracking.yaml` + `proposal.md` | `/backlog-add` (scaffold only) |
+| (initial) | `tracking.yaml` + `proposal.md` | `/backlog "<title>"` (scaffold only) |
 | analysis | `requirements.md` | system-analyst |
 | architecture | `system-design.md` + `application-design.md` | architect |
 | decomposition | `roadmap.md` | teamlead |
 | implementation | code in project tree | code-implementor |
 | verification | (runs Quality gates from roadmap.md) | verifier |
 
-Spec-commands (`/backlog-add`, `/track`, `/accept`, `/decline`, etc.) are **state API only** — they don't generate content. Agents write content via Write/Edit on the appropriate file.
+Spec-commands (`/backlog`, `/track`, etc.) are **state API only** — they don't generate content. Agents write content via Write/Edit on the appropriate file.
 
-### Commands (9 + setup)
+### Commands (4 + setup)
 
-| Command | Purpose |
-|---|---|
-| `/backlog-add "<title>"` | Scaffold new change in backlog (auto-slug from title). |
-| `/backlog-list` · `/sprint-list` · `/done-list` · `/declined-list` | Per-bucket listings. |
-| `/sprint-add <name>` | Manual move backlog → sprint. |
-| `/accept <name>` | Manual move sprint → done. |
-| `/decline <name> <reason>` | Terminal move ANY → declined. |
-| `/track <name>` · `<name> <stage>` · `<name> <stage> <state>` | Unified tracker — 3 forms. |
-| `/foundry:setup` | Scaffold `.spec/` (4 buckets + standards/ + _template/) and project `.claude/`. |
+| Command | Form | Purpose |
+|---|---|---|
+| `/backlog` | bare | List backlog table. |
+| `/backlog "<title>"` | with title | Scaffold new change in backlog (auto-slug from title). |
+| `/sprint` | bare | List sprint table. |
+| `/closed` | bare \| `done` \| `declined` | List terminal buckets — both or filter. |
+| `/track <name>` | summary | All stages, scope, artifacts, roadmap progress, recent history. |
+| `/track <name> <stage>` | stage detail | State + history filtered to stage + owner role + next action. |
+| `/track <name> <stage> <state>` | setter | Validate transition, write tracking.yaml, auto-move bucket. |
+| `/foundry:setup` | — | Scaffold `.spec/` (4 buckets + standards/ + _template/) and project `.claude/`. |
+
+`sprint-add` and `accept` are **not** slash commands — they're automatic side effects of `/track` (auto-move into `sprint/` on `implementation: in-progress`; auto-move into `done/` on `verification: approved` with `implementation: approved|skipped`).
+
+`decline` is **not** a slash command — it's rare and user-initiated by natural language. The agent reads `spec-lifecycle` and invokes `tracking.sh decline` + `change.sh move --to declined` directly.
 
 ### Bash helpers (4 dispatch scripts in `scripts/spec/`)
 

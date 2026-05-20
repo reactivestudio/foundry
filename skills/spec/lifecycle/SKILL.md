@@ -9,7 +9,8 @@ A change in `.spec/changes/` has **5 stages** (`analysis`, `architecture`, `deco
 
 ## When to use
 
-- Implementing any `/track`, `/backlog-*`, `/sprint-*`, `/accept`, `/decline` command.
+- Implementing the `/track` command (Form 3 setter) or the listing commands (`/backlog`, `/sprint`, `/closed`).
+- Performing a decline operation in response to a user request (no slash command — see Decline procedure below).
 - Reasoning about why a change is in `backlog/` vs `sprint/`.
 - Understanding what a stage's `pause` / `need-approve` status means.
 
@@ -48,9 +49,9 @@ Bucket is computed from `stages.implementation` + `stages.verification`:
 | `implementation` ∈ {in-progress, need-approve} OR `verification` ∈ {in-progress, need-approve} | `sprint` |
 | `implementation` ∈ {approved, skipped} AND `verification` ∈ {approved, skipped} | `done` |
 | otherwise (analysis/architecture/decomposition active, or everything paused/pending) | `backlog` |
-| explicit `/decline` | `declined` (terminal, manual only) |
+| explicit decline (bash, see below) | `declined` (terminal, manual only) |
 
-`pause` is a **marker**, not a bucket trigger — a paused change stays where it is. To remove a long-paused change from active listings, run `/decline <name> "paused indefinitely"`.
+`pause` is a **marker**, not a bucket trigger — a paused change stays where it is. To remove a long-paused change from active listings, perform a decline (see Decline procedure below) with reason `"paused indefinitely"`.
 
 After any stage state change via `/track <name> <stage> <state>`, the command:
 1. Calls `tracking.sh set-stage` (writes new state + history entry).
@@ -78,7 +79,7 @@ History preserves the full trail (each state flip is one entry).
 
 ## Procedure (manual workflow drive)
 
-1. Create: `/backlog-add "<title>"` → scaffold in `backlog/`, all stages = `pending`.
+1. Create: `/backlog "<title>"` → scaffold in `backlog/`, all stages = `pending`.
 2. Start analysis: `/track <name> analysis in-progress`.
 3. Agent writes `requirements.md`, calls `tracking.sh set-scope --change <path> --scope <s> --by <who>` (via Bash), then `/track <name> analysis need-approve`.
 4. User reviews → `/track <name> analysis approved` (or `/track <name> analysis in-progress` to send back for rework).
@@ -86,6 +87,17 @@ History preserves the full trail (each state flip is one entry).
 6. `/track <name> implementation in-progress` → auto-move to `sprint/`. Implementor flips roadmap tasks via `roadmap.sh set-task-state`.
 7. When all main roadmap tasks done: `/track <name> implementation need-approve` → user approves.
 8. `/track <name> verification in-progress` → verifier runs Q-tasks. When all green: `/track <name> verification need-approve` → user approves → auto-move to `done/`.
+
+## Decline procedure (no slash command)
+
+There is no `/decline` command — a decline is rare and user-initiated by natural language ("decline X because Y"). When you receive such a request:
+
+1. **Locate.** `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh locate --name <name>`. Capture absolute path as `$CP`.
+2. **Set decline_reason + history.** `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh decline --change $CP --reason "<reason>" --by user`.
+3. **Move.** `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh move --name <name> --to declined --by user` (also appends `_meta/moved-to-declined`).
+4. Report `from: <bucket>/ → to: declined/`, the reason, and that decline is terminal (revive = new change with new name).
+
+Declines occupy the name slot — `change.sh validate-name` refuses re-use. That is intentional.
 
 ## When NOT to use
 

@@ -58,7 +58,7 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
 
    **4a. Top-level probe.** One Bash call: `test -d R/.spec`.
    - Exit non-zero (absent) → AskUserQuestion: **"Bootstrap `.spec/` (4-bucket change workflow) in this project?"**
-     - **Yes, bootstrap** — `description: "Scaffolds <project>/.spec/ with standards/README.md (long-lived rules), 4 bucket dirs (backlog/sprint/done/declined), and changes/_template/ used by /backlog-add. No external deps."`
+     - **Yes, bootstrap** — `description: "Scaffolds <project>/.spec/ with standards/README.md (long-lived rules), 4 bucket dirs (backlog/sprint/done/declined), and changes/_template/ used by /backlog. No external deps."`
      - **No, skip** — `description: "Don't bootstrap. You can re-run /setup later to add it."`
      - On Yes: bootstrap full scaffold (see 4c). Record `.spec: bootstrapped`. Proceed to step 5.
      - On No: record `.spec: skipped`. Skip step 5.
@@ -128,7 +128,7 @@ foundry:setup complete:
     serena:   <added | already present | skipped>
 ```
 
-Omit the `.spec` / `mcp` lines if they were never relevant on this run (both already present and silently skipped). If Serena was added, add a note: `serena requires Python + serena package on PATH`. If any MCP was added, add: `restart the session for new MCP servers to load`. If legacy `.spec/` artifacts were detected, add: `note: legacy artifacts from old delta-merge model detected — see README migration guide`. After a fresh `.spec` bootstrap, suggest: `next: populate .spec/standards/*.md (project.md, stack.md, …), then /backlog-add "<title>" to create your first change`.
+Omit the `.spec` / `mcp` lines if they were never relevant on this run (both already present and silently skipped). If Serena was added, add a note: `serena requires Python + serena package on PATH`. If any MCP was added, add: `restart the session for new MCP servers to load`. If legacy `.spec/` artifacts were detected, add: `note: legacy artifacts from old delta-merge model detected — see README migration guide`. After a fresh `.spec` bootstrap, suggest: `next: populate .spec/standards/*.md (project.md, stack.md, …), then /backlog "<title>" to create your first change`.
 
 ## Important
 
@@ -136,6 +136,6 @@ Omit the `.spec` / `mcp` lines if they were never relevant on this run (both alr
 - The project-scope `settings.json` does NOT contain plugin-management state (`enabledPlugins`, `extraKnownMarketplaces` etc.) — that lives in user-scope. Plain copy is safe.
 - `.spec/` and MCP are **opt-in per-project**. Always ask before installing, and only when absent.
 - `.spec/standards/` is a long-lived freeform directory (stack / architecture / best-practices / anti-patterns / glossary / project context). Edited directly; never archived. Agents read on-demand for relevant context.
-- `.spec/changes/_template/` holds the scaffold (`tracking.yaml`, `proposal.md`) copied verbatim by `change.sh new` when running `/backlog-add`. Edit only if you want to change the per-change starter content for THIS project.
+- `.spec/changes/_template/` holds the scaffold (`tracking.yaml`, `proposal.md`) copied verbatim by `change.sh new` when running `/backlog "<title>"`. Edit only if you want to change the per-change starter content for THIS project.
 - `.mcp.json` is project-scope and conventionally checked in. For private config, the user should use `.mcp.local.json` (gitignored) — mention this when MCP is selected for the first time.
 - Idempotent: re-run after `/plugin update` to refresh templates, or anytime to top-up. Already-present `.spec/` / MCP entries are skipped silently.

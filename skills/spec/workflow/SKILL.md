@@ -21,7 +21,7 @@ Each downstream stage reads everything upstream + relevant `.spec/standards/*.md
 
 | | |
 |---|---|
-| Owner | Workflow / initiator (user or `/backlog-add`) |
+| Owner | Workflow / initiator (user or `/backlog "<title>"`) |
 | Artifact | `proposal.md` |
 | Lives at | `<change>/proposal.md` (scaffold-stub from `_template/`) |
 | Required sections | `# <title>`, `## Intent` (1–3 paragraphs) |

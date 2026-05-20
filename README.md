@@ -68,14 +68,14 @@ A change moves through 4 directories — `backlog/` → `sprint/` → `done/` (o
 
 | Command | Purpose |
 |---|---|
-| `/backlog-add "<title>"` | Scaffold new change in backlog from title (auto-slug). |
-| `/backlog-list` · `/sprint-list` · `/done-list` · `/declined-list` | List changes in each bucket. |
-| `/sprint-add <name>` | Manual move backlog → sprint (usually auto on `implementation in-progress`). |
-| `/accept <name>` | Manual move sprint → done (warns if stages not green). |
-| `/decline <name> <reason>` | Terminal move ANY → declined with required reason. |
+| `/backlog` | No args → list backlog table. With title → scaffold new change in backlog (auto-slug). |
+| `/sprint` | List sprint table (active stage, scope, roadmap progress). |
+| `/closed` · `/closed done` · `/closed declined` | List terminal buckets — both, or filter to one. Includes `decline_reason` for declined. |
 | `/track <name>` · `<name> <stage>` · `<name> <stage> <state>` | Unified tracker: 3 forms — summary, single-stage detail, setter (with auto-bucket-move). |
 
-The `0.5.0` model is a breaking change from the openspec-style delta/canonical model used in `0.4.x`. Legacy `.spec/specs/` and `.spec/changes/archive/` are detected by `/setup` but not migrated automatically — copy what you need into the new structure manually (or, if low-stakes, just start fresh).
+`sprint-add` and `accept` are auto: a change auto-moves to `sprint/` when you set `implementation: in-progress`, and to `done/` when both `implementation` and `verification` are `approved`/`skipped`. To **decline** a change, just say so in natural language ("decline X because Y") — the agent invokes `tracking.sh decline` + `change.sh move --to declined` directly (procedure documented in the `spec-lifecycle` skill).
+
+The `0.5.x` model is a breaking change from the openspec-style delta/canonical model used in `0.4.x`. Legacy `.spec/specs/` and `.spec/changes/archive/` are detected by `/setup` but not migrated automatically — copy what you need into the new structure manually (or, if low-stakes, just start fresh).
 
 ## Model routing
 
