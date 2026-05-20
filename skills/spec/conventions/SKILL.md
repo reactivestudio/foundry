@@ -24,7 +24,7 @@ Naming, directory layout, and `tracking.yaml` schema for `.spec/`. Independent o
 │   ├── project.md                  # suggested (project context)
 │   └── <custom>.md
 └── changes/
-    ├── _template/                  # used by change-new.sh; do not edit per-project
+    ├── _template/                  # used by `change.sh new`; do not edit per-project
     │   ├── tracking.yaml
     │   └── proposal.md
     ├── backlog/<name>/             # analysis → architecture → decomposition → pending-approval
@@ -51,7 +51,7 @@ Files appear progressively. Agents write them; spec-commands never generate cont
 
 - **Change names** (`changes/<bucket>/<name>/`) — kebab-case. Imperative / descriptive. Examples: `add-dark-mode`, `fix-login-rate-limit`, `migrate-postgres-15`.
 
-  Validated by `change-name-validate.sh`:
+  Validated by `change.sh validate-name`:
   - Must match `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`.
   - Must be unique across **all 4 buckets** (`backlog`, `sprint`, `done`, `declined`).
   - Must not equal a reserved name (`backlog`, `sprint`, `done`, `declined`, `_template`).
@@ -62,7 +62,7 @@ Files appear progressively. Agents write them; spec-commands never generate cont
 
 ## `tracking.yaml` schema
 
-**Bash helpers depend on this schema.** Humans should edit only the `title` and (rarely) `priority`-like top-level scalars. State changes go through `tracking-set-stage.sh`, `tracking-set-scope.sh`, `tracking-decline.sh`.
+**Bash helpers depend on this schema.** Humans should edit only the `title` and (rarely) `priority`-like top-level scalars. State changes go through `tracking.sh set-stage / set-scope / decline` subcommands.
 
 ```yaml
 id: <name>                          # matches directory basename
@@ -91,7 +91,7 @@ decline_reason: "<reason text>"
 
 ### Why strict schema
 
-Parsers are pure-bash (portable awk, no `yq`). Any structural deviation (extra indentation, multi-line strings, quoted booleans) silently breaks `tracking-get-stage.sh`. If you need to rescue a broken file, use helpers to rewrite from scratch.
+Parsers are pure-bash (portable awk, no `yq`). Any structural deviation (extra indentation, multi-line strings, quoted booleans) silently breaks `tracking.sh get-stage`. If you need to rescue a broken file, use helpers to rewrite from scratch.
 
 ## When NOT to use
 
@@ -103,7 +103,7 @@ Parsers are pure-bash (portable awk, no `yq`). Any structural deviation (extra i
 ## Anti-patterns
 
 - Inventing your own bucket (e.g. `archive/`, `in-review/`) — only 4 are recognised by helpers and commands.
-- Renaming a change after creation — breaks `change-locate.sh` if anyone references the old name; preserve via `decline` + new `backlog-add` instead.
-- Adding new fields to `tracking.yaml` without updating helpers — parsers ignore unknown keys but writers (`tracking-set-stage.sh`) will not preserve them through rewrites.
+- Renaming a change after creation — breaks `change.sh locate` if anyone references the old name; preserve via `decline` + new `backlog-add` instead.
+- Adding new fields to `tracking.yaml` without updating helpers — parsers ignore unknown keys but writers (`tracking.sh set-stage`) will not preserve them through rewrites.
 - Editing history entries — they are an audit log; append-only by helpers.
 - "Fix-things" or "misc" change names — too vague to be useful in history.

@@ -26,7 +26,7 @@ Each stage has one of 6 states:
 | `pause` | Deferred — we'll come back later. Does **not** trigger bucket change. |
 | `skipped` | Stage deemed unnecessary for this change (e.g. bugfix may skip `architecture`). |
 
-Allowed transitions (enforced by `tracking-validate-stage-transition.sh`):
+Allowed transitions (enforced by `stage-state-machine.sh validate`):
 
 ```
 pending      → in-progress | skipped
@@ -53,9 +53,9 @@ Bucket is computed from `stages.implementation` + `stages.verification`:
 `pause` is a **marker**, not a bucket trigger — a paused change stays where it is. To remove a long-paused change from active listings, run `/decline <name> "paused indefinitely"`.
 
 After any stage state change via `/track <name> <stage> <state>`, the command:
-1. Calls `tracking-set-stage.sh` (writes new state + history entry).
-2. Calls `tracking-derive-bucket.sh` (computes desired bucket).
-3. If desired ≠ current → `change-move.sh` + appends `{ stage: _meta, status: moved-to-<bucket>, by: auto }` history entry.
+1. Calls `tracking.sh set-stage` (writes new state + history entry).
+2. Calls `tracking.sh derive-bucket` (computes desired bucket).
+3. If desired ≠ current → `change.sh move` + appends `{ stage: _meta, status: moved-to-<bucket>, by: auto }` history entry.
 
 ## Back-edges (rework loops)
 
@@ -80,10 +80,10 @@ History preserves the full trail (each state flip is one entry).
 
 1. Create: `/backlog-add "<title>"` → scaffold in `backlog/`, all stages = `pending`.
 2. Start analysis: `/track <name> analysis in-progress`.
-3. Agent writes `requirements.md`, calls `tracking-set-scope.sh ... <scope> ...` (via Bash), then `/track <name> analysis need-approve`.
+3. Agent writes `requirements.md`, calls `tracking.sh set-scope --change <path> --scope <s> --by <who>` (via Bash), then `/track <name> analysis need-approve`.
 4. User reviews → `/track <name> analysis approved` (or `/track <name> analysis in-progress` to send back for rework).
 5. Repeat for `architecture` (writes system-design.md + application-design.md) and `decomposition` (writes roadmap.md).
-6. `/track <name> implementation in-progress` → auto-move to `sprint/`. Implementor flips roadmap tasks via `roadmap-set-task-state.sh`.
+6. `/track <name> implementation in-progress` → auto-move to `sprint/`. Implementor flips roadmap tasks via `roadmap.sh set-task-state`.
 7. When all main roadmap tasks done: `/track <name> implementation need-approve` → user approves.
 8. `/track <name> verification in-progress` → verifier runs Q-tasks. When all green: `/track <name> verification need-approve` → user approves → auto-move to `done/`.
 
@@ -96,8 +96,8 @@ History preserves the full trail (each state flip is one entry).
 
 ## Anti-patterns
 
-- Manually editing `tracking.yaml` instead of using helpers — bash parsers depend on strict schema; one stray quote breaks `tracking-get-stage`.
+- Manually editing `tracking.yaml` instead of using helpers — bash parsers depend on strict schema; one stray quote breaks `tracking.sh get-stage`.
 - Skipping `need-approve` step — flipping straight from `in-progress` → `approved` loses the human checkpoint. Allowed by state machine, but defeats the purpose.
 - Using `pause` instead of `decline` for "we'll never do this" — `pause` keeps the change in active listings forever.
-- Hardcoding bucket name in agent prompts — always derive via `tracking-derive-bucket.sh` to stay consistent.
+- Hardcoding bucket name in agent prompts — always derive via `tracking.sh derive-bucket` to stay consistent.
 - Renumbering history entries or rewriting old `{ stage, status, by }` lines — history is append-only audit.

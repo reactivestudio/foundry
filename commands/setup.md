@@ -16,7 +16,7 @@ Always (mandatory, with diff-prompt on conflict):
 
 Optional (asked only when absent — silent skip on re-run):
 
-- `<project>/.spec/` — 4-bucket change workflow with per-stage `tracking.yaml`. Scaffolded **locally** from `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/`. Bash-only file ops; no external deps. Includes `standards/` for long-lived project rules and `changes/_template/` (used by `change-new.sh`).
+- `<project>/.spec/` — 4-bucket change workflow with per-stage `tracking.yaml`. Scaffolded **locally** from `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/`. Bash-only file ops; no external deps. Includes `standards/` for long-lived project rules and `changes/_template/` (used by `change.sh new`).
 - `<project>/.mcp.json` with any subset of `context7`, `serena`.
 
 Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. Toggle per-project with `/plugin disable foundry@reactivestudio`.
@@ -92,7 +92,7 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
      - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/standards/README.md`  → `R/.spec/standards/README.md`
 
      `Read` source, `Write` destination verbatim. **Never overwrite an existing file** — only write the ones the user is missing.
-   - If `R/.spec/changes/_template/` is missing as a directory, `Bash`: `cp -r ${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/changes/_template R/.spec/changes/_template`. (Recursive copy is the only practical way to copy a directory subtree; the template files inside contain `{{...}}` placeholders that `change-new.sh` substitutes at scaffold time.)
+   - If `R/.spec/changes/_template/` is missing as a directory, `Bash`: `cp -r ${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/changes/_template R/.spec/changes/_template`. (Recursive copy is the only practical way to copy a directory subtree; the template files inside contain `{{...}}` placeholders that `change.sh new` substitutes at scaffold time.)
 
 5. **`.spec/` gitignore policy** (only if `.spec/` was just bootstrapped, OR exists and `.gitignore` has no opinion). `Read` `R/.gitignore`, look for exact line `.spec/`.
    - Already listed → record `.spec gitignore: already ignored`. Don't prompt.
@@ -136,6 +136,6 @@ Omit the `.spec` / `mcp` lines if they were never relevant on this run (both alr
 - The project-scope `settings.json` does NOT contain plugin-management state (`enabledPlugins`, `extraKnownMarketplaces` etc.) — that lives in user-scope. Plain copy is safe.
 - `.spec/` and MCP are **opt-in per-project**. Always ask before installing, and only when absent.
 - `.spec/standards/` is a long-lived freeform directory (stack / architecture / best-practices / anti-patterns / glossary / project context). Edited directly; never archived. Agents read on-demand for relevant context.
-- `.spec/changes/_template/` holds the scaffold (`tracking.yaml`, `proposal.md`) copied verbatim by `change-new.sh` when running `/backlog-add`. Edit only if you want to change the per-change starter content for THIS project.
+- `.spec/changes/_template/` holds the scaffold (`tracking.yaml`, `proposal.md`) copied verbatim by `change.sh new` when running `/backlog-add`. Edit only if you want to change the per-change starter content for THIS project.
 - `.mcp.json` is project-scope and conventionally checked in. For private config, the user should use `.mcp.local.json` (gitignored) — mention this when MCP is selected for the first time.
 - Idempotent: re-run after `/plugin update` to refresh templates, or anytime to top-up. Already-present `.spec/` / MCP entries are skipped silently.

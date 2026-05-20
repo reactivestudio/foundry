@@ -10,7 +10,7 @@ description: "roadmap.md syntax: tasks, fields, blockers, Quality gates. Paralle
 ## When to use
 
 - Authoring `roadmap.md` during decomposition stage.
-- Implementing `roadmap-parse.sh` / `roadmap-ready.sh` / `roadmap-status.sh` / `roadmap-set-task-state.sh`.
+- Implementing `roadmap.sh parse / ready / status / set-task-state` subcommands.
 - Implementing `/track <name>` summary view (shows roadmap progress).
 
 ## Task format
@@ -35,7 +35,7 @@ All 5 fields are required. Authors may add prose between blocks but parser ignor
 | `Estimate` | `15m`, `30m`, `1h`, `2h`, `4h` | Discrete bins. Important for orchestrator's context-window planning. |
 | `Blockers` | comma-separated task IDs (e.g. `1, 2`) or `—` (or `-`) for none | All listed IDs must exist in the same roadmap. Circular = author error. |
 | `Assignee` | foundry agent name (`code-implementor`, `verifier`, `architect`, …) | Used by `/track <name>` to group ready tasks. |
-| `State` | `pending`, `in-progress`, `done`, `blocked`, `rejected` | Mutated only by `roadmap-set-task-state.sh`. |
+| `State` | `pending`, `in-progress`, `done`, `blocked`, `rejected` | Mutated only by `roadmap.sh set-task-state`. |
 | `Acceptance` | free-text criterion | What makes the task verifiably done. |
 
 ### Task IDs
@@ -70,9 +70,9 @@ Verifier flips Q-task `state: done` **only after** the actual command exits gree
 
 ## Parallelism
 
-Tasks with **disjoint transitive blocker sets** can run in parallel. Parser does not enforce this — it's the orchestrator's responsibility to compute the ready set (`roadmap-ready.sh`) and group by safety.
+Tasks with **disjoint transitive blocker sets** can run in parallel. Parser does not enforce this — it's the orchestrator's responsibility to compute the ready set (`roadmap.sh ready`) and group by safety.
 
-`roadmap-ready.sh` rule: task is ready iff `state == pending` AND all `Blockers` have `state == done`. Empty blockers (`—`) → immediately ready.
+`roadmap.sh ready` rule: task is ready iff `state == pending` AND all `Blockers` have `state == done`. Empty blockers (`—`) → immediately ready.
 
 ## Relationship to tracking.yaml
 
@@ -80,12 +80,12 @@ Roadmap.md's tasks are an **internal** concern of the decomposition+implementati
 
 ## Helper reference
 
-| Helper | Use |
+| Subcommand | Use |
 |---|---|
-| `roadmap-parse.sh <path>` | Extract all tasks as TSV (id, title, est, blockers, assignee, state, acceptance) |
-| `roadmap-status.sh <path>` | Aggregate counts by state |
-| `roadmap-ready.sh <path>` | List task IDs whose blockers are all done and own state is pending |
-| `roadmap-set-task-state.sh <path> <id> <state>` | Atomic single-field rewrite |
+| `roadmap.sh parse --roadmap <path>` | Extract all tasks as TSV (id, title, est, blockers, assignee, state, acceptance) |
+| `roadmap.sh status --roadmap <path>` | Aggregate counts by state |
+| `roadmap.sh ready --roadmap <path>` | List task IDs whose blockers are all done and own state is pending |
+| `roadmap.sh set-task-state --roadmap <path> --task-id <id> --state <state>` | Atomic single-field rewrite |
 
 ## Parser limitation — code fences
 

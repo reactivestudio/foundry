@@ -36,7 +36,7 @@ The proposal is **incoming**. Keep it brief — problem + desired outcome. No re
 | Artifact | `requirements.md` |
 | Inputs | `proposal.md`, `.spec/standards/{project,glossary,…}.md`, project's own `docs/` if relevant |
 | Required sections | `## Problem`, `## User stories`, `## Functional requirements`, `## Non-functional requirements`, `## Constraints`, `## Out of scope`, `## Open questions` |
-| Side-effect | Set `scope:` field via `tracking-set-scope.sh <change-path> <product\|project\|feature\|bugfix> <by>` |
+| Side-effect | Set `scope:` field via `tracking.sh set-scope --change <path> --scope <product\|project\|feature\|bugfix> --by <who>` |
 | Quality bar (need-approve) | All FR/NFR phrased with SHALL/MUST/SHOULD; all open questions answered or explicitly deferred; scope set |
 
 **No tech.** No class names, no endpoints, no DB schemas. Business language only. If architect later says "this NFR is unimplementable", set `analysis: in-progress` again and revise.
@@ -73,7 +73,7 @@ If the change is purely internal (no new services / no integration changes), set
 | Owner | code-implementor agent (or generic Claude / human) — one per task or grouped |
 | Artifact | **no spec artifact** — only code in the project tree |
 | Inputs | `roadmap.md` task entries, `requirements.md`, `system-design.md`, `application-design.md`, all relevant standards |
-| Side-effect | Flip task state via `roadmap-set-task-state.sh <roadmap-path> <id> <state>` after the primary action (Write/Edit) of each task |
+| Side-effect | Flip task state via `roadmap.sh set-task-state --roadmap <path> --task-id <id> --state <state>` after the primary action (Write/Edit) of each task |
 | Quality bar (need-approve) | All non-Q tasks `state: done` (or `rejected` with reason) |
 
 When `implementation: in-progress` → change auto-moves to `sprint/`.
@@ -85,7 +85,7 @@ When `implementation: in-progress` → change auto-moves to `sprint/`.
 | Owner | verifier agent (or generic Claude / human) |
 | Artifact | **no spec artifact** — runs Quality gates from roadmap.md |
 | Inputs | `roadmap.md` Q-tasks |
-| Side-effect | Flip Q-task state via `roadmap-set-task-state.sh` only after the actual command exits green |
+| Side-effect | Flip Q-task state via `roadmap.sh set-task-state` only after the actual command exits green |
 | Quality bar (need-approve) | All Q-tasks `state: done`. Any failure stays `pending` with diagnostic surfaced |
 
 When `verification: approved` (with `implementation: approved|skipped`) → change auto-moves to `done/`.

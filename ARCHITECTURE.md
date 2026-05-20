@@ -63,13 +63,16 @@ Spec-commands (`/backlog-add`, `/track`, `/accept`, `/decline`, etc.) are **stat
 | `/track <name>` · `<name> <stage>` · `<name> <stage> <state>` | Unified tracker — 3 forms. |
 | `/foundry:setup` | Scaffold `.spec/` (4 buckets + standards/ + _template/) and project `.claude/`. |
 
-### Bash helpers (14, all in `scripts/spec/`)
+### Bash helpers (4 dispatch scripts in `scripts/spec/`)
 
-- **tracking**: `tracking-{validate-stage-transition,get-stage,set-stage,set-scope,derive-bucket,active-stage,decline}.sh`
-- **roadmap**: `roadmap-{parse,status,ready,set-task-state}.sh`
-- **change**: `change-{name-validate,locate,move,new}.sh`, `list-changes.sh`
+| Script | Subcommands |
+|---|---|
+| `stage-state-machine.sh` | `validate --from <s> --to <s>`, `states`, `allowed-from --state <s>` |
+| `tracking.sh` | `get-stage`, `set-stage`, `get-scope`, `set-scope`, `derive-bucket`, `active-stage`, `decline`, `append-history` (all with `--change <path>` + topic-specific flags) |
+| `roadmap.sh` | `parse`, `status`, `ready`, `set-task-state` (all with `--roadmap <path>` + topic-specific flags) |
+| `change.sh` | `validate-name`, `locate`, `new`, `move`, `list` (named-flag args; `move` accepts `--by <who>`) |
 
-All pure-bash, portable awk (no gawk extensions, no `yq` dep). The `tracking.yaml` schema is the contract these helpers depend on — see `skills/spec/conventions/SKILL.md`.
+All pure-bash, portable awk (no gawk extensions, no `yq` dep). Named-flag args throughout. The `tracking.yaml` schema is the contract these helpers depend on — see `skills/spec/conventions/SKILL.md`.
 
 ### Role agents — not yet shipped
 
