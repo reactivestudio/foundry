@@ -31,7 +31,7 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
   2. `test -d <abs-path>/.spec` (existence probe).
   3. `mkdir -p <abs-path>/.spec/changes/{backlog,sprint,done,declined} <abs-path>/.spec/standards` (create scaffold dirs).
   4. `pwd` (fallback when not in a git repo).
-  5. `cp -r <plugin>/.claude-template/spec/changes/_template <project>/.spec/changes/_template` (copy template subtree when bootstrapping — recursive copy is the only way to copy a directory; do NOT script around it with Read/Write per-file).
+  5. `cp -r <plugin>/.claude-template/spec/changes/_template/. <project>/.spec/changes/_template/` (copy template subtree when bootstrapping or topping up — trailing `/.` copies *contents into* an existing destination dir, which is robust whether the destination is empty or partially present; recursive copy is the only practical way to clone the subtree).
 - **No shell operators in Bash calls.** No `&&`, `||`, `;`, `|`, `>>`, `<<`, backticks, or `\`-continuations. Each Bash call must be a single clean command. Operators trigger Claude Code's "shell operators require approval" prompt — that's the noise the user is angry about.
 - **Every Bash call carries a short human `description`.** Example: `"Resolve project root"`, `"Check if .spec exists"`, `"Create .spec scaffold dirs"`. Never let bare shell be the only thing the user reads.
 - **Report progress as one human line per phase.** E.g. `Templates: 2 identical · .gitignore: already covers .claude/ · .spec: absent (will ask)`. Don't dump shell stdout to chat.
@@ -54,17 +54,17 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
    - Present without exact-match line `.claude/` → `Edit` to append. Record `gitignore: added`.
    - Already contains `.claude/` → silent skip. Record `gitignore: already present`.
 
-4. **`.spec/` (optional, project-scope).** Probe in two stages.
+4. **`.spec/` (optional, project-scope).** **STRICTLY SEQUENTIAL** — do NOT batch the 4a probe with any 4b probes; the 4a outcome determines whether 4b runs at all.
 
-   **4a. Top-level probe.** One Bash call: `test -d R/.spec`.
-   - Exit non-zero (absent) → AskUserQuestion: **"Bootstrap `.spec/` (4-bucket change workflow) in this project?"**
+   **4a. Top-level probe (run first, ALONE).** One Bash call: `test -d R/.spec`. Wait for the result before issuing any other `.spec/`-related Bash calls.
+   - **Exit non-zero (absent)** → AskUserQuestion: **"Bootstrap `.spec/` (4-bucket change workflow) in this project?"**
      - **Yes, bootstrap** — `description: "Scaffolds <project>/.spec/ with standards/README.md (long-lived rules), 4 bucket dirs (backlog/sprint/done/declined), and changes/_template/ used by /backlog. No external deps."`
      - **No, skip** — `description: "Don't bootstrap. You can re-run /setup later to add it."`
-     - On Yes: bootstrap full scaffold (see 4c). Record `.spec: bootstrapped`. Proceed to step 5.
-     - On No: record `.spec: skipped`. Skip step 5.
-   - Exit 0 (present) → continue to 4b for completeness check.
+     - On Yes: bootstrap full scaffold (see 4c). Record `.spec: bootstrapped`. **Skip 4b entirely** — there's nothing to top-up after a fresh bootstrap. Proceed to step 5.
+     - On No: record `.spec: skipped`. Skip 4b, 4c, step 5.
+   - **Exit 0 (present)** → continue to 4b for completeness check. **Only now** may you issue further `test -d` / `Read` probes for the subpaths.
 
-   **4b. Completeness probe (when `.spec/` already exists).** Attempt `Read` of each scaffold target — if `Read` errors with "file not found", the file is missing. Targets:
+   **4b. Completeness probe (run ONLY when 4a returned exit 0).** Attempt `Read` of each scaffold target — if `Read` errors with "file not found", the file is missing. Targets:
    - `R/.spec/standards/README.md`
    - `R/.spec/changes/_template/tracking.yaml`
    - `R/.spec/changes/_template/proposal.md`
@@ -74,7 +74,7 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
    - `R/.spec/changes/backlog`, `R/.spec/changes/sprint`, `R/.spec/changes/done`, `R/.spec/changes/declined`
    - `R/.spec/changes/_template`
 
-   Detect **legacy** artifacts from the old delta-merge model (record but do NOT delete):
+   Detect **legacy** artifacts from the old delta-merge model (record but do NOT delete). **Each path is "detected" ONLY if its `test -d` / `Read` returns exit 0 (present).** A probe returning non-zero means **not detected** — never record those as legacy:
    - `R/.spec/specs/` (was canonical capability specs)
    - `R/.spec/changes/archive/` (was archived changes)
    - `R/.spec/project.md` (now moved into standards/)
@@ -82,17 +82,17 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
 
    - All new-model targets present → record `.spec: already present (complete)`. Proceed to step 5 only if `.gitignore` lacks any opinion about `.spec/`.
    - Any new-model target missing → AskUserQuestion: **"Found `.spec/` but scaffold is incomplete (missing: <list>). Top up missing files?"**
-     - **Yes, top up** — write only the missing files / mkdir the missing dirs (see 4c). Don't touch existing files. Record `.spec: topped up (<n> files written)`.
+     - **Yes, top up** — run 4c (which begins with a defensive `mkdir -p`, then writes only the missing files). Don't touch existing files. Record `.spec: topped up (<n> files written)`.
      - **No, leave as is** — record `.spec: already present (incomplete, user declined top-up)`.
-   - If legacy artifacts detected, append to record: `(legacy: <list>)`. Surface in final summary as a migration note.
+   - If legacy artifacts were actually detected (exit 0 probes), append to record: `(legacy: <list>)`. Surface in final summary as a migration note. **If no legacy probe returned exit 0, omit the legacy line entirely** — do NOT write "legacy: none" or invent paths.
 
-   **4c. Bootstrap / top-up file operations** (referenced by 4a and 4b):
-   - `Bash`: `mkdir -p R/.spec/changes/backlog R/.spec/changes/sprint R/.spec/changes/done R/.spec/changes/declined R/.spec/standards` (idempotent — safe to run unconditionally).
-   - For each `(src, dst)` pair where `dst` does NOT exist:
+   **4c. Bootstrap / top-up file operations** (referenced by 4a-Yes and 4b-Yes):
+   - **Step 1 (ALWAYS first).** `Bash`: `mkdir -p R/.spec/changes/backlog R/.spec/changes/sprint R/.spec/changes/done R/.spec/changes/declined R/.spec/changes/_template R/.spec/standards`. Idempotent. This MUST run before any Write / cp below, because `Write` of a deeply-nested file requires its parent dirs to exist and `cp -r` requires the destination's parent to exist. Do NOT skip this even on top-up — `mkdir -p` is a no-op for existing dirs.
+   - **Step 2.** For each `(src, dst)` pair where `dst` does NOT exist:
      - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/standards/README.md`  → `R/.spec/standards/README.md`
 
      `Read` source, `Write` destination verbatim. **Never overwrite an existing file** — only write the ones the user is missing.
-   - If `R/.spec/changes/_template/` is missing as a directory, `Bash`: `cp -r ${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/changes/_template R/.spec/changes/_template`. (Recursive copy is the only practical way to copy a directory subtree; the template files inside contain `{{...}}` placeholders that `change.sh new` substitutes at scaffold time.)
+   - **Step 3.** If `R/.spec/changes/_template/tracking.yaml` OR `R/.spec/changes/_template/proposal.md` is missing, populate the template subtree. `Bash`: `cp -r ${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/changes/_template/. R/.spec/changes/_template/` (note the trailing `/.` on the source — this copies *contents* into an existing destination dir, which works whether `_template/` was just `mkdir`'d empty in Step 1 or already partially populated). The template files contain `{{...}}` placeholders that `change.sh new` substitutes at scaffold time.
 
 5. **`.spec/` gitignore policy** (only if `.spec/` was just bootstrapped, OR exists and `.gitignore` has no opinion). `Read` `R/.gitignore`, look for exact line `.spec/`.
    - Already listed → record `.spec gitignore: already ignored`. Don't prompt.
@@ -121,7 +121,7 @@ foundry:setup complete:
   templates: written=N, identical=M, overwritten=K, kept=L
   gitignore: <added | already present>
   .spec: <bootstrapped | topped up: N files | already present (complete) | already present (incomplete, declined) | skipped>
-  .spec legacy: <list of detected legacy paths, only if any>
+  .spec legacy: <list of detected legacy paths>     ← OMIT this line entirely if no legacy paths returned exit 0
   .spec gitignore: <committed | added | already ignored | n/a>
   mcp:
     context7: <added | already present | skipped>
