@@ -67,6 +67,8 @@ description: |
 status: backlog                             # derived: backlog | in-progress | done | declined
 stage: refinement                           # derived: refinement | design | … | termination | none
 scope: ""                                   # "" | product | project | feature | bugfix
+created_at: "2026-05-21 22:15:13"           # set at scaffold time; never mutated
+updated_at: "2026-05-21 22:15:15"           # auto-refreshed on every tracking.sh mutation
 refinement:     estimation                  # state per stage; see spec-lifecycle for state machine
 design:         estimation
 decomposition:  estimation
@@ -87,6 +89,8 @@ decline_reason: "<reason text>"
 - **`title:`** — single-line quoted, up to ~120 chars. Imperative phrase.
 - **`description:`** — YAML `|`-literal block, multi-line, up to ~500 chars. Body indented 2 spaces.
 - **`status:` and `stage:` are derived** — `tracking.sh sync` recomputes both on every state mutation. Never edit by hand; the next `set-stage` overwrites drift.
+- **`created_at:`** — written once at scaffold time by `change.sh new`; never mutated thereafter. Immutable audit of when the change first appeared.
+- **`updated_at:`** — auto-refreshed by `tracking.sh sync` on every mutation (`set-stage`, `set-scope`, `decline`, etc.). Top-level convenience field so `change.sh list` doesn't have to parse history.
 - **Stage keys** (`refinement` … `termination`) — exactly 6 top-level keys, no nested `stages:` block. Each value is one of **8 stage states**: `estimation | required | skipped | pending | in-progress | review | completed | rejected`. Order convention: refinement → design → decomposition → implementation → verification → termination. Value column alignment is cosmetic. Initial state for every stage at scaffold time is `estimation`.
 - **`history:` block** — append-only flow-style entries. Each: `{ at, stage, status, by }`. `at` is `YYYY-MM-DD HH:MM:SS` (seconds precision). Always the **last** section. **Only real stage transitions** — no `created`, no `moved-to-*`, no `scope-set:*`, no `lifecycle`. Empty history at scaffold time is normal.
 

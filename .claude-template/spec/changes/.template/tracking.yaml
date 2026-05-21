@@ -5,6 +5,8 @@ description: |
 status: backlog
 stage: refinement
 scope: ""
+created_at: "{{now}}"
+updated_at: "{{now}}"
 refinement:     estimation
 design:         estimation
 decomposition:  estimation

@@ -269,6 +269,8 @@ cmd_list() {
     buckets="$VALID_BUCKETS"
   fi
 
+  # Fallback used only when created_at/updated_at fields are absent
+  # (pre-0.10.0 tracking.yaml). Reads the timestamp of the last history entry.
   read_last_event_at() {
     awk '/^[[:space:]]+-[[:space:]]*\{[[:space:]]*at:[[:space:]]*"/ {
       line = $0
@@ -299,10 +301,12 @@ cmd_list() {
     printf '%s' "$iso"
   }
 
-  # Output columns (TSV):
-  # bucket  name  title  status  stage  stage_state  scope  roadmap  last_event_at  last_event_pretty  path
+  # Output columns (TSV, 13 fields):
+  # bucket  name  title  status  stage  stage_state  scope  roadmap
+  # created_at  created_pretty  updated_at  updated_pretty  path
 
-  local b d name tracking abs title status stage stage_state scope roadmap_md roadmap_progress last_event last_event_pretty
+  local b d name tracking abs title status stage stage_state scope roadmap_md roadmap_progress
+  local created_at created_pretty updated_at updated_pretty fallback
   for b in $buckets; do
     local bdir=".spec/changes/$b"
     [ -d "$bdir" ] || continue
@@ -312,8 +316,8 @@ cmd_list() {
       [ "$name" = ".template" ] && continue
       tracking="$d/tracking.yaml"
       if [ ! -f "$tracking" ]; then
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-          "$b" "$name" "—" "—" "—" "—" "—" "—" "—" "—" "$d"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+          "$b" "$name" "—" "—" "—" "—" "—" "—" "—" "—" "—" "—" "$d"
         continue
       fi
       abs=$(cd "$d" && pwd)
@@ -336,12 +340,22 @@ cmd_list() {
       else
         roadmap_progress="—"
       fi
-      last_event=$(read_last_event_at "$tracking")
-      [ -z "$last_event" ] && last_event="—"
-      last_event_pretty=$(format_pretty_date "$last_event")
-      [ -z "$last_event_pretty" ] && last_event_pretty="—"
-      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$b" "$name" "$title" "$status" "$stage" "$stage_state" "$scope" "$roadmap_progress" "$last_event" "$last_event_pretty" "$abs"
+      # created_at and updated_at — preferred. Fallback to history's last
+      # event when either field is absent (pre-0.10.0 tracking.yaml).
+      created_at=$(read_yaml_field "$tracking" created_at)
+      updated_at=$(read_yaml_field "$tracking" updated_at)
+      if [ -z "$created_at" ] || [ -z "$updated_at" ]; then
+        fallback=$(read_last_event_at "$tracking")
+        [ -z "$created_at" ] && created_at=${fallback:-—}
+        [ -z "$updated_at" ] && updated_at=${fallback:-—}
+      fi
+      created_pretty=$(format_pretty_date "$created_at")
+      [ -z "$created_pretty" ] && created_pretty="—"
+      updated_pretty=$(format_pretty_date "$updated_at")
+      [ -z "$updated_pretty" ] && updated_pretty="—"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$b" "$name" "$title" "$status" "$stage" "$stage_state" "$scope" "$roadmap_progress" \
+        "$created_at" "$created_pretty" "$updated_at" "$updated_pretty" "$abs"
     done
   done
 }
@@ -357,8 +371,9 @@ Subcommands:
   move          --name <name> --to <bucket> [--by <who>]
   list          [--bucket backlog|in-progress|done|declined]
 
-List output columns (TSV):
-  bucket  name  title  status  stage  stage_state  scope  roadmap  last_event_at  last_event_pretty  path
+List output columns (TSV, 13 fields):
+  bucket  name  title  status  stage  stage_state  scope  roadmap
+  created_at  created_pretty  updated_at  updated_pretty  path
 
 Buckets:        $VALID_BUCKETS
 Reserved names: $RESERVED_NAMES

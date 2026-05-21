@@ -20,6 +20,15 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.10.0) — created_at / updated_at + 2 aligned date columns
+
+- ~~`tracking.yaml` schema additions~~: `created_at: "YYYY-MM-DD HH:MM:SS"` (immutable, set once at scaffold time) and `updated_at: "..."` (auto-refreshed on every `tracking.sh` mutation via `sync_all`).
+- ~~`tracking.sh sync_all` now includes `sync_updated_at`~~ — called by `set-stage`, `set-scope`, `decline`. Idempotent: re-writes the existing line; if absent (legacy), inserts after `created_at:`. Bug: first draft duplicated the line on each call; fixed by splitting into "replace if exists" vs. "insert if absent" branches.
+- ~~`change.sh list` TSV~~: 11 cols → 13 cols. Dropped `last_event_at` / `last_event_pretty`. Added `created_at` (col 9), `created_pretty` (col 10), `updated_at` (col 11), `updated_pretty` (col 12). Path moves to col 13. Fallback: when `created_at`/`updated_at` field absent (pre-0.10.0 yaml), uses last-history-event timestamp.
+- ~~/change list rendering~~: row format now `<icon>  <status-11>  <created-27>  <updated-27>  <title>` with status + both dates aligned to fixed widths. Sort order in `All` tab switched from `last_event_at` → `updated_at`.
+- ~~Declined-reason continuation line~~: indented to 74 spaces to align under the title column.
+- Migration from 0.9.x: no auto-migration. Existing tracking.yaml files without the new fields render via fallback (last history entry) until rebuilt via `/foundry:setup` + `/change`.
+
 ## Shipped (v0.9.1) — tabbed /change view + aligned status column + bracketed date
 
 - ~~Tabs replace per-bucket sections~~: `**All [N_all]** · backlog [N_backlog] · in-progress [N_in_progress] · closed [N_closed]` with bold marking the active tab. `closed` = done + declined merged. Default tab on first entry: `All`.

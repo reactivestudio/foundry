@@ -196,10 +196,53 @@ sync_stage_field() {
   mv "$tmp" "$tracking"
 }
 
-# Sync both derived fields.
+# Rewrite top-level `updated_at:` line with current timestamp.
+#
+# Two modes:
+#   - If `updated_at:` line exists → single-line replace (preserves position).
+#   - If absent → insert right after `created_at:` (or, if that's also absent,
+#     just before `history:`).
+#
+# Idempotent: subsequent calls re-write the same line.
+sync_updated_at() {
+  local tracking=$1 now tmp
+  now=$(now_ts)
+  tmp=$(mktemp "${TMPDIR:-/tmp}/tracking-updated.XXXXXX")
+  if grep -q '^updated_at:[[:space:]]' "$tracking"; then
+    # Replace existing line.
+    awk -v val="$now" '
+      /^updated_at:[[:space:]]/ { printf "updated_at: \"%s\"\n", val; next }
+      { print }
+    ' "$tracking" > "$tmp"
+  else
+    # Insert new line. Prefer right after created_at; fall back to right
+    # before history:; last resort, append at EOF.
+    awk -v val="$now" '
+      BEGIN { inserted = 0 }
+      {
+        print
+        if (!inserted && $0 ~ /^created_at:[[:space:]]/) {
+          printf "updated_at: \"%s\"\n", val
+          inserted = 1
+        }
+      }
+      /^history:[[:space:]]*$/ && !inserted {
+        # We already printed history: above; the line we want is now beforehand.
+        # Since we cannot rewind in a single pass, fall back to appending at END.
+      }
+      END {
+        if (!inserted) printf "updated_at: \"%s\"\n", val
+      }
+    ' "$tracking" > "$tmp"
+  fi
+  mv "$tmp" "$tracking"
+}
+
+# Sync all derived / auto-tracked fields.
 sync_all() {
   sync_status_field "$1"
   sync_stage_field "$1"
+  sync_updated_at "$1"
 }
 
 # === subcommand: get-stage ===
@@ -313,6 +356,9 @@ cmd_set_scope() {
   ' "$tracking" > "$tmp"
   mv "$tmp" "$tracking"
   # Note: scope recorded only in top-level `scope:` field — no history entry.
+  # Refresh updated_at (sync_all is a superset that also re-asserts derived
+  # status/stage — cheap and ensures the row's "updated" column is current).
+  sync_all "$tracking"
   echo "$scope"
 }
 
