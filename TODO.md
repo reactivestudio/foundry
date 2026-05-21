@@ -20,6 +20,10 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.7.1) — /setup probe via Read instead of `test -d`
+
+- ~~Pilot bug: `/foundry:setup` reported `.spec` already exists and skipped copy~~ when `.spec/` was actually absent. Root cause: `Bash test -d` probe + Claude's exit-code interpretation was fragile (literal `R/.spec` if `R` not expanded → relative path; or exit 1 misread as "command failed = exists"). Fix: drop all `test -d` probes; use `Read` of a canonical marker file (`.spec/changes/.template/tracking.yaml`) — file-not-found is unambiguous. Dropped `cp -r` in favour of 3× `Read`+`Write` (only 3 template files). Removed legacy-detection (sunk cost — nobody migrating from 0.4.x anymore).
+
 ## Shipped (v0.7.0) — folded commands + flat YAML + termination stage
 
 - ~~Drop commands `/in-progress`, `/closed`, `/track`~~ — folded into `/change` interactive flow (bucket picker → table → drill → context-aware action menu).
