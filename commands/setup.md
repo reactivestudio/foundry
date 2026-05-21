@@ -74,7 +74,7 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
    ```
    `mkdir -p` is a no-op for existing dirs. Always run.
 
-   **4b.2. Read+Write each of 3 template files.** Initialize counters `written=0`, `existing=0`. For EACH of the following 3 `(src, dst)` pairs — in this order, with NO short-circuit:
+   **4b.2. Read+Write each of 4 template files.** Initialize counters `written=0`, `existing=0`. For EACH of the following 4 `(src, dst)` pairs — in this order, with NO short-circuit:
 
    1. `src = ${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/standards/README.md`
       `dst = <R>/.spec/standards/README.md`
@@ -82,6 +82,8 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
       `dst = <R>/.spec/changes/.template/tracking.yaml`
    3. `src = ${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/changes/.template/propose.md`
       `dst = <R>/.spec/changes/.template/propose.md`
+   4. `src = ${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/changes/.template/requirements.md`
+      `dst = <R>/.spec/changes/.template/requirements.md`
 
    For each pair, perform exactly these operations in order:
 
@@ -90,9 +92,9 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
    3. **If destination Read returns "file does not exist"** → `Write` the source contents to the destination verbatim. Increment `written`.
    4. **If destination Read returns content** → silent skip. Increment `existing`.
 
-   You MUST attempt all 3 pairs before reporting. Do not return early after pair #1.
+   You MUST attempt all 4 pairs before reporting. Do not return early after pair #1.
 
-   **4b.3. Report.** Final line for `.spec`: `.spec: scaffold complete (written=<written>, existing=<existing> of 3)`.
+   **4b.3. Report.** Final line for `.spec`: `.spec: scaffold complete (written=<written>, existing=<existing> of 4)`.
 
    Proceed to step 5.
 
@@ -122,7 +124,7 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
 foundry:setup complete:
   templates: written=N, identical=M, overwritten=K, kept=L
   gitignore: <added | already present>
-  .spec: <scaffold complete (written=N, existing=M of 3) | user-skipped>
+  .spec: <scaffold complete (written=N, existing=M of 4) | user-skipped>
   .spec gitignore: <committed | added | already ignored | n/a>
   mcp:
     context7: <added | already present | skipped>

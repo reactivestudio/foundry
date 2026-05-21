@@ -1,7 +1,7 @@
 ---
 name: change
 description: "Change command. Bare = interactive (pick bucket → list → drill → actions). With text = LLM-scaffold new change in .spec/changes/backlog/."
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh:*) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh:*) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/roadmap.sh:*) Bash(grep:*) Bash(sort:*) Bash(head:*) Bash(tail:*) Bash(wc:*) Bash(test:*) Bash(ls:*) Read Write AskUserQuestion
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh:*) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh:*) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/roadmap.sh:*) Bash(grep:*) Bash(sort:*) Bash(head:*) Bash(tail:*) Bash(wc:*) Bash(test:*) Bash(ls:*) Read Write AskUserQuestion Task
 ---
 
 Single entry point for working with `.spec/changes/`. Branches on argument presence.
@@ -115,7 +115,9 @@ If `$CP/roadmap.md` exists → also call `roadmap.sh status --roadmap $CP/roadma
 
 **Executing actions** — each is a sequence of Bash calls. Use `--by user` for human-initiated transitions.
 
-- **Start refinement**: `tracking.sh set-stage --change $CP --stage refinement --state in-progress --by user`.
+- **Start refinement**:
+  1. `tracking.sh set-stage --change $CP --stage refinement --state in-progress --by user`.
+  2. **Invoke `system-analyst` agent** via Task tool: `subagent_type: "system-analyst"`, `description: "Refine <name>"`, `prompt: "Refine the change at <CP>. Read propose.md + tracking.yaml + .spec/standards/*.md. Run clarifying-questions loop. Set scope. Write requirements.md. Mark refinement need-approve. Report back with the structured 'Refinement draft' template."`. The agent handles the rest.
 - **Mark need-approve**: `tracking.sh set-stage --change $CP --stage <current> --state need-approve --by user`.
 - **Approve (advance)**: `tracking.sh set-stage --change $CP --stage <current> --state approved --by user`. Then if status changed (read back via `tracking.sh derive-status`) and differs from bucket → `change.sh move --name <name> --to <new-status> --by auto`.
 - **Send back (rework)**: `tracking.sh set-stage --change $CP --stage <current> --state in-progress --by user`.
@@ -200,7 +202,8 @@ Print:
 
 - On `"start refinement"`:
   - `Bash`: `tracking.sh set-stage --change $CP --stage refinement --state in-progress --by user`.
-  - Final: `Started: refinement in-progress. status=backlog stage=refinement. Next: write requirements.md → /change → drill → Mark need-approve.`
+  - **Invoke `system-analyst` agent** via Task tool (same invocation as Step 5 "Start refinement" action). The agent runs the clarifying-questions loop, sets scope, writes `requirements.md`, marks `refinement: need-approve`, and reports back.
+  - Final (after agent returns): forward the agent's structured "Refinement draft" report to the user and append: `Next: user reviews requirements.md → /change → drill <name> → Approve.`
 
 - On `"straight to implementation"`:
   - `Bash`: `tracking.sh set-stage --change $CP --stage implementation --state in-progress --by user`.

@@ -20,6 +20,15 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.8.0) — Phase A: refinement stage (system-analyst agent)
+
+- ~~Agent `system-analyst` (opus)~~: refines a change → reads propose.md + .spec/standards/*.md → runs clarifying-questions loop → sets scope → writes requirements.md → marks refinement need-approve. Preloads spec-refinement + clarifying-questions + spec-conventions + spec-lifecycle.
+- ~~Skill `spec-refinement`~~: FR/NFR taxonomy, scope categorisation (product/project/feature/bugfix), requirements.md schema, when-to-ask-vs-defer rules, anti-patterns.
+- ~~Template `.template/requirements.md`~~: scaffold with all canonical sections (Context, Problem, Scope In/Out, FR, NFR, Constraints, Open questions, Acceptance criteria).
+- ~~/setup updated~~: now scaffolds 4 template files (added requirements.md).
+- ~~/change wire-up~~: "Start refinement" action (in both Step 5 drill menu and Step 10 post-scaffold prompt) now invokes the system-analyst agent via Task tool. User clicks "Start refinement" → agent does the work → returns structured "Refinement draft" report → user reviews → drill → Approve.
+- /change `allowed-tools` extended with `Task`.
+
 ## Shipped (v0.7.3) — template hygiene
 
 - ~~`{{description_indented}}` → `{{description}}`~~ — короче, и в самом template placeholder теперь правильно отступлен (2 spaces под `description: |`), так что raw template — валидный YAML.
@@ -76,7 +85,7 @@
 ## v0.5.0 follow-ups (specific to .spec/ subsystem)
 
 10. `/migrate` command для legacy `.spec/specs/` + `changes/archive/` + `project.md` + `config.yaml` → новая 4-bucket структура.
-11. Role-agents: `system-analyst`, `architect`, `teamlead`, `verifier` (сейчас только `code-implementor`).
+11. Role-agents: `architect`, `teamlead`, `verifier`, `terminator` (есть: `code-implementor`, `system-analyst`).
 12. Workflow orchestrator command типа `/feature-request` который автоматически drive state machine end-to-end.
 13. `--parallel` mode для orchestrator'а — worktree-per-task execution для roadmap-ready групп (parallel-safe из disjoint blocker sets).
 14. JSON output mode для bash helpers (CI / programmatic consumption).
