@@ -35,7 +35,7 @@ If `$ARGUMENTS` (trimmed) is empty → **Browse form** (Steps 1–5). Otherwise 
 - If `"closed"` → set `BUCKET_LIST="done declined"`, skip to Step 2 (list both).
 - Otherwise → set `BUCKET_LIST="<picked>"`.
 
-**Step 2 — Fetch + render table.**
+**Step 2 — Fetch + render icon-prefixed list.**
 
 For each bucket in `BUCKET_LIST`:
 
@@ -43,18 +43,49 @@ For each bucket in `BUCKET_LIST`:
 
 If `N=0`:
 - Print `<b>/ is empty.`
-- Skip to Step 4.
+- If `BUCKET_LIST` has only one bucket → skip to Step 4. If multi-bucket (closed view), continue to next bucket.
 
-Else render markdown table:
+Else render as **plain list** (no table, no numbering, no bullets — the icon is the bullet). Format per item:
+
 ```
-| Name | Title | Stage | State | Scope | Last event |
-|---|---|---|---|---|---|
-| add-2fa-totp | Add two-factor authentication via TOTP | refinement | need-approve | feature | 2026-05-21 16:00 |
+<icon> <title> — <last_event_at>
 ```
 
-If `N > 10`, append: `+ <N-10> more.`
+If `last_event_at` is `—` (fresh scaffold with no history entries yet), suppress the ` — <date>` suffix entirely — just print `<icon> <title>`.
 
-For `declined/` rows, also surface `decline_reason:` via `grep '^decline_reason:' <path>/tracking.yaml`.
+**Icon by status (column 4):**
+
+| status | icon | codepoint |
+|---|---|---|
+| `backlog` | `○` | U+25CB |
+| `in-progress` | `●` | U+25CF |
+| `done` | `✓` | U+2713 |
+| `declined` | `⊗` | U+2297 |
+
+Example output:
+
+```
+● Add two-factor authentication via TOTP — 2026-05-21 16:00
+○ Refactor user service — 2026-05-20 14:30
+✓ Fix login rate limit — 2026-05-19 09:15
+⊗ Bad idea — 2026-05-18 11:00
+```
+
+When `BUCKET_LIST` has multiple buckets (i.e. `"closed"` → `done declined`), print one section per bucket with a single-word lowercase header line, blank line between sections:
+
+```
+done:
+✓ Add 2FA via TOTP — 2026-05-21 16:00
+✓ Fix login rate limit — 2026-05-19 09:15
+
+declined:
+⊗ Bad idea — 2026-05-18 11:00
+   reason: duplicate of add-2fa
+```
+
+For `declined` rows: read `decline_reason:` via `grep '^decline_reason:' <path>/tracking.yaml` and print as a 3-space-indented second line `   reason: <text>`.
+
+If `N > 10` for any bucket, append after the last row of that bucket: `+ <N-10> more.`
 
 **Step 3 — Build candidate name list.**
 
@@ -80,9 +111,9 @@ Collect top 4 names across all listed buckets (by last_event_at desc) as `DRILL_
 
 `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh locate --name <CHANGE_NAME>` → `$CP`. On failure: report + loop back to Step 4.
 
-`Read` `$CP/tracking.yaml`. Render:
+`Read` `$CP/tracking.yaml`. Render (prefix with the status icon from the Step 2 table):
 ```
-<CHANGE_NAME> — <title>
+<icon> <CHANGE_NAME> — <title>
   status:  <status>          stage: <stage>
   scope:   <scope>           bucket: <bucket>
 

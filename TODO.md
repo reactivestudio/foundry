@@ -20,6 +20,11 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.8.1) — list rendering: icon-prefixed plain list
+
+- ~~/change Step 2: drop markdown table~~. Replace with one-line-per-item plain list, prefixed by status icon: `○` backlog, `●` in-progress, `✓` done, `⊗` declined. Format: `<icon> <title> — <last_event_at>`. Multi-bucket view (closed = done+declined) prints per-bucket sections with single-word headers. For declined rows, second indented line shows `reason: <decline_reason>`. Fresh-scaffold items (no history) omit the ` — <date>` suffix.
+- ~~/change Step 5 drill view~~: prepend status icon to the change header.
+
 ## Shipped (v0.8.0) — Phase A: refinement stage (system-analyst agent)
 
 - ~~Agent `system-analyst` (opus)~~: refines a change → reads propose.md + .spec/standards/*.md → runs clarifying-questions loop → sets scope → writes requirements.md → marks refinement need-approve. Preloads spec-refinement + clarifying-questions + spec-conventions + spec-lifecycle.
