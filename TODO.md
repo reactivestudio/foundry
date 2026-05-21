@@ -20,6 +20,11 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.10.1) — column order: title before dates
+
+- ~~Row format reordered~~: `<icon>  <status>  <title>  <created>  <updated>` (was: status + created + updated + title). Title in the middle, dates at the end. Title padded to 50 chars with `…` ellipsis truncation past 49 visible chars. Created padded to 27; updated trailing unpadded.
+- ~~Declined `reason:` continuation~~: indent reduced 74 → 16 spaces (aligns under title column).
+
 ## Shipped (v0.10.0) — created_at / updated_at + 2 aligned date columns
 
 - ~~`tracking.yaml` schema additions~~: `created_at: "YYYY-MM-DD HH:MM:SS"` (immutable, set once at scaffold time) and `updated_at: "..."` (auto-refreshed on every `tracking.sh` mutation via `sync_all`).

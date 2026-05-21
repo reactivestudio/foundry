@@ -61,20 +61,20 @@ If `N_tab = 0`:
 - Print `  (empty)`.
 - Skip to Step 4.
 
-Else render as plain list with **status, created, and updated columns all aligned**. Format per row:
+Else render as plain list with **status, title, and created columns all padded; updated trailing unpadded**. Format per row:
 
 ```
-<icon>  <status_padded>  <created_padded>  <updated_padded>  <title>
+<icon>  <status_padded>  <title_padded>  <created_padded>  <updated_pretty>
 ```
 
 Rules:
 - `<icon>` = one glyph from the table below (selected by col 4 `status`).
-- `<status_padded>` = TSV col 4 padded with **right-side spaces** to width **11** (longest status is `in-progress`).
-- `<created_padded>` = TSV col 10 (`created_pretty`) padded with **right-side spaces** to width **27** (longest pretty date is `[wednesday, HH:MM] [DD mon]`). If `—`, render as the literal token `—` padded to 27.
-- `<updated_padded>` = TSV col 12 (`updated_pretty`) padded similarly to width **27**.
+- `<status_padded>` = TSV col 4, right-padded to width **11** (longest status is `in-progress`).
+- `<title_padded>` = TSV col 3, right-padded to width **50**. If the title is longer than 50 visible chars, truncate at 49 chars and append `…` (U+2026) — total displayed length stays 50.
+- `<created_padded>` = TSV col 10 (`created_pretty`), right-padded to width **27** (longest pretty date is `[wednesday, HH:MM] [DD mon]`). If `—`, render as `—` padded to 27.
+- `<updated_pretty>` = TSV col 12, no padding (last column).
 - Two spaces between each piece.
-- `<title>` = TSV col 3, no padding (variable width at the end).
-- For `declined` rows: read `decline_reason:` via `grep '^decline_reason:' <path>/tracking.yaml` and print as a second line, indented to start at the title column (offset = 3 + 2 + 11 + 2 + 27 + 2 + 27 + 2 = **74 spaces**), prefixed by `reason:`.
+- For `declined` rows: read `decline_reason:` via `grep '^decline_reason:' <path>/tracking.yaml` and print as a second line, indented to start at the **title column** (offset = 1 icon + 2 + 11 status + 2 = **16 spaces**), prefixed by `reason:`.
 - After the last row, if `N_tab > TAB_LIMIT`: append `... and <N_tab - TAB_LIMIT> more in <CURRENT_TAB>.`
 
 **Icon by status (TSV col 4):**
@@ -91,16 +91,16 @@ Rules:
 ```
 Tabs: **All [12]** · backlog [4] · in-progress [3] · closed [5]
 
-●  in-progress  [tuesday, 09:00] [19 may]    [thursday, 21:56] [21 may]   Add two-factor authentication via TOTP
-●  in-progress  [tuesday, 14:30] [19 may]    [thursday, 21:55] [21 may]   Tune login rate limit
-✓  done         [friday, 10:00] [16 may]     [friday, 12:00] [16 may]     Upgrade Kotlin 2.1
-⊗  declined     [thursday, 21:30] [21 may]   [thursday, 21:35] [21 may]   Refactor user service
-                                                                          reason: duplicate of larger refactor
-○  backlog      [sunday, 16:00] [18 may]     [sunday, 16:00] [18 may]     Migrate Postgres 15
+●  in-progress  Add two-factor authentication via TOTP             [tuesday, 09:00] [19 may]    [thursday, 21:56] [21 may]
+●  in-progress  Tune login rate limit                              [tuesday, 14:30] [19 may]    [thursday, 21:55] [21 may]
+✓  done         Upgrade Kotlin 2.1                                 [friday, 10:00] [16 may]     [friday, 12:00] [16 may]
+⊗  declined     Refactor user service                              [thursday, 21:30] [21 may]   [thursday, 21:35] [21 may]
+                reason: duplicate of larger refactor
+○  backlog      Migrate Postgres 15                                [sunday, 16:00] [18 may]     [sunday, 16:00] [18 may]
 ... and 2 more in All.
 ```
 
-(The `reason:` line for declined rows starts at the title column — 74 spaces in.)
+(The `reason:` line for declined rows starts at the title column — 16 spaces in.)
 
 **Step 4 — Build `DRILL_OPTIONS`.**
 
