@@ -20,6 +20,16 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.12.0) — /change browse UX: tab-args, no AskUserQuestion, quartile-circle progress, hard-cap title
+
+Four coordinated /change browse-view changes addressing pilot feedback:
+
+- ~~Args replace tab AskUserQuestion~~: tab navigation is now `/change <bucket>` (`all` / `backlog` / `in-progress` / `closed`). The bare `/change` defaults to `All`. Browse view is **read-only** — no modal menu. Drill is `/change <slug>`. Scaffold is `/change "<free text>"`. Arg routing dispatch in Step 0.
+- ~~Bucket-priority sort in All tab~~: was sorting by `updated_at` desc globally (mixed buckets), broke the "see what's next in backlog first" mental model. Now: iterate buckets in fixed order (`backlog` → `in-progress` → `done` → `declined`), sort each by `updated_at` desc, concatenate, take top 10. Closed tab uses `done` → `declined` order.
+- ~~Title hard-capped at 50 chars~~ (was: 50 padded with overflow up to 150 — broke alignment for rows in that range). Now: any title >50 chars is truncated at 49 + `…`, then right-padded to exactly 50. Alignment holds for every row. Trade-off: long titles get cut visually in list view; drill view still shows the full title.
+- ~~Progress format redesigned~~: dropped the parallelogram bar (`▰▰▰▱▱▱▱▱`). New format is `<quartile-circle> [done/total]`. Icon by percentage: `○` (0%), `◔` (≤37%), `◑` (38–62%), `◕` (63–99%), `●` (100%). `0/0` renders as `○ [0/0]` (not `—` — explicit per pilot request).
+- Footer hint line replaces the AskUserQuestion at the bottom: `Hint: /change <bucket>  switch tab  ·  /change <name>  drill in  ·  /change "<text>"  scaffold new`.
+
 ## Shipped (v0.11.1) — progress bar glyphs: parallelograms
 
 - ~~Progress bar empty glyph `░` → `▱`~~ (WHITE PARALLELOGRAM, U+25B1). Filled glyph correspondingly `█` → `▰` (BLACK PARALLELOGRAM, U+25B0). Both characters are designed as a purpose-built progress-bar pair: equal width, equal visual weight, no shading effect. Example: `▰▰▰▱▱▱▱▱▱▱▱▱  3/12`.
