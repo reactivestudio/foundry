@@ -1,6 +1,6 @@
 ---
 name: spec-conventions
-description: "Naming (kebab-case), 4-bucket directory layout, tracking.yaml schema. NOT for state machine — see spec-lifecycle."
+description: "Naming (kebab-case slug), 4-bucket directory layout, tracking.yaml schema. NOT for state machine — see spec-lifecycle."
 ---
 
 # spec-conventions
@@ -9,8 +9,8 @@ Naming, directory layout, and `tracking.yaml` schema for `.spec/`. Independent o
 
 ## When to use
 
-- Validating user-supplied change names.
-- Choosing a name for a new change.
+- Validating user-supplied or LLM-generated change slugs.
+- Choosing a slug for a new change.
 - Writing or parsing `tracking.yaml` — the schema below is the **contract** that bash helpers depend on.
 
 ## Directory layout
@@ -26,9 +26,9 @@ Naming, directory layout, and `tracking.yaml` schema for `.spec/`. Independent o
 └── changes/
     ├── _template/                  # used by `change.sh new`; do not edit per-project
     │   ├── tracking.yaml
-    │   └── proposal.md
-    ├── backlog/<name>/             # analysis → architecture → decomposition → pending-approval
-    ├── sprint/<name>/              # implementation, verification
+    │   └── propose.md
+    ├── backlog/<name>/             # not yet in active work (any stage state)
+    ├── in-progress/<name>/         # implementation or verification active
     ├── done/<name>/                # successfully completed
     └── declined/<name>/            # terminal, includes decline_reason
 ```
@@ -38,44 +38,46 @@ Inside each `<name>/`:
 ```
 <name>/
 ├── tracking.yaml                   # always present
-├── proposal.md                     # always present (scaffold-stub from _template)
-├── requirements.md                 # appears after analysis stage starts
-├── system-design.md                # appears after architecture stage starts
-├── application-design.md           # appears after architecture stage starts
+├── propose.md                      # always present (scaffold-stub from _template, body = original task text)
+├── requirements.md                 # appears after refinement stage starts
+├── system-design.md                # appears after design stage starts
+├── application-design.md           # appears after design stage starts
 └── roadmap.md                      # appears after decomposition stage starts
 ```
 
-Files appear progressively. Agents write them; spec-commands never generate content.
+Files appear progressively. Agents write them; spec-commands never generate content (except scaffold).
 
 ## Naming
 
-- **Change names** (`changes/<bucket>/<name>/`) — kebab-case. Imperative / descriptive. Examples: `add-dark-mode`, `fix-login-rate-limit`, `migrate-postgres-15`.
+- **Change names / slugs** (`changes/<bucket>/<name>/`) — kebab-case, **3-4 segments**, LLM-generated from the original task text. Examples: `add-2fa-totp`, `fix-login-rate-limit`, `migrate-postgres-15`.
 
   Validated by `change.sh validate-name`:
   - Must match `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`.
-  - Must be unique across **all 4 buckets** (`backlog`, `sprint`, `done`, `declined`).
-  - Must not equal a reserved name (`backlog`, `sprint`, `done`, `declined`, `_template`).
+  - Must be unique across **all 4 buckets** (`backlog`, `in-progress`, `done`, `declined`).
+  - Must not equal a reserved name (`backlog`, `in-progress`, `done`, `declined`, `_template`).
 
-  No date-prefix. Coined once, used everywhere. Reusing a finished change's name → rejected (rename or pick a different angle).
+  No date-prefix. Coined once, used everywhere. Reusing a finished change's name → rejected (pick a different angle).
 
 - **Task IDs** in `roadmap.md` — `[A-Z]?[0-9]+(\.[0-9]+)*`. Examples: `1`, `2.1`, `Q1`, `Q2.3`. Q-prefix = Quality gate (Assignee: verifier).
 
 ## `tracking.yaml` schema
 
-**Bash helpers depend on this schema.** Humans should edit only the `title` and (rarely) `priority`-like top-level scalars. State changes go through `tracking.sh set-stage / set-scope / decline` subcommands.
+**Bash helpers depend on this schema.** Humans should edit only `title` and `description`. State changes go through `tracking.sh` subcommands (`set-stage`, `set-scope`, `decline`, `sync-status`).
 
 ```yaml
-id: <name>                          # matches directory basename
-title: "<human title>"              # quoted; can be edited freely
-scope: ""                           # "" | product | project | feature | bugfix
+id: add-2fa-totp                            # = directory basename (slug)
+title: "Add two-factor authentication via TOTP"
+description: "Adds TOTP-based 2FA per RFC 6238 with Google Authenticator compatibility."
+status: backlog                             # derived: backlog | in-progress | done | declined
+scope: ""                                   # "" | product | project | feature | bugfix
 stages:
-  analysis:       pending
-  architecture:   pending
+  refinement:     pending
+  design:         pending
   decomposition:  pending
   implementation: pending
   verification:   pending
 history:
-  - { at: "YYYY-MM-DD HH:MM", stage: _meta, status: created, by: workflow }
+  - { at: "2026-05-21 19:33:20", stage: lifecycle, status: created, by: user }
   # …append-only…
 
 # Optional, only when declined:
@@ -84,14 +86,15 @@ decline_reason: "<reason text>"
 
 ### Field rules
 
-- **Top-level scalars** (`id`, `title`, `scope`, `decline_reason`) — one per line, `key: value` form.
-- **`stages:` block** — exactly 5 entries with names `analysis`, `architecture`, `decomposition`, `implementation`, `verification`. Each value is one of 6 stage states. Indentation: 2 spaces. Value column alignment is preserved by helpers (cosmetic; not load-bearing).
-- **`history:` block** — append-only flow-style entries. Each entry: `{ at, stage, status, by }`. Always the **last** section in the file (helpers append to end of file).
-- **Pseudo-stage `_meta`** — used for change-level events: `created`, `declined`, `moved-to-backlog|sprint|done|declined`.
+- **Top-level scalars** (`id`, `title`, `description`, `status`, `scope`, `decline_reason`) — one per line, `key: value` form.
+- **`status:` is derived** — `tracking.sh` recomputes it (via `sync-status`) on every state mutation. Never edit by hand; the next `set-stage` will overwrite drift.
+- **`stages:` block** — exactly 5 entries with names `refinement`, `design`, `decomposition`, `implementation`, `verification`. Each value is one of 6 stage states. Indentation: 2 spaces. Value column alignment is cosmetic.
+- **`history:` block** — append-only flow-style entries. Each entry: `{ at, stage, status, by }`. `at` is `YYYY-MM-DD HH:MM:SS` (seconds precision). Always the **last** section in the file (helpers append to end).
+- **Pseudo-stage `lifecycle`** — used for change-level events: `created`, `declined`, `moved-to-backlog|in-progress|done|declined`. Workflow-stage entries use the actual stage name (`refinement`, `design`, etc.).
 
 ### Why strict schema
 
-Parsers are pure-bash (portable awk, no `yq`). Any structural deviation (extra indentation, multi-line strings, quoted booleans) silently breaks `tracking.sh get-stage`. If you need to rescue a broken file, use helpers to rewrite from scratch.
+Parsers are pure-bash (portable awk, no `yq`). Any structural deviation (extra indentation, multi-line strings, quoted booleans) silently breaks `tracking.sh get-stage`. To rescue a broken file, use helpers to rewrite from scratch.
 
 ## When NOT to use
 
@@ -103,7 +106,8 @@ Parsers are pure-bash (portable awk, no `yq`). Any structural deviation (extra i
 ## Anti-patterns
 
 - Inventing your own bucket (e.g. `archive/`, `in-review/`) — only 4 are recognised by helpers and commands.
-- Renaming a change after creation — breaks `change.sh locate` if anyone references the old name; preserve via `decline` + new `backlog-add` instead.
-- Adding new fields to `tracking.yaml` without updating helpers — parsers ignore unknown keys but writers (`tracking.sh set-stage`) will not preserve them through rewrites.
-- Editing history entries — they are an audit log; append-only by helpers.
-- "Fix-things" or "misc" change names — too vague to be useful in history.
+- Renaming a change after creation — breaks `change.sh locate` if anyone references the old name; preserve via decline + new change with a fresh slug.
+- Adding new fields to `tracking.yaml` without updating helpers — parsers ignore unknown keys but writers (`tracking.sh set-stage`) won't preserve them through rewrites.
+- Editing history entries — they are an append-only audit log.
+- Editing `status:` by hand — it's derived from stages; the next `set-stage` overwrites it.
+- "Fix-things" or "misc" slugs — too vague to be useful in history. Use a specific stem.

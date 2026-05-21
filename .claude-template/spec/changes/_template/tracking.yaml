@@ -1,11 +1,13 @@
 id: {{id}}
 title: "{{title}}"
+description: "{{description}}"
+status: backlog
 scope: ""
 stages:
-  analysis:       pending
-  architecture:   pending
+  refinement:     pending
+  design:         pending
   decomposition:  pending
   implementation: pending
   verification:   pending
 history:
-  - { at: "{{now}}", stage: _meta, status: created, by: workflow }
+  - { at: "{{now}}", stage: lifecycle, status: created, by: user }

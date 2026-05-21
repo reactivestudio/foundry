@@ -10,49 +10,49 @@ Each of the 5 stages in a change produces a specific artifact (or pair), owned b
 ## Pipeline
 
 ```
-proposal.md ──► requirements.md ──► system-design.md      ──► roadmap.md ──► code + tests ──► gates
+propose.md ──► requirements.md ──► system-design.md      ──► roadmap.md ──► code + tests ──► gates
    (workflow)     (analyst)             + application-design.md     (teamlead)    (implementor)     (verifier)
                                        (architect)
 ```
 
 Each downstream stage reads everything upstream + relevant `.spec/standards/*.md`.
 
-## Stage 1 — `proposal.md`
+## Stage 1 — `propose.md`
 
 | | |
 |---|---|
-| Owner | Workflow / initiator (user or `/backlog "<title>"`) |
-| Artifact | `proposal.md` |
-| Lives at | `<change>/proposal.md` (scaffold-stub from `_template/`) |
-| Required sections | `# <title>`, `## Intent` (1–3 paragraphs) |
+| Owner | Workflow / initiator (user via `/change "<task text>"`) |
+| Artifact | `propose.md` |
+| Lives at | `<change>/propose.md` (scaffold-stub from `_template/`, then `/change` writes full task text into `## Intent`) |
+| Required sections | `# <title>`, `## Intent` (verbatim user task text — 1+ paragraphs) |
 
-The proposal is **incoming**. Keep it brief — problem + desired outcome. No requirements, no design, no tech. Subsequent stages expand.
+The proposal is **incoming**. Original task text from the user is stored verbatim. Later stages may extend with `## Notes`, `## Open questions`, etc. but never edit `## Intent`.
 
-## Stage 2 — `analysis` → `requirements.md`
+## Stage 2 — `refinement` → `requirements.md`
 
 | | |
 |---|---|
 | Owner | system-analyst agent (or generic Claude / human) |
 | Artifact | `requirements.md` |
-| Inputs | `proposal.md`, `.spec/standards/{project,glossary,…}.md`, project's own `docs/` if relevant |
+| Inputs | `propose.md`, `.spec/standards/{project,glossary,…}.md`, project's own `docs/` if relevant |
 | Required sections | `## Problem`, `## User stories`, `## Functional requirements`, `## Non-functional requirements`, `## Constraints`, `## Out of scope`, `## Open questions` |
 | Side-effect | Set `scope:` field via `tracking.sh set-scope --change <path> --scope <product\|project\|feature\|bugfix> --by <who>` |
 | Quality bar (need-approve) | All FR/NFR phrased with SHALL/MUST/SHOULD; all open questions answered or explicitly deferred; scope set |
 
-**No tech.** No class names, no endpoints, no DB schemas. Business language only. If architect later says "this NFR is unimplementable", set `analysis: in-progress` again and revise.
+**No tech.** No class names, no endpoints, no DB schemas. Business language only. If architect later says "this NFR is unimplementable", set `refinement: in-progress` again and revise.
 
-## Stage 3 — `architecture` → `system-design.md` + `application-design.md`
+## Stage 3 — `design` → `system-design.md` + `application-design.md`
 
 | | |
 |---|---|
 | Owner | architect agent (or generic Claude / human) |
 | Artifacts | `system-design.md` (C4 context+container), `application-design.md` (C4 component+code) |
-| Inputs | `proposal.md`, `requirements.md`, `.spec/standards/{stack,architecture,anti-patterns}.md` |
+| Inputs | `propose.md`, `requirements.md`, `.spec/standards/{stack,architecture,anti-patterns}.md` |
 | `system-design.md` sections | `## Components` (new/changed services), `## Contracts` (cross-service APIs, message schemas), `## Integrations`, `## Data flow`, `## Open questions` |
 | `application-design.md` sections | `## Modules`, `## Key classes/interfaces`, `## Data models`, `## Patterns`, `## Open questions` |
 | Quality bar (need-approve) | Both files present, no open questions, decisions traceable to a requirement |
 
-If the change is purely internal (no new services / no integration changes), set `system-design.md` with a single `## Scope` note "no system-level impact" — do not skip the file unless the entire stage is set to `skipped`.
+If the change is purely internal (no new services / no integration changes), `system-design.md` with a single `## Scope` note "no system-level impact" — do not skip the file unless the entire stage is set to `skipped`.
 
 ## Stage 4 — `decomposition` → `roadmap.md`
 
@@ -76,7 +76,7 @@ If the change is purely internal (no new services / no integration changes), set
 | Side-effect | Flip task state via `roadmap.sh set-task-state --roadmap <path> --task-id <id> --state <state>` after the primary action (Write/Edit) of each task |
 | Quality bar (need-approve) | All non-Q tasks `state: done` (or `rejected` with reason) |
 
-When `implementation: in-progress` → change auto-moves to `sprint/`.
+When `implementation: in-progress` → change auto-moves to `in-progress/` bucket.
 
 ## Stage 6 — `verification`
 
@@ -111,3 +111,4 @@ If a downstream stage discovers an upstream blocker:
 - Skipping `need-approve` and going straight to `approved` — defeats human checkpoints (state machine allows it, but every stage owner should pause for review).
 - Filling `roadmap.md` without Quality gates section — `verification` stage has nothing to run.
 - Doing implementation directly in tracking.yaml or history.yaml — code lives in the project, not in `.spec/`.
+- Editing the `## Intent` section of `propose.md` after creation — that's the verbatim original; add to other sections instead.

@@ -64,18 +64,18 @@ The marketplace and the plugin share this repository — both manifests live in 
 
 ### `.spec/` change workflow (4 buckets + per-stage tracking)
 
-A change moves through 4 directories — `backlog/` → `sprint/` → `done/` (or `→ declined/`). Each change has 5 stages (`analysis`, `architecture`, `decomposition`, `implementation`, `verification`), each with its own state (`pending | in-progress | need-approve | approved | pause | skipped`). Bucket is derived automatically from stages. Spec-commands are **state API only** — they don't generate content (agents do).
+A change moves through 4 directories — `backlog/` → `in-progress/` → `done/` (or `→ declined/`). Each change has 5 stages (`refinement`, `design`, `decomposition`, `implementation`, `verification`), each with its own state (`pending | in-progress | need-approve | approved | pause | skipped`). Top-level `status:` field is derived from the stages and mirrors the bucket. Spec-commands are **state API only** — they don't generate content (agents do).
 
 | Command | Purpose |
 |---|---|
-| `/backlog` | No args → list backlog table. With title → scaffold new change in backlog (auto-slug). |
-| `/sprint` | List sprint table (active stage, scope, roadmap progress). |
+| `/change` | No args → interactive backlog list (top 10 + actions). With text → LLM-generates slug + description from the task text, scaffolds new change in backlog, writes full task text to `propose.md`. |
+| `/in-progress` | List in-progress table (active stage, scope, roadmap progress). |
 | `/closed` · `/closed done` · `/closed declined` | List terminal buckets — both, or filter to one. Includes `decline_reason` for declined. |
-| `/track <name>` · `<name> <stage>` · `<name> <stage> <state>` | Unified tracker: 3 forms — summary, single-stage detail, setter (with auto-bucket-move). |
+| `/track <name>` · `<name> <stage>` · `<name> <stage> <state>` | Unified tracker: 3 forms — summary, single-stage detail, setter (with auto-status-sync and auto-move). |
 
-`sprint-add` and `accept` are auto: a change auto-moves to `sprint/` when you set `implementation: in-progress`, and to `done/` when both `implementation` and `verification` are `approved`/`skipped`. To **decline** a change, just say so in natural language ("decline X because Y") — the agent invokes `tracking.sh decline` + `change.sh move --to declined` directly (procedure documented in the `spec-lifecycle` skill).
+`accept` and "move to in-progress" are auto: a change auto-moves to `in-progress/` when you set `implementation: in-progress`, and to `done/` when both `implementation` and `verification` are `approved`/`skipped`. To **decline** a change, just say so in natural language ("decline X because Y") — the agent invokes `tracking.sh decline` + `change.sh move --to declined` directly (procedure documented in the `spec-lifecycle` skill).
 
-The `0.5.x` model is a breaking change from the openspec-style delta/canonical model used in `0.4.x`. Legacy `.spec/specs/` and `.spec/changes/archive/` are detected by `/setup` but not migrated automatically — copy what you need into the new structure manually (or, if low-stakes, just start fresh).
+The `0.6.x` model is a breaking change from `0.5.x`: stage rename (`analysis`→`refinement`, `architecture`→`design`), bucket rename (`sprint/`→`in-progress/`), file rename (`proposal.md`→`propose.md`), new `tracking.yaml` schema (`description`, `status`, seconds-precision history, `lifecycle` pseudo-stage replacing `_meta`). LLM now generates the slug + description from the original task text. No auto-migration — start fresh or hand-edit existing `tracking.yaml` files.
 
 ## Model routing
 

@@ -7,28 +7,29 @@
 #   tracking.sh set-stage      --change <path> --stage <name> --state <s> --by <who>
 #   tracking.sh get-scope      --change <path>
 #   tracking.sh set-scope      --change <path> --scope <s> --by <who>
-#   tracking.sh derive-bucket  --change <path>
+#   tracking.sh derive-status  --change <path>
 #   tracking.sh active-stage   --change <path>
 #   tracking.sh decline        --change <path> --reason <r> --by <who>
 #   tracking.sh append-history --change <path> --stage <s> --status <st> --by <who>
+#   tracking.sh sync-status    --change <path>
 #
-# Stages (5): analysis architecture decomposition implementation verification
+# Stages (5):       refinement design decomposition implementation verification
 # Stage states (6): pending in-progress need-approve approved pause skipped
-# Scopes (4): product project feature bugfix
-# Buckets (3 derivable): backlog sprint done   (declined is set manually, not derived)
+# Scopes (4):       product project feature bugfix
+# Statuses (4):     backlog in-progress done declined
+#                   (declined is set by `decline` subcommand; others are derived from stages)
 
 set -eu
 
 SELF_DIR=$(cd "$(dirname "$0")" && pwd)
 STATE_MACHINE="$SELF_DIR/stage-state-machine.sh"
 
-VALID_STAGES="analysis architecture decomposition implementation verification"
+VALID_STAGES="refinement design decomposition implementation verification"
 VALID_SCOPES="product project feature bugfix"
 
 # === helpers ===
 
 require_args() {
-  # require_args <subcommand-name> <pair...>  where each pair is "flag-name|value"
   local sub=$1; shift
   while [ $# -gt 0 ]; do
     local flag=${1%%|*}
@@ -74,7 +75,15 @@ read_scope() {
   }' "$1"
 }
 
-now_ts() { date '+%Y-%m-%d %H:%M'; }
+read_decline_reason() {
+  awk '/^decline_reason:[[:space:]]/ {
+    sub(/^decline_reason:[[:space:]]*/, "", $0)
+    print
+    exit
+  }' "$1"
+}
+
+now_ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 # Append a history entry to tracking.yaml.
 append_history_entry() {
@@ -82,7 +91,7 @@ append_history_entry() {
   printf '  - { at: "%s", stage: %s, status: %s, by: %s }\n' "$(now_ts)" "$stage" "$status" "$by" >> "$tracking"
 }
 
-# Append a history entry with a quoted status (when status contains special chars like ':').
+# Append a history entry with a quoted status (for values containing ':' or spaces).
 append_history_entry_quoted() {
   local tracking=$1 stage=$2 status=$3 by=$4
   printf '  - { at: "%s", stage: %s, status: "%s", by: %s }\n' "$(now_ts)" "$stage" "$status" "$by" >> "$tracking"
@@ -111,6 +120,49 @@ rewrite_stage() {
         }
       }
     }
+    { print }
+  ' "$tracking" > "$tmp"
+  mv "$tmp" "$tracking"
+}
+
+# Compute status from current yaml state (no I/O write).
+# Echoes: backlog | in-progress | done | declined
+compute_status() {
+  local tracking=$1
+  local declined_reason
+  declined_reason=$(read_decline_reason "$tracking")
+  if [ -n "$declined_reason" ]; then
+    echo declined
+    return
+  fi
+  local impl verif
+  impl=$(read_stage "$tracking" implementation)
+  verif=$(read_stage "$tracking" verification)
+  case "$impl" in
+    in-progress|need-approve) echo in-progress; return ;;
+  esac
+  case "$verif" in
+    in-progress|need-approve) echo in-progress; return ;;
+  esac
+  case "$impl" in
+    approved|skipped)
+      case "$verif" in
+        approved|skipped) echo done; return ;;
+      esac
+      ;;
+  esac
+  echo backlog
+}
+
+# Rewrite the top-level `status:` line in tracking.yaml to match computed value.
+sync_status_field() {
+  local tracking=$1
+  local computed
+  computed=$(compute_status "$tracking")
+  local tmp
+  tmp=$(mktemp "${TMPDIR:-/tmp}/tracking-status.XXXXXX")
+  awk -v val="$computed" '
+    /^status:[[:space:]]/ { print "status: " val; next }
     { print }
   ' "$tracking" > "$tmp"
   mv "$tmp" "$tracking"
@@ -170,6 +222,7 @@ cmd_set_stage() {
     rewrite_stage "$tracking" "$stage" "$new_state"
   fi
   append_history_entry "$tracking" "$stage" "$new_state" "$by"
+  sync_status_field "$tracking"
   echo "$new_state"
 }
 
@@ -217,41 +270,43 @@ cmd_set_scope() {
     { print }
   ' "$tracking" > "$tmp"
   mv "$tmp" "$tracking"
-  append_history_entry_quoted "$tracking" analysis "scope-set:$scope" "$by"
+  append_history_entry_quoted "$tracking" refinement "scope-set:$scope" "$by"
   echo "$scope"
 }
 
-# === subcommand: derive-bucket ===
+# === subcommand: derive-status (was: derive-bucket) ===
 
-cmd_derive_bucket() {
+cmd_derive_status() {
   local change=""
   while [ $# -gt 0 ]; do
     case ${1:-} in
       --change) shift; change=${1:-} ;;
-      *) echo "tracking derive-bucket: unknown arg '$1'" >&2; exit 2 ;;
+      *) echo "tracking derive-status: unknown arg '$1'" >&2; exit 2 ;;
     esac
     shift || true
   done
-  require_args derive-bucket "--change|$change"
+  require_args derive-status "--change|$change"
   local tracking="$change/tracking.yaml"
   require_file "$tracking"
-  local impl verif
-  impl=$(read_stage "$tracking" implementation)
-  verif=$(read_stage "$tracking" verification)
-  case "$impl" in
-    in-progress|need-approve) echo sprint; return ;;
-  esac
-  case "$verif" in
-    in-progress|need-approve) echo sprint; return ;;
-  esac
-  case "$impl" in
-    approved|skipped)
-      case "$verif" in
-        approved|skipped) echo done; return ;;
-      esac
-      ;;
-  esac
-  echo backlog
+  compute_status "$tracking"
+}
+
+# === subcommand: sync-status (rewrite status field) ===
+
+cmd_sync_status() {
+  local change=""
+  while [ $# -gt 0 ]; do
+    case ${1:-} in
+      --change) shift; change=${1:-} ;;
+      *) echo "tracking sync-status: unknown arg '$1'" >&2; exit 2 ;;
+    esac
+    shift || true
+  done
+  require_args sync-status "--change|$change"
+  local tracking="$change/tracking.yaml"
+  require_file "$tracking"
+  sync_status_field "$tracking"
+  compute_status "$tracking"
 }
 
 # === subcommand: active-stage ===
@@ -316,7 +371,8 @@ cmd_decline() {
     }
   ' "$tracking" > "$tmp"
   mv "$tmp" "$tracking"
-  append_history_entry "$tracking" _meta declined "$by"
+  append_history_entry "$tracking" lifecycle declined "$by"
+  sync_status_field "$tracking"
 }
 
 # === subcommand: append-history (utility) ===
@@ -336,7 +392,6 @@ cmd_append_history() {
   require_args append-history "--change|$change" "--stage|$stage" "--status|$status" "--by|$by"
   local tracking="$change/tracking.yaml"
   require_file "$tracking"
-  # Quote status if it contains ':' or whitespace.
   case "$status" in
     *:*|*\ *) append_history_entry_quoted "$tracking" "$stage" "$status" "$by" ;;
     *)        append_history_entry         "$tracking" "$stage" "$status" "$by" ;;
@@ -352,13 +407,15 @@ Subcommands:
   set-stage      --change <path> --stage <name> --state <state> --by <who>
   get-scope      --change <path>
   set-scope      --change <path> --scope <scope> --by <who>
-  derive-bucket  --change <path>
+  derive-status  --change <path>
+  sync-status    --change <path>
   active-stage   --change <path>
   decline        --change <path> --reason <reason> --by <who>
   append-history --change <path> --stage <stage> --status <status> --by <who>
 
 Stages:     $VALID_STAGES
 Scopes:     $VALID_SCOPES
+Statuses:   backlog in-progress done declined
 Stage states (see stage-state-machine.sh): pending in-progress need-approve approved pause skipped
 EOF
 }
@@ -370,7 +427,8 @@ case "$sub" in
   set-stage)      cmd_set_stage "$@" ;;
   get-scope)      cmd_get_scope "$@" ;;
   set-scope)      cmd_set_scope "$@" ;;
-  derive-bucket)  cmd_derive_bucket "$@" ;;
+  derive-status)  cmd_derive_status "$@" ;;
+  sync-status)    cmd_sync_status "$@" ;;
   active-stage)   cmd_active_stage "$@" ;;
   decline)        cmd_decline "$@" ;;
   append-history) cmd_append_history "$@" ;;

@@ -29,7 +29,7 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
 - **Bash is allowed only for these operations** — nothing else:
   1. `git rev-parse --show-toplevel` (resolve project root, once).
   2. `test -d <abs-path>/.spec` (existence probe).
-  3. `mkdir -p <abs-path>/.spec/changes/{backlog,sprint,done,declined} <abs-path>/.spec/standards` (create scaffold dirs).
+  3. `mkdir -p <abs-path>/.spec/changes/{backlog,in-progress,done,declined} <abs-path>/.spec/standards` (create scaffold dirs).
   4. `pwd` (fallback when not in a git repo).
   5. `cp -r <plugin>/.claude-template/spec/changes/_template/. <project>/.spec/changes/_template/` (copy template subtree when bootstrapping or topping up — trailing `/.` copies *contents into* an existing destination dir, which is robust whether the destination is empty or partially present; recursive copy is the only practical way to clone the subtree).
 - **No shell operators in Bash calls.** No `&&`, `||`, `;`, `|`, `>>`, `<<`, backticks, or `\`-continuations. Each Bash call must be a single clean command. Operators trigger Claude Code's "shell operators require approval" prompt — that's the noise the user is angry about.
@@ -58,7 +58,7 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
 
    **4a. Top-level probe (run first, ALONE).** One Bash call: `test -d R/.spec`. Wait for the result before issuing any other `.spec/`-related Bash calls.
    - **Exit non-zero (absent)** → AskUserQuestion: **"Bootstrap `.spec/` (4-bucket change workflow) in this project?"**
-     - **Yes, bootstrap** — `description: "Scaffolds <project>/.spec/ with standards/README.md (long-lived rules), 4 bucket dirs (backlog/sprint/done/declined), and changes/_template/ used by /backlog. No external deps."`
+     - **Yes, bootstrap** — `description: "Scaffolds <project>/.spec/ with standards/README.md (long-lived rules), 4 bucket dirs (backlog/in-progress/done/declined), and changes/_template/ used by /change. No external deps."`
      - **No, skip** — `description: "Don't bootstrap. You can re-run /setup later to add it."`
      - On Yes: bootstrap full scaffold (see 4c). Record `.spec: bootstrapped`. **Skip 4b entirely** — there's nothing to top-up after a fresh bootstrap. Proceed to step 5.
      - On No: record `.spec: skipped`. Skip 4b, 4c, step 5.
@@ -67,11 +67,11 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
    **4b. Completeness probe (run ONLY when 4a returned exit 0).** Attempt `Read` of each scaffold target — if `Read` errors with "file not found", the file is missing. Targets:
    - `R/.spec/standards/README.md`
    - `R/.spec/changes/_template/tracking.yaml`
-   - `R/.spec/changes/_template/proposal.md`
+   - `R/.spec/changes/_template/propose.md`
 
    Also check (Bash `test -d`) the directory markers:
    - `R/.spec/standards`
-   - `R/.spec/changes/backlog`, `R/.spec/changes/sprint`, `R/.spec/changes/done`, `R/.spec/changes/declined`
+   - `R/.spec/changes/backlog`, `R/.spec/changes/in-progress`, `R/.spec/changes/done`, `R/.spec/changes/declined`
    - `R/.spec/changes/_template`
 
    Detect **legacy** artifacts from the old delta-merge model (record but do NOT delete). **Each path is "detected" ONLY if its `test -d` / `Read` returns exit 0 (present).** A probe returning non-zero means **not detected** — never record those as legacy:
@@ -87,12 +87,12 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
    - If legacy artifacts were actually detected (exit 0 probes), append to record: `(legacy: <list>)`. Surface in final summary as a migration note. **If no legacy probe returned exit 0, omit the legacy line entirely** — do NOT write "legacy: none" or invent paths.
 
    **4c. Bootstrap / top-up file operations** (referenced by 4a-Yes and 4b-Yes):
-   - **Step 1 (ALWAYS first).** `Bash`: `mkdir -p R/.spec/changes/backlog R/.spec/changes/sprint R/.spec/changes/done R/.spec/changes/declined R/.spec/changes/_template R/.spec/standards`. Idempotent. This MUST run before any Write / cp below, because `Write` of a deeply-nested file requires its parent dirs to exist and `cp -r` requires the destination's parent to exist. Do NOT skip this even on top-up — `mkdir -p` is a no-op for existing dirs.
+   - **Step 1 (ALWAYS first).** `Bash`: `mkdir -p R/.spec/changes/backlog R/.spec/changes/in-progress R/.spec/changes/done R/.spec/changes/declined R/.spec/changes/_template R/.spec/standards`. Idempotent. This MUST run before any Write / cp below, because `Write` of a deeply-nested file requires its parent dirs to exist and `cp -r` requires the destination's parent to exist. Do NOT skip this even on top-up — `mkdir -p` is a no-op for existing dirs.
    - **Step 2.** For each `(src, dst)` pair where `dst` does NOT exist:
      - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/standards/README.md`  → `R/.spec/standards/README.md`
 
      `Read` source, `Write` destination verbatim. **Never overwrite an existing file** — only write the ones the user is missing.
-   - **Step 3.** If `R/.spec/changes/_template/tracking.yaml` OR `R/.spec/changes/_template/proposal.md` is missing, populate the template subtree. `Bash`: `cp -r ${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/changes/_template/. R/.spec/changes/_template/` (note the trailing `/.` on the source — this copies *contents* into an existing destination dir, which works whether `_template/` was just `mkdir`'d empty in Step 1 or already partially populated). The template files contain `{{...}}` placeholders that `change.sh new` substitutes at scaffold time.
+   - **Step 3.** If `R/.spec/changes/_template/tracking.yaml` OR `R/.spec/changes/_template/propose.md` is missing, populate the template subtree. `Bash`: `cp -r ${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/changes/_template/. R/.spec/changes/_template/` (note the trailing `/.` on the source — this copies *contents* into an existing destination dir, which works whether `_template/` was just `mkdir`'d empty in Step 1 or already partially populated). The template files contain `{{...}}` placeholders that `change.sh new` substitutes at scaffold time.
 
 5. **`.spec/` gitignore policy** (only if `.spec/` was just bootstrapped, OR exists and `.gitignore` has no opinion). `Read` `R/.gitignore`, look for exact line `.spec/`.
    - Already listed → record `.spec gitignore: already ignored`. Don't prompt.
@@ -128,7 +128,7 @@ foundry:setup complete:
     serena:   <added | already present | skipped>
 ```
 
-Omit the `.spec` / `mcp` lines if they were never relevant on this run (both already present and silently skipped). If Serena was added, add a note: `serena requires Python + serena package on PATH`. If any MCP was added, add: `restart the session for new MCP servers to load`. If legacy `.spec/` artifacts were detected, add: `note: legacy artifacts from old delta-merge model detected — see README migration guide`. After a fresh `.spec` bootstrap, suggest: `next: populate .spec/standards/*.md (project.md, stack.md, …), then /backlog "<title>" to create your first change`.
+Omit the `.spec` / `mcp` lines if they were never relevant on this run (both already present and silently skipped). If Serena was added, add a note: `serena requires Python + serena package on PATH`. If any MCP was added, add: `restart the session for new MCP servers to load`. If legacy `.spec/` artifacts were detected, add: `note: legacy artifacts from old delta-merge model detected — see README migration guide`. After a fresh `.spec` bootstrap, suggest: `next: populate .spec/standards/*.md (project.md, stack.md, …), then /change "<task text>" to create your first change`.
 
 ## Important
 
@@ -136,6 +136,6 @@ Omit the `.spec` / `mcp` lines if they were never relevant on this run (both alr
 - The project-scope `settings.json` does NOT contain plugin-management state (`enabledPlugins`, `extraKnownMarketplaces` etc.) — that lives in user-scope. Plain copy is safe.
 - `.spec/` and MCP are **opt-in per-project**. Always ask before installing, and only when absent.
 - `.spec/standards/` is a long-lived freeform directory (stack / architecture / best-practices / anti-patterns / glossary / project context). Edited directly; never archived. Agents read on-demand for relevant context.
-- `.spec/changes/_template/` holds the scaffold (`tracking.yaml`, `proposal.md`) copied verbatim by `change.sh new` when running `/backlog "<title>"`. Edit only if you want to change the per-change starter content for THIS project.
+- `.spec/changes/_template/` holds the scaffold (`tracking.yaml`, `propose.md`) copied verbatim by `change.sh new` when running `/change "<text>"`. Edit only if you want to change the per-change starter content for THIS project.
 - `.mcp.json` is project-scope and conventionally checked in. For private config, the user should use `.mcp.local.json` (gitignored) — mention this when MCP is selected for the first time.
 - Idempotent: re-run after `/plugin update` to refresh templates, or anytime to top-up. Already-present `.spec/` / MCP entries are skipped silently.

@@ -5,12 +5,12 @@
 # Usage:
 #   change.sh validate-name --name <name>
 #   change.sh locate        --name <name>
-#   change.sh new           --title <title> [--name <slug>]
+#   change.sh new           --title <title> --name <slug> [--description <one-line>]
 #   change.sh move          --name <name> --to <bucket> [--by <who>]
-#   change.sh list          [--bucket backlog|sprint|done|declined]
+#   change.sh list          [--bucket backlog|in-progress|done|declined]
 #
-# Buckets: backlog sprint done declined
-# Reserved names (cannot be used as change name): backlog sprint done declined _template
+# Buckets: backlog in-progress done declined
+# Reserved names (cannot be used as change name): backlog in-progress done declined _template
 
 set -eu
 
@@ -18,8 +18,8 @@ SELF_DIR=$(cd "$(dirname "$0")" && pwd)
 TRACKING="$SELF_DIR/tracking.sh"
 ROADMAP="$SELF_DIR/roadmap.sh"
 
-VALID_BUCKETS="backlog sprint done declined"
-RESERVED_NAMES="backlog sprint done declined _template"
+VALID_BUCKETS="backlog in-progress done declined"
+RESERVED_NAMES="backlog in-progress done declined _template"
 NAME_REGEX='^[a-z][a-z0-9]*(-[a-z0-9]+)*$'
 
 # === helpers ===
@@ -41,14 +41,19 @@ is_valid_bucket() {
   printf ' %s ' "$VALID_BUCKETS" | grep -q " $1 "
 }
 
-derive_slug() {
-  printf '%s' "$1" \
-    | tr '[:upper:]' '[:lower:]' \
-    | tr -s '[:space:]' '-' \
-    | sed -e 's/[^a-z0-9-]//g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
-}
+now_ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
-now_ts() { date '+%Y-%m-%d %H:%M'; }
+read_yaml_field() {
+  # Reads a top-level scalar `key: value` (value may be quoted).
+  local file=$1 key=$2
+  awk -v key="$key" '
+    $0 ~ "^"key":[[:space:]]" {
+      sub("^"key":[[:space:]]*", "", $0)
+      gsub(/^"|"$/, "", $0)
+      print
+      exit
+    }' "$file"
+}
 
 # === subcommand: validate-name ===
 
@@ -120,26 +125,17 @@ cmd_locate() {
 # === subcommand: new ===
 
 cmd_new() {
-  local title="" name_override=""
+  local title="" name="" description=""
   while [ $# -gt 0 ]; do
     case ${1:-} in
-      --title) shift; title=${1:-} ;;
-      --name)  shift; name_override=${1:-} ;;
+      --title)       shift; title=${1:-} ;;
+      --name)        shift; name=${1:-} ;;
+      --description) shift; description=${1:-} ;;
       *) echo "change new: unknown arg '$1'" >&2; exit 2 ;;
     esac
     shift || true
   done
-  require_args new "--title|$title"
-  local name
-  if [ -n "$name_override" ]; then
-    name=$name_override
-  else
-    name=$(derive_slug "$title")
-  fi
-  if [ -z "$name" ]; then
-    echo "change new: could not derive a valid name from title '$title'; pass --name <slug>" >&2
-    exit 2
-  fi
+  require_args new "--title|$title" "--name|$name"
   # Validate (self-call).
   if ! "$0" validate-name --name "$name" >/dev/null; then
     exit 1
@@ -161,13 +157,18 @@ cmd_new() {
     exit 3
   fi
   cp -r "$template" "$dest"
-  local now title_escaped f tmp
+  local now title_escaped description_escaped f tmp
   now=$(now_ts)
-  title_escaped=$(printf '%s' "$title" | sed 's/[&/\]/\\&/g')
-  for f in "$dest"/tracking.yaml "$dest"/proposal.md; do
+  title_escaped=$(printf '%s' "$title"       | sed 's/[&/\]/\\&/g')
+  description_escaped=$(printf '%s' "$description" | sed 's/[&/\]/\\&/g')
+  for f in "$dest"/tracking.yaml "$dest"/propose.md; do
     [ -f "$f" ] || continue
     tmp=$(mktemp "${TMPDIR:-/tmp}/change-new.XXXXXX")
-    sed -e "s/{{id}}/$name/g" -e "s/{{title}}/$title_escaped/g" -e "s/{{now}}/$now/g" "$f" > "$tmp"
+    sed -e "s/{{id}}/$name/g" \
+        -e "s/{{title}}/$title_escaped/g" \
+        -e "s/{{description}}/$description_escaped/g" \
+        -e "s/{{now}}/$now/g" \
+        "$f" > "$tmp"
     mv "$tmp" "$f"
   done
   (cd "$dest" && pwd)
@@ -213,7 +214,8 @@ cmd_move() {
   fi
   mv "$src" "$dest"
   if [ -f "$dest/tracking.yaml" ]; then
-    "$TRACKING" append-history --change "$dest" --stage _meta --status "moved-to-$to" --by "$by"
+    "$TRACKING" append-history --change "$dest" --stage lifecycle --status "moved-to-$to" --by "$by"
+    "$TRACKING" sync-status --change "$dest" >/dev/null
   fi
   echo "$dest"
 }
@@ -251,7 +253,10 @@ cmd_list() {
     END { if (last != "") print last }' "$1"
   }
 
-  local b d name tracking abs active active_state scope roadmap_md roadmap_progress last_event
+  # Output columns (TSV):
+  # bucket  name  title  active_stage  active_stage_state  scope  roadmap  last_event_at  path
+
+  local b d name tracking abs title active active_state scope roadmap_md roadmap_progress last_event
   for b in $buckets; do
     local bdir=".spec/changes/$b"
     [ -d "$bdir" ] || continue
@@ -261,11 +266,13 @@ cmd_list() {
       [ "$name" = "_template" ] && continue
       tracking="$d/tracking.yaml"
       if [ ! -f "$tracking" ]; then
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-          "$b" "$name" "—" "—" "—" "—" "—" "$d"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+          "$b" "$name" "—" "—" "—" "—" "—" "—" "$d"
         continue
       fi
       abs=$(cd "$d" && pwd)
+      title=$(read_yaml_field "$tracking" title)
+      [ -z "$title" ] && title="—"
       active=$("$TRACKING" active-stage --change "$abs" 2>/dev/null || echo "")
       if [ -n "$active" ]; then
         active_state=$("$TRACKING" get-stage --change "$abs" --stage "$active" 2>/dev/null || echo "—")
@@ -282,8 +289,8 @@ cmd_list() {
       fi
       last_event=$(read_last_event_at "$tracking")
       [ -z "$last_event" ] && last_event="—"
-      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$b" "$name" "$active" "$active_state" "$scope" "$roadmap_progress" "$last_event" "$abs"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$b" "$name" "$title" "$active" "$active_state" "$scope" "$roadmap_progress" "$last_event" "$abs"
     done
   done
 }
@@ -295,9 +302,12 @@ Usage: change.sh <subcommand> [options]
 Subcommands:
   validate-name --name <name>
   locate        --name <name>
-  new           --title <title> [--name <slug>]
+  new           --title <title> --name <slug> [--description <one-line>]
   move          --name <name> --to <bucket> [--by <who>]
-  list          [--bucket backlog|sprint|done|declined]
+  list          [--bucket backlog|in-progress|done|declined]
+
+List output columns (TSV):
+  bucket  name  title  active_stage  active_stage_state  scope  roadmap  last_event_at  path
 
 Buckets:        $VALID_BUCKETS
 Reserved names: $RESERVED_NAMES

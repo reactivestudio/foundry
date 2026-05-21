@@ -5,16 +5,16 @@
 > (orchestrator agent, skill-resolver, conflict-resolver, ADR loop, Foundry MCP, …)
 > that has never been implemented in this repository.
 >
-> The **current** `foundry` plugin (v0.5.0) is a Kotlin / Spring Boot engineer's toolkit.
+> The **current** `foundry` plugin (v0.6.0) is a Kotlin / Spring Boot engineer's toolkit.
 > See [README.md](./README.md) for installed commands. The actually-shipping `.spec/`
-> subsystem is summarised in the [Current `.spec/` subsystem](#current-spec-subsystem-v050)
+> subsystem is summarised in the [Current `.spec/` subsystem](#current-spec-subsystem-v060)
 > section below; the rest of this file is roadmap material kept for reference.
 
 ---
 
-## Current `.spec/` subsystem (v0.5.0)
+## Current `.spec/` subsystem (v0.6.0)
 
-A change in `.spec/changes/` flows through 4 bucket directories (`backlog/`, `sprint/`, `done/`, `declined/`) and 5 stages (`analysis`, `architecture`, `decomposition`, `implementation`, `verification`), each with its own state (`pending | in-progress | need-approve | approved | pause | skipped`).
+A change in `.spec/changes/` flows through 4 bucket directories (`backlog/`, `in-progress/`, `done/`, `declined/`) and 5 stages (`refinement`, `design`, `decomposition`, `implementation`, `verification`), each with its own state (`pending | in-progress | need-approve | approved | pause | skipped`).
 
 ### State machine (per stage)
 
@@ -27,55 +27,57 @@ pending → in-progress → need-approve → approved
    └──► skipped ◄── (any state, when stage is unnecessary)
 ```
 
-### Bucket derivation (auto)
+### Status derivation (auto)
 
-| Condition | Bucket |
+Top-level `status:` in `tracking.yaml` mirrors the bucket and is derived from stages + decline state.
+
+| Condition | Status / Bucket |
 |---|---|
-| `implementation` ∈ {in-progress, need-approve} OR `verification` ∈ same | `sprint` |
+| `decline_reason:` field present | `declined` (terminal) |
+| `implementation` ∈ {in-progress, need-approve} OR `verification` ∈ same | `in-progress` |
 | `implementation` ∈ {approved, skipped} AND `verification` ∈ same | `done` |
 | otherwise | `backlog` |
-| explicit decline (bash) | `declined` (terminal, manual only) |
 
-`pause` does not move the change — it stays where it is.
+`pause` does not move the change — it stays where it is. `tracking.sh sync-status` rewrites the field on every state mutation.
 
 ### Artifacts (filled by agents)
 
 | Stage | Artifact | Owner role |
 |---|---|---|
-| (initial) | `tracking.yaml` + `proposal.md` | `/backlog "<title>"` (scaffold only) |
-| analysis | `requirements.md` | system-analyst |
-| architecture | `system-design.md` + `application-design.md` | architect |
+| (initial) | `tracking.yaml` + `propose.md` | `/change "<task text>"` (LLM scaffold) |
+| refinement | `requirements.md` | system-analyst |
+| design | `system-design.md` + `application-design.md` | architect |
 | decomposition | `roadmap.md` | teamlead |
 | implementation | code in project tree | code-implementor |
 | verification | (runs Quality gates from roadmap.md) | verifier |
 
-Spec-commands (`/backlog`, `/track`, etc.) are **state API only** — they don't generate content. Agents write content via Write/Edit on the appropriate file.
+Spec-commands (`/change`, `/track`, etc.) are **state API only** — they don't generate domain content. The `/change` command additionally generates slug + description + writes the original task text verbatim into `propose.md`. Per-stage artifacts (requirements/design/roadmap/code) are written by agents.
 
 ### Commands (4 + setup)
 
 | Command | Form | Purpose |
 |---|---|---|
-| `/backlog` | bare | List backlog table. |
-| `/backlog "<title>"` | with title | Scaffold new change in backlog (auto-slug from title). |
-| `/sprint` | bare | List sprint table. |
+| `/change` | bare | Interactive backlog list (top 10 + actions: move to in-progress / show in-progress / show closed). |
+| `/change "<task text>"` | with text | LLM-generate slug (3-4 segments) + title + description. Scaffold in backlog. Write full task text to `propose.md`. Prompt for "Start work now?" |
+| `/in-progress` | bare | List in-progress table. |
 | `/closed` | bare \| `done` \| `declined` | List terminal buckets — both or filter. |
-| `/track <name>` | summary | All stages, scope, artifacts, roadmap progress, recent history. |
+| `/track <name>` | summary | Title, description, status, all stages, artifacts, roadmap progress, recent history. |
 | `/track <name> <stage>` | stage detail | State + history filtered to stage + owner role + next action. |
-| `/track <name> <stage> <state>` | setter | Validate transition, write tracking.yaml, auto-move bucket. |
+| `/track <name> <stage> <state>` | setter | Validate transition, write tracking.yaml, sync `status:`, auto-move bucket if status changed. |
 | `/foundry:setup` | — | Scaffold `.spec/` (4 buckets + standards/ + _template/) and project `.claude/`. |
 
-`sprint-add` and `accept` are **not** slash commands — they're automatic side effects of `/track` (auto-move into `sprint/` on `implementation: in-progress`; auto-move into `done/` on `verification: approved` with `implementation: approved|skipped`).
+`accept` and "move to in-progress" are **not** slash commands — automatic side effects of `/track` (auto-move into `in-progress/` on `implementation: in-progress`; auto-move into `done/` on `verification: approved` with `implementation: approved|skipped`).
 
-`decline` is **not** a slash command — it's rare and user-initiated by natural language. The agent reads `spec-lifecycle` and invokes `tracking.sh decline` + `change.sh move --to declined` directly.
+`decline` is **not** a slash command — rare and user-initiated by natural language. Agent reads `spec-lifecycle` and invokes `tracking.sh decline` + `change.sh move --to declined` directly.
 
 ### Bash helpers (4 dispatch scripts in `scripts/spec/`)
 
 | Script | Subcommands |
 |---|---|
 | `stage-state-machine.sh` | `validate --from <s> --to <s>`, `states`, `allowed-from --state <s>` |
-| `tracking.sh` | `get-stage`, `set-stage`, `get-scope`, `set-scope`, `derive-bucket`, `active-stage`, `decline`, `append-history` (all with `--change <path>` + topic-specific flags) |
+| `tracking.sh` | `get-stage`, `set-stage`, `get-scope`, `set-scope`, `derive-status`, `sync-status`, `active-stage`, `decline`, `append-history` (all with `--change <path>` + topic-specific flags) |
 | `roadmap.sh` | `parse`, `status`, `ready`, `set-task-state` (all with `--roadmap <path>` + topic-specific flags) |
-| `change.sh` | `validate-name`, `locate`, `new`, `move`, `list` (named-flag args; `move` accepts `--by <who>`) |
+| `change.sh` | `validate-name`, `locate`, `new` (requires `--title --name --description`), `move`, `list` |
 
 All pure-bash, portable awk (no gawk extensions, no `yq` dep). Named-flag args throughout. The `tracking.yaml` schema is the contract these helpers depend on — see `skills/spec/conventions/SKILL.md`.
 

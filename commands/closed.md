@@ -25,20 +25,20 @@ Read-only.
 
 3. **Render.** Group output by bucket. For each non-empty group, render a markdown table.
 
-   **`done/` table** — columns: `Name | Scope | Roadmap | Completed at`.
+   **`done/` table** — columns: `Name | Title | Scope | Roadmap | Completed at`.
    ```
    ### done/
-   | Name | Scope | Roadmap | Completed at |
-   |---|---|---|---|
-   | add-2fa | feature | 5/5 done · Q1 done | 2026-05-20 19:00 |
+   | Name | Title | Scope | Roadmap | Completed at |
+   |---|---|---|---|---|
+   | add-2fa-totp | Add 2FA via TOTP | feature | 5/5 done · Q1 done | 2026-05-20 19:00:42 |
    ```
 
-   **`declined/` table** — columns: `Name | Reason | Declined at`. For each row, augment with the `decline_reason` field: `Bash`: `grep '^decline_reason:' <path>/tracking.yaml` and strip the `decline_reason: ` prefix + surrounding quotes. If missing → render `—` and add a warning footer.
+   **`declined/` table** — columns: `Name | Title | Reason | Declined at`. For each row, augment with the `decline_reason` field: `Bash`: `grep '^decline_reason:' <path>/tracking.yaml` and strip the `decline_reason: ` prefix + surrounding quotes. If missing → render `—` and add a warning footer.
    ```
    ### declined/
-   | Name | Reason | Declined at |
-   |---|---|---|
-   | add-sms-fallback | superseded by add-totp | 2026-05-21 10:00 |
+   | Name | Title | Reason | Declined at |
+   |---|---|---|---|
+   | add-sms-fallback | SMS fallback for 2FA | superseded by add-totp | 2026-05-21 10:00:00 |
    ```
 
 4. **Report counts** per bucket at the end:

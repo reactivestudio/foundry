@@ -16,6 +16,21 @@
 - ~~Дроп `/accept`, `/decline`, `/sprint-add`~~ — accept/sprint-move = auto через `/track`; decline = bash напрямую по natural-language запросу (документировано в `spec-lifecycle`).
 - 10 команд → 5 (`/setup`, `/backlog`, `/sprint`, `/closed`, `/track`).
 
+## Shipped (v0.5.4)
+
+- ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
+
+## Shipped (v0.6.0) — breaking
+
+- ~~Schema rewrite~~: `id` (= slug), `title`, **`description`** (LLM-generated), **`status`** (derived: backlog \| in-progress \| done \| declined), `scope`, `stages`, `history`.
+- ~~Stage rename~~: `analysis`→`refinement`, `architecture`→`design`. Остальные без изменений.
+- ~~Bucket rename~~: `sprint/`→`in-progress/`. Backlog/done/declined без изменений.
+- ~~File rename~~: `proposal.md`→`propose.md`.
+- ~~Команда `/backlog` → `/change`~~. Команда `/sprint` → `/in-progress`.
+- ~~LLM-generated slug (3-4 segments)~~ + LLM-generated description — генерируются на этапе `/change` из текста задачи.
+- ~~History format~~: seconds precision (`YYYY-MM-DD HH:MM:SS`), pseudo-stage `_meta` → `lifecycle`.
+- Migration legacy `.spec/` (0.5.x → 0.6.0) — out of scope, follow-up как `/migrate`.
+
 ## Active
 
 1. Добавить возможность выбирать стэк проекта и подгружать только нужные скиллы, команды, агенты, хуки.
