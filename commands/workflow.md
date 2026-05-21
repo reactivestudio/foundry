@@ -141,14 +141,14 @@ On **Decline**:
 
 Producer mapping (lookup via `workflow.sh producer --stage <stage>`):
 
-| Stage | Producer | Status in Phase 2A |
+| Stage | Producer | Status |
 |---|---|---|
 | refinement | `system-analyst` | **wired (Task launch)** |
-| design | `architect` | **stub (not yet implemented)** |
-| decomposition | `teamlead` | **stub** |
+| design | `architect` | **wired (Task launch)** |
+| decomposition | `teamlead` | **wired (Task launch)** |
 | implementation | `code-implementor` (per task, in loop) | **wired (task-loop, see Step 6)** |
-| verification | `qa-engineer` | **stub** |
-| termination | `termination-handler` | **stub** |
+| verification | `qa-engineer` | **stub (Phase 2D)** |
+| termination | `termination-handler` | **stub (Phase 2D)** |
 
 For **wired** stages:
 
@@ -166,6 +166,27 @@ Stage-specific prompts:
   Write requirements.md per the spec-refinement schema.
   Mark refinement: review via tracking.sh set-stage.
   Return the structured 'Refinement draft' report.
+  <REWORK_NOTE if any>
+  ```
+
+- **design** (architect):
+  ```
+  Design the change at <CP>. Read requirements.md + propose.md + tracking.yaml + .spec/standards/*.md.
+  Write system-design.md (C4 context+container view, key decisions) and application-design.md
+  (modules, ports, adapters, contracts, data model) per the spec-design schema.
+  Mark design: review via tracking.sh set-stage.
+  Return the structured 'Design draft' report.
+  <REWORK_NOTE if any>
+  ```
+
+- **decomposition** (teamlead):
+  ```
+  Decompose the change at <CP> into roadmap.md. Read requirements.md + system-design.md +
+  application-design.md + tracking.yaml + .spec/standards/*.md.
+  Produce atomic tasks (≤4h each) wired by a blocker DAG, with Q-gates for NFRs, per the
+  spec-decomposition skill. Verify with roadmap.sh ready before stopping.
+  Mark decomposition: review via tracking.sh set-stage.
+  Return the structured 'Roadmap draft' report.
   <REWORK_NOTE if any>
   ```
 
@@ -225,5 +246,5 @@ If a state mutation happened this invocation, list it (e.g. `mutated: refinement
 - **Read `spec-workflow` SKILL.md before driving.** The hand-off protocol is the contract producers follow; orchestrator must enforce it.
 - **One loop iteration = one user input.** Never silent-cycle past an AskUserQuestion.
 - **Orchestrator never writes artifact content.** Only `Read`s for the review preview.
-- **Phase 2A scope:** refinement (real Task) + implementation (real task-loop) wired. Other stages print stub message + AskUserQuestion (skip/mark-review/pause). Wire them in Phase 2B/2C/2D.
+- **Phase 2B scope:** refinement + design + decomposition + implementation wired (real Task launches). verification + termination still print stub message + AskUserQuestion (skip/mark-review/pause). Wire them in Phase 2D.
 - **Auto-bucket move** happens via `tracking.sh sync` (called transitively by `set-stage`). Orchestrator does not call `change.sh move` directly except on Decline.
