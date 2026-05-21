@@ -1,12 +1,12 @@
 ---
 name: change
-description: "Change command. Bare = interactive (pick bucket → list → drill → actions). With text = LLM-scaffold new change in .spec/changes/backlog/."
+description: "Change command. Bare = all-buckets list + actions. With text = LLM-scaffold new change in .spec/changes/backlog/."
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh:*) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh:*) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/roadmap.sh:*) Bash(grep:*) Bash(sort:*) Bash(head:*) Bash(tail:*) Bash(wc:*) Bash(test:*) Bash(ls:*) Read Write AskUserQuestion Task
 ---
 
-Single entry point for working with `.spec/changes/`. Branches on argument presence.
+Single entry point for `.spec/changes/`.
 
-- **No args** → pick a bucket (backlog / in-progress / done / declined) or add new. Show table. Optionally drill into a change for stage actions.
+- **No args** → list all 4 buckets (backlog → in-progress → done → declined), top 3 per bucket. Offer drill-down + add-new + exit.
 - **Free-form task text** → LLM-generate slug + title + description, scaffold new change in `backlog/`, write full task text to `propose.md`, offer to start work.
 
 Every AskUserQuestion option is overridable via the auto-provided **Other** choice (free-form text).
@@ -17,43 +17,40 @@ This is the **only** user-facing slash command for `.spec/changes/` (besides `/s
 
 ### Step 0 — Decide form
 
-If `$ARGUMENTS` (trimmed) is empty → **Browse form** (Steps 1–5). Otherwise → **Add form** (Steps 6–10).
+If `$ARGUMENTS` (trimmed) is empty → **Browse form** (Steps 1–4). Otherwise → **Add form** (Steps 6–10).
 
 ---
 
 ### Browse form
 
-**Step 1 — Pick bucket.**
+**Step 1 — Fetch + render all 4 buckets.**
 
-- **AskUserQuestion:** `"Which bucket to inspect?"` (header `"Bucket"`):
-  - `"backlog"` — description: `"Not yet picked up. refinement/design/decomposition active or pending."`
-  - `"in-progress"` — description: `"Actively worked on. implementation/verification/termination running."`
-  - `"closed"` — description: `"done/ + declined/. Read-only history."`
-  - `"add new"` — description: `"Skip browsing; scaffold a new change instead."`
+For EACH bucket in this fixed order — `backlog`, `in-progress`, `done`, `declined` — do:
 
-- If `"add new"` → ask for task text (single-question prompt — accept free text via Other only), assign to `TASK_TEXT`, jump to **Step 6**.
-- If `"closed"` → set `BUCKET_LIST="done declined"`, skip to Step 2 (list both).
-- Otherwise → set `BUCKET_LIST="<picked>"`.
+1. `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh list --bucket <b>`. TSV columns (11): `bucket name title status stage stage_state scope roadmap last_event_at last_event_pretty path`.
+2. Sort rows by `last_event_at` (column 9) desc.
+3. Capture row count `N_b`.
+4. Take top **`PER_BUCKET_LIMIT = 3`** rows.
 
-**Step 2 — Fetch + render icon-prefixed list.**
-
-For each bucket in `BUCKET_LIST`:
-
-`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh list --bucket <b>`. TSV columns: `bucket name title status stage stage_state scope roadmap last_event_at path`. Sort by `last_event_at` desc (column 9), keep top 10. Capture row count `N`.
-
-If `N=0`:
-- Print `<b>/ is empty.`
-- If `BUCKET_LIST` has only one bucket → skip to Step 4. If multi-bucket (closed view), continue to next bucket.
-
-Else render as **plain list** (no table, no numbering, no bullets — the icon is the bullet). Format per item:
+Render the bucket section. Format:
 
 ```
-<icon> <title> — <last_event_at>
+<bucket>:
+<icon>  <title>  <last_event_pretty>
+<icon>  <title>  <last_event_pretty>
+<icon>  <title>  <last_event_pretty>
++ <N-3> more.
 ```
 
-If `last_event_at` is `—` (fresh scaffold with no history entries yet), suppress the ` — <date>` suffix entirely — just print `<icon> <title>`.
+Rules:
+- Header line is the bucket name + `:` (lowercase, no markdown).
+- Each row: icon (one glyph) + **two spaces** + title + **two spaces** + `last_event_pretty` (column 10 from TSV — already formatted as `wednesday [10:30] [25 feb]`).
+- If `last_event_pretty` is `—` (fresh scaffold, no history yet), drop the trailing ` <date>` — just print `<icon>  <title>`.
+- If `N_b == 0`: print `  (empty)` on a single indented line under the header (still emit the header).
+- If `N_b > PER_BUCKET_LIMIT`: append `+ <N_b - PER_BUCKET_LIMIT> more.` as the last line of that section.
+- One blank line between bucket sections.
 
-**Icon by status (column 4):**
+**Icon by status (TSV column 4):**
 
 | status | icon | codepoint |
 |---|---|---|
@@ -62,56 +59,53 @@ If `last_event_at` is `—` (fresh scaffold with no history entries yet), suppre
 | `done` | `✓` | U+2713 |
 | `declined` | `⊗` | U+2297 |
 
-Example output:
+For `declined` rows: read `decline_reason:` via `grep '^decline_reason:' <path>/tracking.yaml` and print as an indented second line `   reason: <text>` (3 spaces of indent).
+
+**Example complete output:**
 
 ```
-● Add two-factor authentication via TOTP — 2026-05-21 16:00
-○ Refactor user service — 2026-05-20 14:30
-✓ Fix login rate limit — 2026-05-19 09:15
-⊗ Bad idea — 2026-05-18 11:00
-```
+backlog:
+○  Refactor user service  monday [10:30] [19 may]
+○  Migrate Postgres 15  sunday [16:00] [18 may]
++ 4 more.
 
-When `BUCKET_LIST` has multiple buckets (i.e. `"closed"` → `done declined`), print one section per bucket with a single-word lowercase header line, blank line between sections:
+in-progress:
+●  Add two-factor authentication via TOTP  wednesday [16:00] [21 may]
+●  Fix login rate limit  tuesday [09:15] [20 may]
 
-```
 done:
-✓ Add 2FA via TOTP — 2026-05-21 16:00
-✓ Fix login rate limit — 2026-05-19 09:15
+✓  Upgrade Kotlin 2.1  friday [12:00] [16 may]
 
 declined:
-⊗ Bad idea — 2026-05-18 11:00
-   reason: duplicate of add-2fa
+⊗  Bad idea
+   reason: duplicate of add-2fa-totp
 ```
 
-For `declined` rows: read `decline_reason:` via `grep '^decline_reason:' <path>/tracking.yaml` and print as a 3-space-indented second line `   reason: <text>`.
+`PER_BUCKET_LIMIT` will become configurable later — for now hardcoded to 3.
 
-If `N > 10` for any bucket, append after the last row of that bucket: `+ <N-10> more.`
+**Step 2 — Build `DRILL_OPTIONS`.**
 
-**Step 3 — Build candidate name list.**
+Collect top 4 names ACROSS ALL buckets by `last_event_at` desc (so the drill picker shows the most recently touched changes regardless of bucket). If total rows across all buckets = 0 → `DRILL_OPTIONS` is empty.
 
-Collect top 4 names across all listed buckets (by last_event_at desc) as `DRILL_OPTIONS`. If `N=0` → empty list, skip Step 4 drill option.
-
-**Step 4 — Ask follow-up.**
+**Step 3 — Action menu.**
 
 - **AskUserQuestion:** `"What next?"` (header `"Action"`):
-  - `"Drill into a change"` — description: `"Pick one to see stage history + take action. Skipped if list is empty."` (omit if empty)
-  - `"Switch bucket"` — description: `"Pick a different bucket to inspect."`
-  - `"Add new change"` — description: `"Scaffold a new change in backlog/."`
+  - `"Drill into a change"` — description: `"Pick a change to see details + take action."` (omit if `DRILL_OPTIONS` empty)
+  - `"Add new change"` — description: `"Scaffold a new change in backlog/. Asks for task text."`
   - `"Exit"` — description: `"Done."`
 
-- If `"Switch bucket"` → loop to Step 1.
-- If `"Add new change"` → ask for task text via single-question free-text prompt → Step 6.
+- If `"Add new change"` → ask for task text via a single-question free-text AskUserQuestion (the user types into Other), set `TASK_TEXT`, jump to **Step 6**.
 - If `"Exit"` → done.
 - If `"Drill into a change"`:
   - **AskUserQuestion:** `"Which change?"` (header `"Change"`):
-    - Show up to 4 names from `DRILL_OPTIONS` with description `"Title: <title> · stage: <stage>/<state>"`. Other = free-form name.
-  - Set `CHANGE_NAME=<answer>`. Continue to Step 5.
+    - Show up to 4 names from `DRILL_OPTIONS` with description `"<icon>  <title>  ·  <stage>/<state>"`. Other = free-form name.
+  - Set `CHANGE_NAME=<answer>`. Continue to Step 4.
 
-**Step 5 — Drill into change.**
+**Step 4 — Drill into change.**
 
-`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh locate --name <CHANGE_NAME>` → `$CP`. On failure: report + loop back to Step 4.
+`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh locate --name <CHANGE_NAME>` → `$CP`. On failure: report + loop back to Step 3.
 
-`Read` `$CP/tracking.yaml`. Render (prefix with the status icon from the Step 2 table):
+`Read` `$CP/tracking.yaml`. Render (prefix with the status icon from the Step 1 table):
 ```
 <icon> <CHANGE_NAME> — <title>
   status:  <status>          stage: <stage>
@@ -131,36 +125,41 @@ Collect top 4 names across all listed buckets (by last_event_at desc) as `DRILL_
 
 If `$CP/roadmap.md` exists → also call `roadmap.sh status --roadmap $CP/roadmap.md` and show one line.
 
-**Context-aware action menu.** Based on current `stage:` field and its state:
+**Context-aware action menu.** Based on the active stage (`stage:` field) and its state:
 
-| current `stage` / state | Action options (4 max) |
+| state of current stage | Action options (4 max) |
 |---|---|
-| `none` (all pending) | Start refinement · Set scope · Decline · Back |
-| `<X>` `in-progress` | Mark need-approve · Pause · Skip stage · Back |
-| `<X>` `need-approve` | Approve (advance) · Send back (rework) · Decline · Back |
-| `<X>` `approved` (next stage pending) | Start next stage · Rework current · Decline · Back |
-| `<X>` `pause` | Resume · Skip stage · Decline · Back |
-| terminal (`done`/`declined`) | Show propose.md · Show roadmap · Show requirements · Back |
+| `estimation` | Mark required · Skip stage · Set scope · Decline |
+| `required` | Start (in-progress) · Mark blocked (pending) · Skip stage · Decline |
+| `pending` (blocked) | Resume (in-progress) · Re-evaluate (required) · Skip stage · Decline |
+| `in-progress` | Send to review · Mark blocked (pending) · Reject · Skip stage |
+| `review` | Approve (completed) · Send back (in-progress) · Reject · Decline |
+| `completed` (next stage in `estimation`) | Start next stage · Rework current · Decline · Back |
+| `rejected` | Restart (in-progress) · Re-mark required · Decline · Back |
+| `skipped` | Reactivate (required) · Decline · Back |
+| terminal (`done`/`declined` status) | Show propose.md · Show requirements · Show roadmap · Back |
 
-- **AskUserQuestion** with relevant options. Each label = imperative phrase ("Mark need-approve", "Send back", etc.).
+- **AskUserQuestion** with relevant options. Each label = imperative phrase.
 
 **Executing actions** — each is a sequence of Bash calls. Use `--by user` for human-initiated transitions.
 
-- **Start refinement**:
+- **Start (in-progress)** — refinement special case (system-analyst takes over):
   1. `tracking.sh set-stage --change $CP --stage refinement --state in-progress --by user`.
-  2. **Invoke `system-analyst` agent** via Task tool: `subagent_type: "system-analyst"`, `description: "Refine <name>"`, `prompt: "Refine the change at <CP>. Read propose.md + tracking.yaml + .spec/standards/*.md. Run clarifying-questions loop. Set scope. Write requirements.md. Mark refinement need-approve. Report back with the structured 'Refinement draft' template."`. The agent handles the rest.
-- **Mark need-approve**: `tracking.sh set-stage --change $CP --stage <current> --state need-approve --by user`.
-- **Approve (advance)**: `tracking.sh set-stage --change $CP --stage <current> --state approved --by user`. Then if status changed (read back via `tracking.sh derive-status`) and differs from bucket → `change.sh move --name <name> --to <new-status> --by auto`.
-- **Send back (rework)**: `tracking.sh set-stage --change $CP --stage <current> --state in-progress --by user`.
-- **Pause**: `tracking.sh set-stage --change $CP --stage <current> --state pause --by user`.
-- **Resume**: `tracking.sh set-stage --change $CP --stage <current> --state in-progress --by user`.
+  2. **Invoke `system-analyst` agent** via Task tool: `subagent_type: "system-analyst"`, `description: "Refine <name>"`, `prompt: "Refine the change at <CP>. Read propose.md + tracking.yaml + .spec/standards/*.md. Run clarifying-questions loop. Set scope. Write requirements.md. Mark refinement: review. Report back with the structured 'Refinement draft' template."`.
+- **Start (in-progress)** — other stages: `tracking.sh set-stage --change $CP --stage <current> --state in-progress --by user`. (Future phases will wire architect / teamlead / verifier / terminator agents here.)
+- **Mark required**: `tracking.sh set-stage --change $CP --stage <current> --state required --by user`.
+- **Mark blocked (pending)**: `tracking.sh set-stage --change $CP --stage <current> --state pending --by user`.
+- **Resume (in-progress)** / **Re-evaluate (required)** / **Send back (in-progress)**: `tracking.sh set-stage --change $CP --stage <current> --state <target> --by user`.
+- **Send to review**: `tracking.sh set-stage --change $CP --stage <current> --state review --by user`.
+- **Approve (completed)**: `tracking.sh set-stage --change $CP --stage <current> --state completed --by user`. Then read back `tracking.sh derive-status`; if it differs from current bucket → `change.sh move --name <name> --to <new-status> --by auto`.
+- **Reject**: `tracking.sh set-stage --change $CP --stage <current> --state rejected --by user`. Stays in current bucket — upstream stages must be reopened to resolve.
 - **Skip stage**: `tracking.sh set-stage --change $CP --stage <current> --state skipped --by user`. Auto-move on status change.
-- **Start next stage**: identify next pending stage in order (refinement → design → decomposition → implementation → verification → termination); `tracking.sh set-stage --change $CP --stage <next> --state in-progress --by user`. Auto-move if status flipped.
+- **Start next stage**: identify next stage (refinement → design → decomposition → implementation → verification → termination) whose state is `estimation` or `required`; `tracking.sh set-stage --change $CP --stage <next> --state in-progress --by user`. Auto-move if status flipped.
 - **Set scope**: AskUserQuestion with options `product / project / feature / bugfix` → `tracking.sh set-scope --change $CP --scope <value> --by user`.
-- **Decline**: prompt for reason (free text via single AskUserQuestion or Other), then `tracking.sh decline --change $CP --reason "<reason>" --by user` + `change.sh move --name <name> --to declined --by user`.
+- **Decline**: prompt for reason (free text via AskUserQuestion Other), then `tracking.sh decline --change $CP --reason "<reason>" --by user` + `change.sh move --name <name> --to declined --by user`.
 - **Show propose.md / roadmap / requirements**: `Read` the file and print.
 
-After each action, re-render the change view (loop in Step 5) until user picks "Back" or "Exit".
+After each action, re-render the change view (loop in Step 4) until user picks "Back" or "Exit".
 
 ---
 
@@ -168,7 +167,7 @@ After each action, re-render the change view (loop in Step 5) until user picks "
 
 **Step 6 — Receive `TASK_TEXT`.**
 
-If reached from Step 1/4, `TASK_TEXT` is the user's free-form answer. Otherwise `TASK_TEXT` = `$ARGUMENTS` verbatim. If `--name <slug>` is present, capture explicit slug override and strip from `TASK_TEXT`.
+If reached from Step 3 ("Add new change"), `TASK_TEXT` is the user's free-form answer. Otherwise `TASK_TEXT` = `$ARGUMENTS` verbatim. If `--name <slug>` is present, capture explicit slug override and strip from `TASK_TEXT`.
 
 **Step 7 — LLM-generate slug + title + description.**
 
@@ -220,26 +219,26 @@ Print:
   description: "<DESCRIPTION>"
   path:        <CP>
   status:      backlog
-  stage:       none
+  stage:       refinement (all stages: estimation)
   propose.md:  written (<TASK_TEXT length> chars)
 ```
 
 **Step 10 — Offer to start work.**
 
 - **AskUserQuestion:** `"Start work now?"` (header `"Start work"`):
-  - `"Yes — start refinement"` — description: `"refinement → in-progress. Stays in backlog/. Recommended for features."`
-  - `"Yes — straight to implementation"` — description: `"implementation → in-progress. Auto-moves to in-progress/. Skips refinement/design/decomposition. Trivial bugfixes only."`
-  - `"No — leave in backlog"` — description: `"All stages stay pending. Resume later via /change."`
+  - `"Yes — start refinement"` — description: `"refinement: estimation → in-progress. Stays in backlog/. Recommended for features."`
+  - `"Yes — straight to implementation"` — description: `"implementation: estimation → in-progress. Auto-moves to in-progress/. Skips refinement/design/decomposition. Trivial bugfixes only."`
+  - `"No — leave in backlog"` — description: `"All stages stay in estimation. Resume later via /change."`
 
 - On `"start refinement"`:
   - `Bash`: `tracking.sh set-stage --change $CP --stage refinement --state in-progress --by user`.
-  - **Invoke `system-analyst` agent** via Task tool (same invocation as Step 5 "Start refinement" action). The agent runs the clarifying-questions loop, sets scope, writes `requirements.md`, marks `refinement: need-approve`, and reports back.
-  - Final (after agent returns): forward the agent's structured "Refinement draft" report to the user and append: `Next: user reviews requirements.md → /change → drill <name> → Approve.`
+  - **Invoke `system-analyst` agent** via Task tool (same invocation as Step 4 "Start (in-progress)" action for refinement). The agent runs the clarifying-questions loop, sets scope, writes `requirements.md`, marks `refinement: review`, and reports back.
+  - Final (after agent returns): forward the agent's structured "Refinement draft" report to the user and append: `Next: user reviews requirements.md → /change → drill <name> → Approve (completed).`
 
 - On `"straight to implementation"`:
   - `Bash`: `tracking.sh set-stage --change $CP --stage implementation --state in-progress --by user`.
   - `Bash`: `change.sh move --name <SLUG> --to in-progress --by auto`.
-  - Final: `Started: implementation in-progress. status=in-progress (auto-moved) stage=implementation. Planning stages stayed pending.`
+  - Final: `Started: implementation in-progress. status=in-progress (auto-moved) stage=implementation. Planning stages stayed in estimation.`
 
 - On `"leave in backlog"`:
   - Final: `Left in backlog. Resume via /change.`
@@ -250,4 +249,4 @@ Print:
 - Step 9 writes the full original task text verbatim into `propose.md`.
 - "Straight to implementation" intentionally skips planning. Risky for features.
 - For free-form names supplied via Other, validate via `change.sh locate` (must resolve to exactly one dir).
-- This is the only command that scaffolds, lists, or mutates `.spec/changes/`. Stage setters are invoked from drill-down (Step 5) or directly via Bash by agents.
+- This is the only command that scaffolds, lists, or mutates `.spec/changes/`. Stage setters are invoked from drill-down (Step 4) or directly via Bash by agents.

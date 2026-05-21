@@ -20,6 +20,18 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.9.0) — breaking: state machine rewrite (8 states), all-buckets list, pretty dates
+
+- ~~Stage state machine rewritten (8 states)~~: `estimation | required | skipped | pending | in-progress | review | completed | rejected`. Was: `pending | in-progress | need-approve | approved | pause | skipped`. Renames: `need-approve → review`, `approved → completed`. New: `estimation` (initial — decide if stage is needed), `required` (needed but not started), `rejected` (unrealizable, needs upstream rework). `pause` folded into `pending` (semantic shift: blocked, not "deferred").
+- ~~Initial state at scaffold = `estimation` for every stage~~ (was `pending`). Tracking template + all docs updated.
+- ~~Status derivation rewritten~~: `impl ∈ {estimation, required}` → `backlog`; all of `{impl, verif, term} ∈ {completed, skipped}` → `done`; otherwise `in-progress`. `pending`/`rejected` keep status `in-progress`.
+- ~~Stage derivation rewritten~~: first stage whose state ≠ `{completed, skipped}`. Fresh-scaffold change has `stage: refinement` (not `none`).
+- ~~/change no-arg view rewritten~~: dropped the bucket picker. Now always lists ALL 4 buckets in fixed order (backlog → in-progress → done → declined), top 3 per bucket with `+ N more.` overflow. Per-bucket sections, header line, blank line between.
+- ~~Action menu in drill view rewritten~~ to use new state names (`Start (in-progress)` / `Send to review` / `Approve (completed)` / `Reject` / `Mark required` / `Mark blocked (pending)` / etc.). Context-aware per stage-state.
+- ~~Pretty date format~~: `change.sh list` TSV now emits 11 columns — added `last_event_pretty` (col 10) formatted as `monday [10:30] [25 feb]` (full lowercase day, abbreviated month). BSD `date -j -f` primary, GNU `date -d` fallback.
+- ~~Skills+agent updated~~: spec-conventions, spec-lifecycle, spec-refinement, system-analyst (state-name refs); README + ARCHITECTURE.md.
+- No auto-migration from 0.8.x — state-name renames are incompatible with existing tracking.yaml files; rebuild .spec/ from /foundry:setup or hand-edit.
+
 ## Shipped (v0.8.1) — list rendering: icon-prefixed plain list
 
 - ~~/change Step 2: drop markdown table~~. Replace with one-line-per-item plain list, prefixed by status icon: `○` backlog, `●` in-progress, `✓` done, `⊗` declined. Format: `<icon> <title> — <last_event_at>`. Multi-bucket view (closed = done+declined) prints per-bucket sections with single-word headers. For declined rows, second indented line shows `reason: <decline_reason>`. Fresh-scaffold items (no history) omit the ` — <date>` suffix.

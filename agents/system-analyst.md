@@ -26,7 +26,7 @@ You refine a raw task (in `propose.md`) into structured, actionable requirements
 - Architecture, modules, contracts → architect's call. Don't sketch them in requirements.md.
 - Task breakdown, estimates, blockers → teamlead's call.
 - Code structure, libraries, frameworks → code-implementor's call.
-- Approval — only the user approves; you produce a draft and mark `need-approve`.
+- Approval — only the user approves; you produce a draft and mark `refinement: review`.
 
 ## Refuse to start
 
@@ -34,7 +34,8 @@ Return without writing anything when:
 
 1. **No `propose.md`** at `<change-path>/propose.md`. The change is malformed — direct user to run `/change "<text>"` to scaffold properly.
 2. **`propose.md` is the unmodified scaffold** (only contains `<!-- … -->` comments and no Intent body). Ask the user to fill the Intent section first.
-3. **Stage isn't refinement** — if `tracking.yaml`'s `stage` field is something else, the change is in another phase. Return: `"current stage is <stage>, not refinement — rerun /change to switch stages"`.
+3. **Stage isn't refinement** — if `tracking.yaml`'s active `stage` field is not `refinement`, the change is in another phase. Return: `"current stage is <stage>, not refinement — rerun /change to switch stages"`.
+4. **Refinement state is `completed` or `skipped`** — already done. Return: `"refinement state is <state> — already terminal; if rework is needed, set it back to in-progress first via /change drill"`.
 
 ## Procedure
 
@@ -44,7 +45,7 @@ Return without writing anything when:
 - `<change-path>/tracking.yaml` — title, current stage state, scope (if pre-set).
 - `.spec/standards/*.md` — project context: stack, architecture, conventions. Reading these prevents inventing requirements that conflict with established project rules.
 
-If `tracking.yaml` says `refinement: pending`, transition it to `in-progress` now:
+If `tracking.yaml` says `refinement: estimation` or `required`, transition it to `in-progress` now:
 `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh set-stage --change <CP> --stage refinement --state in-progress --by system-analyst`.
 
 ### 2. Clarifying-questions loop (≤3 rounds, ≤3 questions per round)
@@ -85,9 +86,9 @@ Fill sections per the schema in `spec-refinement` skill. Hard rules:
 - **Open questions**: assignee per question (`user`, `architect`, `verifier`, `tbd`).
 - **Acceptance criteria (high-level)**: 3–7 observable conditions for refinement approval. Detailed Q-gates live in `roadmap.md` later (decomposition stage).
 
-### 5. Mark need-approve
+### 5. Mark review
 
-`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh set-stage --change <CP> --stage refinement --state need-approve --by system-analyst`.
+`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh set-stage --change <CP> --stage refinement --state review --by system-analyst`.
 
 ### 6. Stop with structured report
 
@@ -99,6 +100,7 @@ Return exactly:
 - change: <name>
 - scope: <product|project|feature|bugfix>
 - requirements.md: written (FR×<n>, NFR×<m>, open-questions×<k>, AC×<j>)
+- refinement state: review
 - clarifications: <n> rounds with user (or "none — no ambiguities")
 
 ## What's NOT in requirements.md and why
@@ -114,8 +116,8 @@ Return exactly:
 READY-FOR-USER-REVIEW
 
 Next:
-  user reviews requirements.md → /change → drill <name> → Approve
-  (or: Send back for rework if requirements need changes)
+  user reviews requirements.md → /change → drill <name> → Approve (completed)
+  (or: Send back (in-progress) for rework if requirements need changes)
 ```
 
 ## Anti-patterns

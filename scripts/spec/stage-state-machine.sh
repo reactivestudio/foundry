@@ -15,27 +15,46 @@
 set -eu
 
 # === state set + transitions table ===
-# States: pending | in-progress | need-approve | approved | pause | skipped
+# States: estimation | required | skipped | pending | in-progress | review | completed | rejected
+#
+# Semantics:
+#   estimation  — initial; deciding whether this stage is needed for this change.
+#   required    — decided needed, not yet active (waiting on caller / scheduling).
+#   skipped     — decided not needed for this change (terminal-for-stage).
+#   pending     — needed and started, but currently blocked by an external factor.
+#   in-progress — active work by the owning agent.
+#   review      — artifact ready, awaiting user / peer review.
+#   completed   — review approved (terminal-for-stage).
+#   rejected    — unrealizable as currently scoped; requires upstream stages to be
+#                 revisited (compromise / clarification). Re-entry happens via the
+#                 upstream stage flipping back to in-progress; this stage returns to
+#                 in-progress (or required) once unblocked.
 #
 # Allowed transitions:
-#   pending      → in-progress | skipped
-#   in-progress  → need-approve | pause | skipped
-#   pause        → in-progress | skipped
-#   need-approve → approved | in-progress       (in-progress = rework after rejection)
-#   approved     → in-progress | skipped         (back-edge: later stage flags rework)
-#   skipped      → in-progress                   (rare: stage reclassified as needed)
+#   estimation   → required | skipped | in-progress    (in-progress = decide+start in one step)
+#   required     → pending | in-progress | skipped
+#   pending      → in-progress | required | skipped     (unblock, re-eval need, or de-scope)
+#   in-progress  → review | pending | rejected | skipped
+#   review       → completed | in-progress | rejected
+#   completed    → in-progress | rejected               (back-edges from downstream)
+#   skipped      → required | in-progress                (reclassified as needed)
+#   rejected     → required | in-progress                (upstream fixed, resume)
+#
+# estimation is initial-only — no transition returns to it.
 
-VALID_STATES="pending in-progress need-approve approved pause skipped"
+VALID_STATES="estimation required skipped pending in-progress review completed rejected"
 
 allowed_from_state() {
   case "$1" in
-    pending)      echo "in-progress skipped" ;;
-    in-progress)  echo "need-approve pause skipped" ;;
-    pause)        echo "in-progress skipped" ;;
-    need-approve) echo "approved in-progress" ;;
-    approved)     echo "in-progress skipped" ;;
-    skipped)      echo "in-progress" ;;
-    *)            echo "" ;;
+    estimation)  echo "required skipped in-progress" ;;
+    required)    echo "pending in-progress skipped" ;;
+    pending)     echo "in-progress required skipped" ;;
+    in-progress) echo "review pending rejected skipped" ;;
+    review)      echo "completed in-progress rejected" ;;
+    completed)   echo "in-progress rejected" ;;
+    skipped)     echo "required in-progress" ;;
+    rejected)    echo "required in-progress" ;;
+    *)           echo "" ;;
   esac
 }
 

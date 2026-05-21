@@ -65,14 +65,14 @@ description: |
   Adds TOTP-based 2FA per RFC 6238 with Google Authenticator support.
   Supports QR-code provisioning and recovery codes.
 status: backlog                             # derived: backlog | in-progress | done | declined
-stage: none                                 # derived: none | refinement | design | … | termination
+stage: refinement                           # derived: refinement | design | … | termination | none
 scope: ""                                   # "" | product | project | feature | bugfix
-refinement:     pending
-design:         pending
-decomposition:  pending
-implementation: pending
-verification:   pending
-termination:    pending
+refinement:     estimation                  # state per stage; see spec-lifecycle for state machine
+design:         estimation
+decomposition:  estimation
+implementation: estimation
+verification:   estimation
+termination:    estimation
 history:
   - { at: "2026-05-21 19:47:14", stage: refinement, status: in-progress, by: user }
   # …append-only, ONLY real stage transitions…
@@ -87,7 +87,7 @@ decline_reason: "<reason text>"
 - **`title:`** — single-line quoted, up to ~120 chars. Imperative phrase.
 - **`description:`** — YAML `|`-literal block, multi-line, up to ~500 chars. Body indented 2 spaces.
 - **`status:` and `stage:` are derived** — `tracking.sh sync` recomputes both on every state mutation. Never edit by hand; the next `set-stage` overwrites drift.
-- **Stage keys** (`refinement` … `termination`) — exactly 6 top-level keys, no nested `stages:` block. Each value is one of 6 stage states. Order convention: refinement → design → decomposition → implementation → verification → termination. Value column alignment is cosmetic.
+- **Stage keys** (`refinement` … `termination`) — exactly 6 top-level keys, no nested `stages:` block. Each value is one of **8 stage states**: `estimation | required | skipped | pending | in-progress | review | completed | rejected`. Order convention: refinement → design → decomposition → implementation → verification → termination. Value column alignment is cosmetic. Initial state for every stage at scaffold time is `estimation`.
 - **`history:` block** — append-only flow-style entries. Each: `{ at, stage, status, by }`. `at` is `YYYY-MM-DD HH:MM:SS` (seconds precision). Always the **last** section. **Only real stage transitions** — no `created`, no `moved-to-*`, no `scope-set:*`, no `lifecycle`. Empty history at scaffold time is normal.
 
 ### Why strict + flat schema

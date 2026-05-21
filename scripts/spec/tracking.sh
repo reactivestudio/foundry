@@ -15,7 +15,7 @@
 #   tracking.sh append-history --change <path> --stage <s> --status <st> --by <who>
 #
 # Stages (6):       refinement design decomposition implementation verification termination
-# Stage states (6): pending in-progress need-approve approved pause skipped
+# Stage states (8): estimation required skipped pending in-progress review completed rejected
 # Scopes (4):       product project feature bugfix
 # Statuses (4):     backlog in-progress done declined
 #
@@ -126,14 +126,15 @@ rewrite_stage() {
 #
 # Rules (in order):
 #   1. decline_reason present → declined
-#   2. implementation == pending → backlog (planning still ongoing or not started)
-#   3. all of {implementation, verification, termination} ∈ {approved, skipped} → done
+#   2. implementation ∈ {estimation, required} → backlog (impl not yet active)
+#   3. all of {implementation, verification, termination} ∈ {completed, skipped} → done
 #   4. otherwise → in-progress
 #
-# Key invariant: once implementation leaves `pending`, the change can only move
-# to `in-progress` or `done` (or `declined`). A pending termination after a
-# completed verification keeps the change `in-progress` until termination is
-# closed (approved or skipped).
+# Key invariant: once implementation moves past {estimation, required} the
+# change is "in motion" and stays `in-progress` (or moves to `done`) — it does
+# NOT slide back to `backlog`. A `pending` (= blocked) impl still counts as
+# in-progress for bucket purposes. `rejected` likewise stays `in-progress`
+# pending upstream-stage rework.
 compute_status() {
   local tracking=$1
   local declined_reason
@@ -146,25 +147,26 @@ compute_status() {
   impl=$(read_stage "$tracking" implementation)
   verif=$(read_stage "$tracking" verification)
   term=$(read_stage "$tracking" termination)
-  if [ "$impl" = pending ]; then
-    echo backlog
-    return
-  fi
-  case "$impl" in approved|skipped) ;; *) echo in-progress; return ;; esac
-  case "$verif" in approved|skipped) ;; *) echo in-progress; return ;; esac
-  case "$term"  in approved|skipped) ;; *) echo in-progress; return ;; esac
+  case "$impl" in
+    estimation|required) echo backlog; return ;;
+  esac
+  case "$impl"  in completed|skipped) ;; *) echo in-progress; return ;; esac
+  case "$verif" in completed|skipped) ;; *) echo in-progress; return ;; esac
+  case "$term"  in completed|skipped) ;; *) echo in-progress; return ;; esac
   echo done
 }
 
-# Compute current active stage (first non-{approved,skipped,pending} stage,
-# or first non-terminal stage if any in-progress/need-approve/pause).
-# Echoes one of $VALID_STAGES, or "none" if no stage active.
+# Compute current active stage. A stage is "active" if its state is anything
+# other than {completed, skipped} — i.e. work is still due on it. The active
+# stage is the first such stage in canonical order. If all stages are
+# completed/skipped (typically a `done` change), echo "none".
 compute_stage() {
   local tracking=$1 s state
   for s in $VALID_STAGES; do
     state=$(read_stage "$tracking" "$s")
     case "$state" in
-      in-progress|need-approve|pause) echo "$s"; return ;;
+      completed|skipped) continue ;;
+      *) echo "$s"; return ;;
     esac
   done
   echo none

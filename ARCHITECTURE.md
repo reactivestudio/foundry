@@ -14,33 +14,43 @@
 
 ## Current `.spec/` subsystem (v0.7.0)
 
-A change in `.spec/changes/` flows through 4 bucket directories (`backlog/`, `in-progress/`, `done/`, `declined/`) and 6 stages (`refinement`, `design`, `decomposition`, `implementation`, `verification`, `termination`), each with its own state (`pending | in-progress | need-approve | approved | pause | skipped`).
+A change in `.spec/changes/` flows through 4 bucket directories (`backlog/`, `in-progress/`, `done/`, `declined/`) and 6 stages (`refinement`, `design`, `decomposition`, `implementation`, `verification`, `termination`), each with its own state from an 8-element set: `estimation | required | skipped | pending | in-progress | review | completed | rejected`.
 
 ### State machine (per stage)
 
 ```
-pending → in-progress → need-approve → approved
-   │         ▲   │           │              │
-   │         │   ▼           ▼              ▼
-   │         │  pause     in-progress   in-progress    (back-edges)
-   │         └───┘
-   └──► skipped ◄── (any state, when stage is unnecessary)
+estimation ──→ required ──→ in-progress ──→ review ──→ completed
+   │              │     ↑      │   ↑           │            │
+   │              ▼     │      ▼   │           ▼            ▼
+   │           pending ─┘   pending └──── in-progress    rejected (← from anywhere; resume via upstream-fix)
+   │              │  (blocked)
+   ▼              ▼
+skipped ◄────────────────── (any non-terminal state, when stage is unnecessary)
 ```
+
+- `estimation` = initial; decide if the stage is needed.
+- `required` = needed, not yet started.
+- `pending` = needed and started, but currently blocked.
+- `in-progress` = active work.
+- `review` = artifact ready, awaiting user / peer approval.
+- `completed` = approved (terminal-for-stage).
+- `skipped` = decided not needed (terminal-for-stage).
+- `rejected` = unrealizable as scoped; needs upstream stages revisited.
 
 ### Status derivation (auto)
 
-Top-level `status:` in `tracking.yaml` mirrors the bucket and is derived from stages + decline state.
+Top-level `status:` mirrors the bucket and is derived from impl/verif/term states + decline_reason.
 
 | Condition | Status / Bucket |
 |---|---|
 | `decline_reason:` field present | `declined` (terminal) |
-| Any of `{implementation, verification, termination}` ∈ {in-progress, need-approve, pause} | `in-progress` |
-| All of `{implementation, verification, termination}` ∈ {approved, skipped} | `done` |
-| otherwise | `backlog` |
+| `implementation ∈ {estimation, required}` | `backlog` (impl not yet active) |
+| All of `{implementation, verification, termination}` ∈ {completed, skipped} | `done` |
+| otherwise | `in-progress` |
 
-`pause` does not move the change — it stays where it is. `tracking.sh sync` rewrites both `status:` and `stage:` fields on every state mutation.
+Once `implementation` leaves `{estimation, required}`, the change cannot return to `backlog`. `pending` (blocked) and `rejected` both keep status `in-progress`. `tracking.sh sync` rewrites both `status:` and `stage:` fields on every state mutation.
 
-Top-level `stage:` is the first stage (in canonical order) whose state is in `{in-progress, need-approve, pause}`; `none` if no stage is currently active.
+Top-level `stage:` is the first stage (in canonical order) whose state is **not** in `{completed, skipped}`; `none` if all stages are terminal (typical of a `done` change).
 
 ### YAML schema is flat
 

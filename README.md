@@ -64,13 +64,13 @@ The marketplace and the plugin share this repository — both manifests live in 
 
 ### `.spec/` change workflow (4 buckets + per-stage tracking)
 
-A change moves through 4 directories — `backlog/` → `in-progress/` → `done/` (or `→ declined/`). Each change has 6 stages (`refinement`, `design`, `decomposition`, `implementation`, `verification`, `termination`), each with its own state (`pending | in-progress | need-approve | approved | pause | skipped`). Top-level `status:` and `stage:` fields are derived from the stages. Spec-commands are **state API only** — they don't generate content (agents do).
+A change moves through 4 directories — `backlog/` → `in-progress/` → `done/` (or `→ declined/`). Each change has 6 stages (`refinement`, `design`, `decomposition`, `implementation`, `verification`, `termination`), each with its own state from an 8-element set (`estimation | required | skipped | pending | in-progress | review | completed | rejected`). Top-level `status:` and `stage:` fields are derived from the stages. Spec-commands are **state API only** — they don't generate content (agents do).
 
 | Command | Purpose |
 |---|---|
-| `/change` | No args → interactive: pick bucket (backlog / in-progress / closed) → table → drill into a change → context-aware actions (advance / approve / send-back / pause / skip / decline / set scope). With text → LLM-generates slug + description, scaffolds new change in backlog, writes full task text to `propose.md`. |
+| `/change` | No args → list all 4 buckets (top 3 per bucket, icon-prefixed) → drill into a change → context-aware actions (start / send to review / approve / reject / skip / decline / set scope). With text → LLM-generates slug + description, scaffolds new change in backlog, writes full task text to `propose.md`, offers to launch the `system-analyst` agent for refinement. |
 
-`/change` is the **only** user-facing slash command for `.spec/changes/` besides `/setup`. Everything else (state setters, listing other buckets, drilling into a specific change) folds into the same interactive flow. Auto-move: a change auto-flips to `in-progress/` when any of `{implementation, verification, termination}` is active, and to `done/` when all three are `approved`/`skipped`. Decline: from the drill menu, or natural language ("decline X because Y").
+`/change` is the **only** user-facing slash command for `.spec/changes/` besides `/setup`. Auto-move: a change auto-flips to `in-progress/` when implementation leaves `{estimation, required}`, and to `done/` when all three terminal stages (implementation, verification, termination) reach `completed` or `skipped`. Decline: from the drill menu, or natural language ("decline X because Y"). The `0.9.0` line is a breaking change from 0.8.x: state set rewritten (added `estimation`, `required`, `rejected`; renamed `need-approve→review`, `approved→completed`; `pause` folded into `pending`).
 
 The `0.7.x` model is a breaking change from `0.6.x`: added `termination` stage, flat `tracking.yaml` schema (stage keys at top level — no nested `stages:` block), explicit `stage:` field (derived), dropped `/in-progress`, `/closed`, `/track` commands (folded into `/change`), dropped `spec-workflow` skill. No auto-migration — start fresh or hand-edit existing `tracking.yaml` files.
 

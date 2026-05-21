@@ -3,12 +3,12 @@ title: "{{title}}"
 description: |
   {{description}}
 status: backlog
-stage: none
+stage: refinement
 scope: ""
-refinement:     pending
-design:         pending
-decomposition:  pending
-implementation: pending
-verification:   pending
-termination:    pending
+refinement:     estimation
+design:         estimation
+decomposition:  estimation
+implementation: estimation
+verification:   estimation
+termination:    estimation
 history:

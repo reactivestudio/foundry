@@ -279,10 +279,29 @@ cmd_list() {
     END { if (last != "") print last }' "$1"
   }
 
-  # Output columns (TSV):
-  # bucket  name  title  status  stage  stage_state  scope  roadmap  last_event_at  path
+  # Format an ISO timestamp ("YYYY-MM-DD HH:MM:SS") as "<day> [HH:MM] [DD mon]"
+  # in lowercase. BSD date(1) is tried first (macOS), GNU date(1) second
+  # (Linux). Empty input → empty output.
+  format_pretty_date() {
+    local iso=$1 out
+    if [ -z "$iso" ] || [ "$iso" = "—" ]; then
+      return
+    fi
+    if out=$(date -j -f "%Y-%m-%d %H:%M:%S" "$iso" "+%A [%H:%M] [%d %b]" 2>/dev/null); then
+      printf '%s' "$out" | tr '[:upper:]' '[:lower:]'
+      return
+    fi
+    if out=$(date -d "$iso" "+%A [%H:%M] [%d %b]" 2>/dev/null); then
+      printf '%s' "$out" | tr '[:upper:]' '[:lower:]'
+      return
+    fi
+    printf '%s' "$iso"
+  }
 
-  local b d name tracking abs title status stage stage_state scope roadmap_md roadmap_progress last_event
+  # Output columns (TSV):
+  # bucket  name  title  status  stage  stage_state  scope  roadmap  last_event_at  last_event_pretty  path
+
+  local b d name tracking abs title status stage stage_state scope roadmap_md roadmap_progress last_event last_event_pretty
   for b in $buckets; do
     local bdir=".spec/changes/$b"
     [ -d "$bdir" ] || continue
@@ -292,8 +311,8 @@ cmd_list() {
       [ "$name" = ".template" ] && continue
       tracking="$d/tracking.yaml"
       if [ ! -f "$tracking" ]; then
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-          "$b" "$name" "—" "—" "—" "—" "—" "—" "—" "$d"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+          "$b" "$name" "—" "—" "—" "—" "—" "—" "—" "—" "$d"
         continue
       fi
       abs=$(cd "$d" && pwd)
@@ -318,8 +337,10 @@ cmd_list() {
       fi
       last_event=$(read_last_event_at "$tracking")
       [ -z "$last_event" ] && last_event="—"
-      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$b" "$name" "$title" "$status" "$stage" "$stage_state" "$scope" "$roadmap_progress" "$last_event" "$abs"
+      last_event_pretty=$(format_pretty_date "$last_event")
+      [ -z "$last_event_pretty" ] && last_event_pretty="—"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$b" "$name" "$title" "$status" "$stage" "$stage_state" "$scope" "$roadmap_progress" "$last_event" "$last_event_pretty" "$abs"
     done
   done
 }
@@ -336,7 +357,7 @@ Subcommands:
   list          [--bucket backlog|in-progress|done|declined]
 
 List output columns (TSV):
-  bucket  name  title  status  stage  stage_state  scope  roadmap  last_event_at  path
+  bucket  name  title  status  stage  stage_state  scope  roadmap  last_event_at  last_event_pretty  path
 
 Buckets:        $VALID_BUCKETS
 Reserved names: $RESERVED_NAMES
