@@ -20,6 +20,15 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.9.1) — tabbed /change view + aligned status column + bracketed date
+
+- ~~Tabs replace per-bucket sections~~: `**All [N_all]** · backlog [N_backlog] · in-progress [N_in_progress] · closed [N_closed]` with bold marking the active tab. `closed` = done + declined merged. Default tab on first entry: `All`.
+- ~~TAB_LIMIT = 10~~ items per tab (was 3), with `... and <N-10> more in <tab>.` overflow line.
+- ~~Tab switching~~: Step 5 action menu now has 4 options — `Switch tab` / `Drill` / `Add new` / `Exit`. Switch tab → nested AskUserQuestion `"Which tab?"` with the 4 tab options.
+- ~~Browse form is now a loop~~: each iteration re-fetches counts, re-renders header + list, re-asks action menu. Maintains `CURRENT_TAB` state across iterations.
+- ~~Aligned status column~~: each row prints `<icon>  <status_padded_to_11>  <title>  <date>`. Padding 11 = width of longest status (`in-progress`). Date suppressed when fresh-scaffold (no history).
+- ~~Date format~~: `[monday, 10:30] [25 feb]` (bracket-wrapped, comma between day and time). Was: `monday [10:30] [25 feb]`. format_pretty_date in change.sh updated.
+
 ## Shipped (v0.9.0) — breaking: state machine rewrite (8 states), all-buckets list, pretty dates
 
 - ~~Stage state machine rewritten (8 states)~~: `estimation | required | skipped | pending | in-progress | review | completed | rejected`. Was: `pending | in-progress | need-approve | approved | pause | skipped`. Renames: `need-approve → review`, `approved → completed`. New: `estimation` (initial — decide if stage is needed), `required` (needed but not started), `rejected` (unrealizable, needs upstream rework). `pause` folded into `pending` (semantic shift: blocked, not "deferred").

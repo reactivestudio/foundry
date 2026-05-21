@@ -279,19 +279,20 @@ cmd_list() {
     END { if (last != "") print last }' "$1"
   }
 
-  # Format an ISO timestamp ("YYYY-MM-DD HH:MM:SS") as "<day> [HH:MM] [DD mon]"
-  # in lowercase. BSD date(1) is tried first (macOS), GNU date(1) second
-  # (Linux). Empty input → empty output.
+  # Format an ISO timestamp ("YYYY-MM-DD HH:MM:SS") as
+  # "[<day>, HH:MM] [DD mon]" in lowercase.
+  # BSD date(1) is tried first (macOS), GNU date(1) second (Linux).
+  # Empty input → empty output.
   format_pretty_date() {
     local iso=$1 out
     if [ -z "$iso" ] || [ "$iso" = "—" ]; then
       return
     fi
-    if out=$(date -j -f "%Y-%m-%d %H:%M:%S" "$iso" "+%A [%H:%M] [%d %b]" 2>/dev/null); then
+    if out=$(date -j -f "%Y-%m-%d %H:%M:%S" "$iso" "+[%A, %H:%M] [%d %b]" 2>/dev/null); then
       printf '%s' "$out" | tr '[:upper:]' '[:lower:]'
       return
     fi
-    if out=$(date -d "$iso" "+%A [%H:%M] [%d %b]" 2>/dev/null); then
+    if out=$(date -d "$iso" "+[%A, %H:%M] [%d %b]" 2>/dev/null); then
       printf '%s' "$out" | tr '[:upper:]' '[:lower:]'
       return
     fi

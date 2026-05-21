@@ -17,40 +17,66 @@ This is the **only** user-facing slash command for `.spec/changes/` (besides `/s
 
 ### Step 0 — Decide form
 
-If `$ARGUMENTS` (trimmed) is empty → **Browse form** (Steps 1–4). Otherwise → **Add form** (Steps 6–10).
+If `$ARGUMENTS` (trimmed) is empty → **Browse form** (Steps 1–6, loops in Step 5 / Step 6). Otherwise → **Add form** (Steps 7–11).
 
 ---
 
 ### Browse form
 
-**Step 1 — Fetch + render all 4 buckets.**
+This form is a **tabbed UI** that loops until the user exits. State across iterations: `CURRENT_TAB` (default `"All"`). On every loop iteration: re-fetch counts, render tab header, render the current tab's list, ask the action menu.
 
-For EACH bucket in this fixed order — `backlog`, `in-progress`, `done`, `declined` — do:
+**Step 1 — Fetch counts (every iteration).**
 
-1. `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh list --bucket <b>`. TSV columns (11): `bucket name title status stage stage_state scope roadmap last_event_at last_event_pretty path`.
-2. Sort rows by `last_event_at` (column 9) desc.
-3. Capture row count `N_b`.
-4. Take top **`PER_BUCKET_LIMIT = 3`** rows.
+`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh list` (no `--bucket` flag — emits TSV across all 4 buckets). TSV columns (11): `bucket name title status stage stage_state scope roadmap last_event_at last_event_pretty path`.
 
-Render the bucket section. Format:
+Compute counts:
+- `N_backlog` = rows with col 1 = `backlog`
+- `N_in_progress` = rows with col 1 = `in-progress`
+- `N_done` = rows with col 1 = `done`
+- `N_declined` = rows with col 1 = `declined`
+- `N_closed` = `N_done + N_declined`
+- `N_all` = total rows
+
+**Step 2 — Render tab header.**
+
+Print one line, with the active tab wrapped in `**…**` (markdown bold). Use ` · ` as separator. Use the literal names below — no other variations.
 
 ```
-<bucket>:
-<icon>  <title>  <last_event_pretty>
-<icon>  <title>  <last_event_pretty>
-<icon>  <title>  <last_event_pretty>
-+ <N-3> more.
+Tabs: **All [N_all]** · backlog [N_backlog] · in-progress [N_in_progress] · closed [N_closed]
+```
+
+Always exactly 4 tabs in this fixed order: `All`, `backlog`, `in-progress`, `closed`. (Note: `closed` combines `done + declined`.) Bold only the active tab; leave the others plain.
+
+**Step 3 — Render list for the current tab.**
+
+Pick rows for the current tab:
+- `All` → all rows, sort by `last_event_at` (col 9) desc.
+- `backlog` → rows with col 1 = `backlog`, sorted desc.
+- `in-progress` → rows with col 1 = `in-progress`, sorted desc.
+- `closed` → rows with col 1 ∈ `{done, declined}`, sorted desc.
+
+Take top `TAB_LIMIT = 10`. Capture `N_tab` (rows in current tab).
+
+If `N_tab = 0`:
+- Print `  (empty)`.
+- Skip to Step 4.
+
+Else render as plain list, with status column aligned. Format per row:
+
+```
+<icon>  <status_padded>  <title>  <last_event_pretty>
 ```
 
 Rules:
-- Header line is the bucket name + `:` (lowercase, no markdown).
-- Each row: icon (one glyph) + **two spaces** + title + **two spaces** + `last_event_pretty` (column 10 from TSV — already formatted as `wednesday [10:30] [25 feb]`).
-- If `last_event_pretty` is `—` (fresh scaffold, no history yet), drop the trailing ` <date>` — just print `<icon>  <title>`.
-- If `N_b == 0`: print `  (empty)` on a single indented line under the header (still emit the header).
-- If `N_b > PER_BUCKET_LIMIT`: append `+ <N_b - PER_BUCKET_LIMIT> more.` as the last line of that section.
-- One blank line between bucket sections.
+- `<icon>` = one glyph from the table below (selected by col 4 `status`).
+- `<status_padded>` = TSV col 4 (`backlog | in-progress | done | declined`) padded with **right-side spaces** to width **11** (longest is `in-progress`). Example: `done       ` (4 chars + 7 spaces).
+- Two spaces between each piece.
+- `<last_event_pretty>` = TSV col 10 — already formatted as `[thursday, 21:56] [21 may]`.
+- If `last_event_pretty` is `—` (fresh scaffold, no history), drop the trailing ` <date>` — just `<icon>  <status_padded>  <title>`.
+- For `declined` rows: read `decline_reason:` via `grep '^decline_reason:' <path>/tracking.yaml` and print as a second line indented to align under the title column (15 spaces of indent), prefixed by `reason:`.
+- After the last row, if `N_tab > TAB_LIMIT`: append `... and <N_tab - TAB_LIMIT> more in <CURRENT_TAB>.`
 
-**Icon by status (TSV column 4):**
+**Icon by status (TSV col 4):**
 
 | status | icon | codepoint |
 |---|---|---|
@@ -59,53 +85,56 @@ Rules:
 | `done` | `✓` | U+2713 |
 | `declined` | `⊗` | U+2297 |
 
-For `declined` rows: read `decline_reason:` via `grep '^decline_reason:' <path>/tracking.yaml` and print as an indented second line `   reason: <text>` (3 spaces of indent).
-
-**Example complete output:**
+**Example output (All tab, 12 items total):**
 
 ```
-backlog:
-○  Refactor user service  monday [10:30] [19 may]
-○  Migrate Postgres 15  sunday [16:00] [18 may]
-+ 4 more.
+Tabs: **All [12]** · backlog [4] · in-progress [3] · closed [5]
 
-in-progress:
-●  Add two-factor authentication via TOTP  wednesday [16:00] [21 may]
-●  Fix login rate limit  tuesday [09:15] [20 may]
-
-done:
-✓  Upgrade Kotlin 2.1  friday [12:00] [16 may]
-
-declined:
-⊗  Bad idea
-   reason: duplicate of add-2fa-totp
+●  in-progress  Add two-factor authentication via TOTP  [thursday, 21:56] [21 may]
+●  in-progress  Tune login rate limit                   [thursday, 21:55] [21 may]
+✓  done         Upgrade Kotlin 2.1                      [thursday, 12:00] [16 may]
+⊗  declined     Refactor user service                   [thursday, 21:35] [21 may]
+               reason: duplicate of larger refactor
+○  backlog      Migrate Postgres 15                     [sunday, 16:00] [18 may]
+... and 2 more in All.
 ```
 
-`PER_BUCKET_LIMIT` will become configurable later — for now hardcoded to 3.
+**Step 4 — Build `DRILL_OPTIONS`.**
 
-**Step 2 — Build `DRILL_OPTIONS`.**
+Top 4 names FROM THE CURRENT TAB's rows (already sorted desc), so the drill picker reflects what the user is currently looking at. Empty if `N_tab = 0`.
 
-Collect top 4 names ACROSS ALL buckets by `last_event_at` desc (so the drill picker shows the most recently touched changes regardless of bucket). If total rows across all buckets = 0 → `DRILL_OPTIONS` is empty.
-
-**Step 3 — Action menu.**
+**Step 5 — Action menu.**
 
 - **AskUserQuestion:** `"What next?"` (header `"Action"`):
-  - `"Drill into a change"` — description: `"Pick a change to see details + take action."` (omit if `DRILL_OPTIONS` empty)
+  - `"Switch tab"` — description: `"Pick a different tab (All / backlog / in-progress / closed)."`
+  - `"Drill into a change"` — description: `"Pick a change from the current tab to see details + take action."` (omit if `DRILL_OPTIONS` empty)
   - `"Add new change"` — description: `"Scaffold a new change in backlog/. Asks for task text."`
   - `"Exit"` — description: `"Done."`
 
-- If `"Add new change"` → ask for task text via a single-question free-text AskUserQuestion (the user types into Other), set `TASK_TEXT`, jump to **Step 6**.
-- If `"Exit"` → done.
-- If `"Drill into a change"`:
+Branch:
+
+- **Switch tab** → nested AskUserQuestion `"Which tab?"` (header `"Tab"`):
+  - `"All"` — `"All changes across every bucket [<N_all>]."`
+  - `"backlog"` — `"Not yet picked up [<N_backlog>]."`
+  - `"in-progress"` — `"Implementation / verification / termination active [<N_in_progress>]."`
+  - `"closed"` — `"done + declined combined [<N_closed>]."`
+
+  Set `CURRENT_TAB` to the answer (or to the literal Other free-text if user typed one), then loop back to Step 1.
+
+- **Add new change** → ask for task text via a single free-text AskUserQuestion (Other only), set `TASK_TEXT`, jump to **Step 7** (Add form).
+
+- **Exit** → stop the loop.
+
+- **Drill into a change**:
   - **AskUserQuestion:** `"Which change?"` (header `"Change"`):
     - Show up to 4 names from `DRILL_OPTIONS` with description `"<icon>  <title>  ·  <stage>/<state>"`. Other = free-form name.
-  - Set `CHANGE_NAME=<answer>`. Continue to Step 4.
+  - Set `CHANGE_NAME=<answer>`. Continue to **Step 6** (Drill).
 
-**Step 4 — Drill into change.**
+**Step 6 — Drill into change.**
 
-`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh locate --name <CHANGE_NAME>` → `$CP`. On failure: report + loop back to Step 3.
+`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh locate --name <CHANGE_NAME>` → `$CP`. On failure: report + loop back to Step 5.
 
-`Read` `$CP/tracking.yaml`. Render (prefix with the status icon from the Step 1 table):
+`Read` `$CP/tracking.yaml`. Render (prefix with the status icon from Step 3):
 ```
 <icon> <CHANGE_NAME> — <title>
   status:  <status>          stage: <stage>
@@ -159,17 +188,17 @@ If `$CP/roadmap.md` exists → also call `roadmap.sh status --roadmap $CP/roadma
 - **Decline**: prompt for reason (free text via AskUserQuestion Other), then `tracking.sh decline --change $CP --reason "<reason>" --by user` + `change.sh move --name <name> --to declined --by user`.
 - **Show propose.md / roadmap / requirements**: `Read` the file and print.
 
-After each action, re-render the change view (loop in Step 4) until user picks "Back" or "Exit".
+After each action, re-render the change view (loop in Step 6) until user picks "Back" (return to browse loop, Step 1) or "Exit" (stop entirely).
 
 ---
 
 ### Add form
 
-**Step 6 — Receive `TASK_TEXT`.**
+**Step 7 — Receive `TASK_TEXT`.**
 
-If reached from Step 3 ("Add new change"), `TASK_TEXT` is the user's free-form answer. Otherwise `TASK_TEXT` = `$ARGUMENTS` verbatim. If `--name <slug>` is present, capture explicit slug override and strip from `TASK_TEXT`.
+If reached from Step 5 ("Add new change"), `TASK_TEXT` is the user's free-form answer. Otherwise `TASK_TEXT` = `$ARGUMENTS` verbatim. If `--name <slug>` is present, capture explicit slug override and strip from `TASK_TEXT`.
 
-**Step 7 — LLM-generate slug + title + description.**
+**Step 8 — LLM-generate slug + title + description.**
 
 Thinking step. From `TASK_TEXT` produce:
 
@@ -179,14 +208,14 @@ Thinking step. From `TASK_TEXT` produce:
 
 If `TASK_TEXT` ≤ 20 chars, reuse as TITLE and set DESCRIPTION to TITLE.
 
-**Step 8 — Scaffold.**
+**Step 9 — Scaffold.**
 
 `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh new --title "<TITLE>" --name "<SLUG>" --description "<DESCRIPTION>"`. Pass multi-line DESCRIPTION in double quotes — `change.sh new` indents body lines under `description: |`. Capture stdout (absolute path) as `CP`.
 
 - Exit 1 (collision / invalid) → if collision and no `--name` override, regenerate SLUG with an extra differentiating segment and retry once. After second failure → ask user for explicit slug.
 - Exit 3 (template missing) → tell user to run `/foundry:setup` first. Exit.
 
-**Step 9 — Inject `TASK_TEXT` into `propose.md`'s `## Intent` section.**
+**Step 10 — Inject `TASK_TEXT` into `propose.md`'s `## Intent` section.**
 
 `Read` `$CP/propose.md`. The scaffold has three sections: `## Intent`, `## Context`, `## Notes`. Each starts with a `<!-- … -->` HTML comment as a placeholder.
 
@@ -223,7 +252,7 @@ Print:
   propose.md:  written (<TASK_TEXT length> chars)
 ```
 
-**Step 10 — Offer to start work.**
+**Step 11 — Offer to start work.**
 
 - **AskUserQuestion:** `"Start work now?"` (header `"Start work"`):
   - `"Yes — start refinement"` — description: `"refinement: estimation → in-progress. Stays in backlog/. Recommended for features."`
@@ -232,7 +261,7 @@ Print:
 
 - On `"start refinement"`:
   - `Bash`: `tracking.sh set-stage --change $CP --stage refinement --state in-progress --by user`.
-  - **Invoke `system-analyst` agent** via Task tool (same invocation as Step 4 "Start (in-progress)" action for refinement). The agent runs the clarifying-questions loop, sets scope, writes `requirements.md`, marks `refinement: review`, and reports back.
+  - **Invoke `system-analyst` agent** via Task tool (same invocation as Step 6 "Start (in-progress)" action for refinement). The agent runs the clarifying-questions loop, sets scope, writes `requirements.md`, marks `refinement: review`, and reports back.
   - Final (after agent returns): forward the agent's structured "Refinement draft" report to the user and append: `Next: user reviews requirements.md → /change → drill <name> → Approve (completed).`
 
 - On `"straight to implementation"`:
@@ -245,8 +274,9 @@ Print:
 
 ## Important
 
-- Step 7 is purely LLM — `change.sh new` requires explicit `--name` and `--description`.
-- Step 9 writes the full original task text verbatim into `propose.md`.
+- Step 8 is purely LLM — `change.sh new` requires explicit `--name` and `--description`.
+- Step 10 writes the full original task text verbatim into `propose.md`.
 - "Straight to implementation" intentionally skips planning. Risky for features.
 - For free-form names supplied via Other, validate via `change.sh locate` (must resolve to exactly one dir).
-- This is the only command that scaffolds, lists, or mutates `.spec/changes/`. Stage setters are invoked from drill-down (Step 4) or directly via Bash by agents.
+- This is the only command that scaffolds, lists, or mutates `.spec/changes/`. Stage setters are invoked from drill-down (Step 6) or directly via Bash by agents.
+- `TAB_LIMIT = 10` is hardcoded in Step 3. Will become configurable later.
