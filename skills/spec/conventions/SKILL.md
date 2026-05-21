@@ -69,6 +69,7 @@ stage: refinement                           # derived: refinement | design | …
 scope: ""                                   # "" | product | project | feature | bugfix
 created_at: "2026-05-21 22:15:13"           # set at scaffold time; never mutated
 updated_at: "2026-05-21 22:15:15"           # auto-refreshed on every tracking.sh mutation
+progress: "3/12"                            # auto-synced from roadmap.md task states (done/total)
 refinement:     estimation                  # state per stage; see spec-lifecycle for state machine
 design:         estimation
 decomposition:  estimation
@@ -91,6 +92,7 @@ decline_reason: "<reason text>"
 - **`status:` and `stage:` are derived** — `tracking.sh sync` recomputes both on every state mutation. Never edit by hand; the next `set-stage` overwrites drift.
 - **`created_at:`** — written once at scaffold time by `change.sh new`; never mutated thereafter. Immutable audit of when the change first appeared.
 - **`updated_at:`** — auto-refreshed by `tracking.sh sync` on every mutation (`set-stage`, `set-scope`, `decline`, etc.). Top-level convenience field so `change.sh list` doesn't have to parse history.
+- **`progress:`** — `"done/total"` snapshot of the roadmap. Initial `"0/0"` at scaffold time. Auto-synced by `tracking.sh sync_roadmap_progress` (part of `sync_all`) and after `roadmap.sh set-task-state`. If `roadmap.md` is absent → stays at `"0/0"`.
 - **Stage keys** (`refinement` … `termination`) — exactly 6 top-level keys, no nested `stages:` block. Each value is one of **8 stage states**: `estimation | required | skipped | pending | in-progress | review | completed | rejected`. Order convention: refinement → design → decomposition → implementation → verification → termination. Value column alignment is cosmetic. Initial state for every stage at scaffold time is `estimation`.
 - **`history:` block** — append-only flow-style entries. Each: `{ at, stage, status, by }`. `at` is `YYYY-MM-DD HH:MM:SS` (seconds precision). Always the **last** section. **Only real stage transitions** — no `created`, no `moved-to-*`, no `scope-set:*`, no `lifecycle`. Empty history at scaffold time is normal.
 

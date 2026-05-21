@@ -27,7 +27,7 @@ This form is a **tabbed UI** that loops until the user exits. State across itera
 
 **Step 1 — Fetch counts (every iteration).**
 
-`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh list` (no `--bucket` flag — emits TSV across all 4 buckets). TSV columns (13): `bucket name title status stage stage_state scope roadmap created_at created_pretty updated_at updated_pretty path`.
+`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh list` (no `--bucket` flag — emits TSV across all 4 buckets). TSV columns (13): `bucket name title status stage stage_state scope progress created_at created_pretty updated_at updated_rel path`.
 
 Compute counts:
 - `N_backlog` = rows with col 1 = `backlog`
@@ -61,21 +61,32 @@ If `N_tab = 0`:
 - Print `  (empty)`.
 - Skip to Step 4.
 
-Else render as plain list with **status, title, and created columns all padded; updated trailing unpadded**. Format per row:
+Else render as a plain list. Each row has 6 visual segments:
 
 ```
-<icon>  <status_padded>  <title_padded>  <created_padded>  <updated_pretty>
+<icon>  <status_padded>  <title_padded>  <created_padded>  <updated_rel_padded>  <progress_bar>
 ```
 
 Rules:
 - `<icon>` = one glyph from the table below (selected by col 4 `status`).
-- `<status_padded>` = TSV col 4, right-padded to width **11** (longest status is `in-progress`).
-- `<title_padded>` = TSV col 3, right-padded to width **50**. If the title is longer than 50 visible chars, truncate at 49 chars and append `…` (U+2026) — total displayed length stays 50.
-- `<created_padded>` = TSV col 10 (`created_pretty`), right-padded to width **27** (longest pretty date is `[wednesday, HH:MM] [DD mon]`). If `—`, render as `—` padded to 27.
-- `<updated_pretty>` = TSV col 12, no padding (last column).
-- Two spaces between each piece.
-- For `declined` rows: read `decline_reason:` via `grep '^decline_reason:' <path>/tracking.yaml` and print as a second line, indented to start at the **title column** (offset = 1 icon + 2 + 11 status + 2 = **16 spaces**), prefixed by `reason:`.
+- `<status_padded>` = TSV col 4, right-padded to width **11**.
+- `<title_padded>` = TSV col 3. Truncate to **150 visible chars max** — if longer, take first 149 chars and append `…` (U+2026). Then right-pad to width **50** for typical alignment. Titles between 50 and 150 chars expand beyond the column and break alignment for that row; this is an accepted trade-off.
+- `<created_padded>` = TSV col 10 (`created_pretty`), right-padded to width **27**.
+- `<updated_rel_padded>` = TSV col 12 (`updated_rel`), right-padded to width **12** (longest realistic: `[365 d ago]` = 12 chars).
+- `<progress_bar>` = rendered from TSV col 8 (`progress` = `"done/total"`). See rendering rules below. Last column → no padding.
+- Two spaces between each segment.
+- For `declined` rows: read `decline_reason:` via `grep '^decline_reason:' <path>/tracking.yaml` and print as a second line indented **16 spaces** (aligns under the title column), prefixed by `reason:`.
 - After the last row, if `N_tab > TAB_LIMIT`: append `... and <N_tab - TAB_LIMIT> more in <CURRENT_TAB>.`
+
+**Progress bar rendering rules** (from `"done/total"`):
+- If progress is `"0/0"` or `"—"` or empty → render `—`.
+- Else parse `done` and `total` as integers.
+- Bar width = `min(total, 20)` chars. (For changes with > 20 tasks, scale: `filled = round(done * 20 / total)`. For ≤ 20 tasks, `filled = done` directly.)
+- Filled segment: `█` (U+2588, FULL BLOCK) repeated `filled` times.
+- Empty segment: `░` (U+2591, LIGHT SHADE) repeated `(bar_width - filled)` times.
+- Then `  done/total` as a numeric label (two spaces then the raw counts).
+- Example: `"3/12"` → `███░░░░░░░░░  3/12` (12-char bar + label).
+- Example: `"15/30"` → `██████████░░░░░░░░░░  15/30` (scaled 20-char bar + label).
 
 **Icon by status (TSV col 4):**
 
@@ -91,12 +102,12 @@ Rules:
 ```
 Tabs: **All [12]** · backlog [4] · in-progress [3] · closed [5]
 
-●  in-progress  Add two-factor authentication via TOTP             [tuesday, 09:00] [19 may]    [thursday, 21:56] [21 may]
-●  in-progress  Tune login rate limit                              [tuesday, 14:30] [19 may]    [thursday, 21:55] [21 may]
-✓  done         Upgrade Kotlin 2.1                                 [friday, 10:00] [16 may]     [friday, 12:00] [16 may]
-⊗  declined     Refactor user service                              [thursday, 21:30] [21 may]   [thursday, 21:35] [21 may]
+●  in-progress  Add two-factor authentication via TOTP             [tuesday, 09:00] [19 may]    [12 min ago]  ███░░░░░░░░░  3/12
+●  in-progress  Tune login rate limit                              [tuesday, 14:30] [19 may]    [2 h ago]     █████░░░░░░░░░░░░░░░  5/21
+✓  done         Upgrade Kotlin 2.1                                 [friday, 10:00] [16 may]     [5 d ago]     ████████  8/8
+⊗  declined     Refactor user service                              [thursday, 21:30] [21 may]   [4 min ago]   —
                 reason: duplicate of larger refactor
-○  backlog      Migrate Postgres 15                                [sunday, 16:00] [18 may]     [sunday, 16:00] [18 may]
+○  backlog      Migrate Postgres 15                                [sunday, 16:00] [18 may]     [3 d ago]     —
 ... and 2 more in All.
 ```
 

@@ -20,6 +20,14 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.11.0) — relative time + progress bar + title cap 150
+
+- ~~`updated_at` column now relative~~: format `[5 sec ago]` / `[12 min ago]` / `[2 h ago]` / `[7 d ago]` / `[3 mo ago]` / `[1 y ago]`. Computed at list time from the stored `updated_at` timestamp. `change.sh format_relative_time()` helper added.
+- ~~New `progress: "done/total"` field in tracking.yaml~~: auto-synced from `roadmap.md` task states. Initial `"0/0"`. Updated by `sync_roadmap_progress` (part of `sync_all`) on every state mutation, and additionally by `roadmap.sh set-task-state` (which now calls `tracking.sh sync` at end).
+- ~~Progress bar column~~: rendered from `done/total` as `█` (filled) + `░` (empty) + ` <done>/<total>` label. Bar width capped at 20 chars; for changes with >20 tasks the filled portion scales proportionally. `0/0` or absent → renders as `—`.
+- ~~Title cap raised 50 → 150~~ with `…` ellipsis truncation. Title still right-padded to 50 for typical alignment; titles between 50–150 chars expand and locally break alignment of subsequent columns (accepted trade-off).
+- TSV cols rearranged: `progress` replaces `roadmap` (col 8); `updated_rel` replaces `updated_pretty` (col 12). 13 cols total, path stays at col 13.
+
 ## Shipped (v0.10.1) — column order: title before dates
 
 - ~~Row format reordered~~: `<icon>  <status>  <title>  <created>  <updated>` (was: status + created + updated + title). Title in the middle, dates at the end. Title padded to 50 chars with `…` ellipsis truncation past 49 visible chars. Created padded to 27; updated trailing unpadded.

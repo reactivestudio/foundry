@@ -301,12 +301,46 @@ cmd_list() {
     printf '%s' "$iso"
   }
 
-  # Output columns (TSV, 13 fields):
-  # bucket  name  title  status  stage  stage_state  scope  roadmap
-  # created_at  created_pretty  updated_at  updated_pretty  path
+  # Format an ISO timestamp as a relative time string: "[N sec ago]",
+  # "[N min ago]", "[N h ago]", "[N d ago]", "[N mo ago]", "[N y ago]".
+  # Future timestamps clamp to "[0 sec ago]". Empty / "—" → empty.
+  format_relative_time() {
+    local iso=$1 then_epoch now_epoch diff
+    if [ -z "$iso" ] || [ "$iso" = "—" ]; then
+      return
+    fi
+    if then_epoch=$(date -j -f "%Y-%m-%d %H:%M:%S" "$iso" "+%s" 2>/dev/null); then
+      :
+    elif then_epoch=$(date -d "$iso" "+%s" 2>/dev/null); then
+      :
+    else
+      printf '%s' "$iso"
+      return
+    fi
+    now_epoch=$(date +%s)
+    diff=$((now_epoch - then_epoch))
+    [ "$diff" -lt 0 ] && diff=0
+    if [ "$diff" -lt 60 ]; then
+      printf '[%d sec ago]' "$diff"
+    elif [ "$diff" -lt 3600 ]; then
+      printf '[%d min ago]' $((diff / 60))
+    elif [ "$diff" -lt 86400 ]; then
+      printf '[%d h ago]' $((diff / 3600))
+    elif [ "$diff" -lt 2592000 ]; then
+      printf '[%d d ago]' $((diff / 86400))
+    elif [ "$diff" -lt 31536000 ]; then
+      printf '[%d mo ago]' $((diff / 2592000))
+    else
+      printf '[%d y ago]' $((diff / 31536000))
+    fi
+  }
 
-  local b d name tracking abs title status stage stage_state scope roadmap_md roadmap_progress
-  local created_at created_pretty updated_at updated_pretty fallback
+  # Output columns (TSV, 13 fields):
+  # bucket  name  title  status  stage  stage_state  scope  progress
+  # created_at  created_pretty  updated_at  updated_rel  path
+
+  local b d name tracking abs title status stage stage_state scope progress
+  local created_at created_pretty updated_at updated_rel fallback
   for b in $buckets; do
     local bdir=".spec/changes/$b"
     [ -d "$bdir" ] || continue
@@ -334,14 +368,11 @@ cmd_list() {
       fi
       scope=$("$TRACKING" get-scope --change "$abs" 2>/dev/null || echo "")
       [ -z "$scope" ] && scope="—"
-      roadmap_md="$d/roadmap.md"
-      if [ -f "$roadmap_md" ]; then
-        roadmap_progress=$("$ROADMAP" status --roadmap "$roadmap_md")
-      else
-        roadmap_progress="—"
-      fi
-      # created_at and updated_at — preferred. Fallback to history's last
-      # event when either field is absent (pre-0.10.0 tracking.yaml).
+      # progress: prefer the stored field; fall back to "0/0" if absent.
+      progress=$(read_yaml_field "$tracking" progress)
+      [ -z "$progress" ] && progress="0/0"
+      # created_at / updated_at — preferred. Fallback to history's last event
+      # when either field is absent (pre-0.10.0 tracking.yaml).
       created_at=$(read_yaml_field "$tracking" created_at)
       updated_at=$(read_yaml_field "$tracking" updated_at)
       if [ -z "$created_at" ] || [ -z "$updated_at" ]; then
@@ -351,11 +382,11 @@ cmd_list() {
       fi
       created_pretty=$(format_pretty_date "$created_at")
       [ -z "$created_pretty" ] && created_pretty="—"
-      updated_pretty=$(format_pretty_date "$updated_at")
-      [ -z "$updated_pretty" ] && updated_pretty="—"
+      updated_rel=$(format_relative_time "$updated_at")
+      [ -z "$updated_rel" ] && updated_rel="—"
       printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$b" "$name" "$title" "$status" "$stage" "$stage_state" "$scope" "$roadmap_progress" \
-        "$created_at" "$created_pretty" "$updated_at" "$updated_pretty" "$abs"
+        "$b" "$name" "$title" "$status" "$stage" "$stage_state" "$scope" "$progress" \
+        "$created_at" "$created_pretty" "$updated_at" "$updated_rel" "$abs"
     done
   done
 }
@@ -372,8 +403,11 @@ Subcommands:
   list          [--bucket backlog|in-progress|done|declined]
 
 List output columns (TSV, 13 fields):
-  bucket  name  title  status  stage  stage_state  scope  roadmap
-  created_at  created_pretty  updated_at  updated_pretty  path
+  bucket  name  title  status  stage  stage_state  scope  progress
+  created_at  created_pretty  updated_at  updated_rel  path
+
+`progress` = "done/total" from tracking.yaml (synced from roadmap.md).
+`updated_rel` = relative time like "[5 min ago]" computed from updated_at.
 
 Buckets:        $VALID_BUCKETS
 Reserved names: $RESERVED_NAMES

@@ -26,6 +26,7 @@ set -eu
 
 SELF_DIR=$(cd "$(dirname "$0")" && pwd)
 STATE_MACHINE="$SELF_DIR/stage-state-machine.sh"
+ROADMAP="$SELF_DIR/roadmap.sh"
 
 VALID_STAGES="refinement design decomposition implementation verification termination"
 VALID_SCOPES="product project feature bugfix"
@@ -238,11 +239,65 @@ sync_updated_at() {
   mv "$tmp" "$tracking"
 }
 
+# Rewrite top-level `progress:` line with current roadmap stats. Reads
+# `<change_dir>/roadmap.md` (sibling of tracking.yaml) and runs
+# `roadmap.sh status` to extract done/total. Writes `progress: "done/total"`.
+# If roadmap.md is absent → `progress: "0/0"`.
+#
+# Insert / replace logic mirrors sync_updated_at.
+sync_roadmap_progress() {
+  local tracking=$1 change_dir roadmap_md stats done total progress tmp
+  change_dir=$(dirname "$tracking")
+  roadmap_md="$change_dir/roadmap.md"
+  done=0
+  total=0
+  if [ -f "$roadmap_md" ]; then
+    stats=$("$ROADMAP" status --roadmap "$roadmap_md" 2>/dev/null || echo "")
+    if [ -n "$stats" ]; then
+      done=$(printf '%s' "$stats" | tr ' ' '\n' | awk -F= '$1=="done"{print $2; exit}')
+      total=$(printf '%s' "$stats" | tr ' ' '\n' | awk -F= '$1=="total"{print $2; exit}')
+      [ -z "$done" ] && done=0
+      [ -z "$total" ] && total=0
+    fi
+  fi
+  progress="${done}/${total}"
+  tmp=$(mktemp "${TMPDIR:-/tmp}/tracking-progress.XXXXXX")
+  if grep -q '^progress:[[:space:]]' "$tracking"; then
+    awk -v p="$progress" '
+      /^progress:[[:space:]]/ { printf "progress: \"%s\"\n", p; next }
+      { print }
+    ' "$tracking" > "$tmp"
+  else
+    # Insert after updated_at: (preferred), else after created_at:, else
+    # before history:, else EOF.
+    awk -v p="$progress" '
+      BEGIN { inserted = 0 }
+      {
+        print
+        if (!inserted && $0 ~ /^updated_at:[[:space:]]/) {
+          printf "progress: \"%s\"\n", p
+          inserted = 1
+        } else if (!inserted && $0 ~ /^created_at:[[:space:]]/) {
+          # only fall back to created_at if no updated_at seen yet (we are
+          # in single-pass, so just print here too; sync_updated_at always
+          # inserts updated_at right after created_at, so this branch is
+          # unreachable in practice — keep for safety).
+        }
+      }
+      END {
+        if (!inserted) printf "progress: \"%s\"\n", p
+      }
+    ' "$tracking" > "$tmp"
+  fi
+  mv "$tmp" "$tracking"
+}
+
 # Sync all derived / auto-tracked fields.
 sync_all() {
   sync_status_field "$1"
   sync_stage_field "$1"
   sync_updated_at "$1"
+  sync_roadmap_progress "$1"
 }
 
 # === subcommand: get-stage ===

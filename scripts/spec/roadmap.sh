@@ -203,6 +203,17 @@ cmd_set_task_state() {
     exit 1
   }
   mv "$tmp" "$roadmap"
+  # Best-effort: refresh the sibling tracking.yaml's `progress:` field so the
+  # change-level view stays in sync. Silent failure (e.g. no tracking.yaml,
+  # or tracking.sh missing) — set-task-state itself succeeded.
+  local change_dir tracking
+  change_dir=$(cd "$(dirname "$roadmap")" && pwd)
+  tracking="$change_dir/tracking.yaml"
+  if [ -f "$tracking" ]; then
+    local self_dir
+    self_dir=$(cd "$(dirname "$0")" && pwd)
+    "$self_dir/tracking.sh" sync --change "$change_dir" >/dev/null 2>&1 || true
+  fi
   echo "$new_state"
 }
 
