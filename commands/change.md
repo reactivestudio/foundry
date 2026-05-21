@@ -154,17 +154,30 @@ If `TASK_TEXT` ≤ 20 chars, reuse as TITLE and set DESCRIPTION to TITLE.
 - Exit 1 (collision / invalid) → if collision and no `--name` override, regenerate SLUG with an extra differentiating segment and retry once. After second failure → ask user for explicit slug.
 - Exit 3 (template missing) → tell user to run `/foundry:setup` first. Exit.
 
-**Step 9 — Write `propose.md` with full task text.**
+**Step 9 — Inject `TASK_TEXT` into `propose.md`'s `## Intent` section.**
 
-`Read` `$CP/propose.md` (scaffold contains only `# <TITLE>\n`). `Write` it back as:
+`Read` `$CP/propose.md`. The scaffold has three sections: `## Intent`, `## Context`, `## Notes`. Each starts with a `<!-- … -->` HTML comment as a placeholder.
 
+Locate the `## Intent` section. Replace its placeholder comment with `TASK_TEXT` verbatim (multi-paragraph OK — keep blank lines as authored). **Leave `## Context` and `## Notes` sections untouched** — those are pre-refinement spaces for the user / system-analyst to fill.
+
+Resulting structure:
 ```markdown
 # <TITLE>
 
 ## Intent
 
-<TASK_TEXT verbatim, may be multi-paragraph>
+<TASK_TEXT verbatim>
+
+## Context
+
+<!-- Background: what's currently happening, … -->
+
+## Notes
+
+<!-- Free-form space … -->
 ```
+
+`Write` the result back.
 
 Print:
 ```

@@ -20,6 +20,11 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.7.3) — template hygiene
+
+- ~~`{{description_indented}}` → `{{description}}`~~ — короче, и в самом template placeholder теперь правильно отступлен (2 spaces под `description: |`), так что raw template — валидный YAML.
+- ~~propose.md template минимально структурирован~~: 3 секции (`## Intent`, `## Context`, `## Notes`) с HTML-комментариями-плейсхолдерами. /change теперь подставляет TASK_TEXT в `## Intent`, оставляя `## Context` / `## Notes` для пользователя / system-analyst.
+
 ## Shipped (v0.7.2) — /setup: mandatory ask + always-run idempotent scaffold
 
 - ~~Pilot bug v2: even with Read-probe, /setup silently skipped .spec/ scaffolding entirely~~. Root cause: ANY conditional probe (test -d OR Read-marker) gave Claude a place to short-circuit to a "skip silently" branch when context was ambiguous. Fix: drop the probe ENTIRELY. Step 4 now ALWAYS asks "Set up .spec/?". On Yes → ALWAYS runs the scaffold loop (mkdir + per-file Read+Write — existing files never overwritten). No more "if X then skip" branches. Re-asking is cheap because the loop is idempotent.

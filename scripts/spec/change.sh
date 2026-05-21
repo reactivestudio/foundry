@@ -175,8 +175,10 @@ cmd_new() {
   CHANGE_TITLE="$title" \
   CHANGE_NOW="$now" \
   awk '
-    /\{\{description_indented\}\}/ {
+    /\{\{description\}\}/ {
       # Whole line is the placeholder — emit the multi-line description body.
+      # The leading indentation in the template (e.g. "  ") is discarded; the
+      # body itself is pre-indented to 2 spaces by the caller.
       print ENVIRON["CHANGE_DESC"]
       next
     }
