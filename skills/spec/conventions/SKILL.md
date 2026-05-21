@@ -24,7 +24,7 @@ Naming, directory layout, and `tracking.yaml` schema for `.spec/`. Independent o
 │   ├── project.md                  # suggested (project context)
 │   └── <custom>.md
 └── changes/
-    ├── _template/                  # used by `change.sh new`; do not edit per-project
+    ├── .template/                  # used by `change.sh new`; do not edit per-project
     │   ├── tracking.yaml
     │   └── propose.md
     ├── backlog/<name>/             # not yet in active work (any stage state)
@@ -38,7 +38,7 @@ Inside each `<name>/`:
 ```
 <name>/
 ├── tracking.yaml                   # always present
-├── propose.md                      # always present (scaffold-stub from _template, body = original task text)
+├── propose.md                      # always present (scaffold-stub from .template, body = original task text)
 ├── requirements.md                 # appears after refinement stage starts
 ├── system-design.md                # appears after design stage starts
 ├── application-design.md           # appears after design stage starts
@@ -54,7 +54,7 @@ Files appear progressively. Agents write them; spec-commands never generate cont
   Validated by `change.sh validate-name`:
   - Must match `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`.
   - Must be unique across **all 4 buckets** (`backlog`, `in-progress`, `done`, `declined`).
-  - Must not equal a reserved name (`backlog`, `in-progress`, `done`, `declined`, `_template`).
+  - Must not equal a reserved name (`backlog`, `in-progress`, `done`, `declined`, `.template`).
 
   No date-prefix. Coined once, used everywhere. Reusing a finished change's name → rejected (pick a different angle).
 
@@ -65,9 +65,12 @@ Files appear progressively. Agents write them; spec-commands never generate cont
 **Bash helpers depend on this schema.** Humans should edit only `title` and `description`. State changes go through `tracking.sh` subcommands (`set-stage`, `set-scope`, `decline`, `sync-status`).
 
 ```yaml
-id: add-2fa-totp                            # = directory basename (slug)
+id: add-2fa-totp                            # = directory basename (slug, 3-4 segments)
 title: "Add two-factor authentication via TOTP"
-description: "Adds TOTP-based 2FA per RFC 6238 with Google Authenticator compatibility."
+description: |
+  Adds TOTP-based 2FA per RFC 6238 with Google Authenticator support.
+  Supports QR-code provisioning and recovery codes.
+  Multi-line, up to ~500 chars.
 status: backlog                             # derived: backlog | in-progress | done | declined
 scope: ""                                   # "" | product | project | feature | bugfix
 stages:
@@ -77,8 +80,8 @@ stages:
   implementation: pending
   verification:   pending
 history:
-  - { at: "2026-05-21 19:33:20", stage: lifecycle, status: created, by: user }
-  # …append-only…
+  - { at: "2026-05-21 19:47:14", stage: refinement, status: in-progress, by: user }
+  # …append-only, ONLY stage transitions…
 
 # Optional, only when declined:
 decline_reason: "<reason text>"
@@ -86,11 +89,12 @@ decline_reason: "<reason text>"
 
 ### Field rules
 
-- **Top-level scalars** (`id`, `title`, `description`, `status`, `scope`, `decline_reason`) — one per line, `key: value` form.
+- **Top-level scalars** (`id`, `title`, `status`, `scope`, `decline_reason`) — one per line, `key: value` form.
+- **`title:`** — single-line quoted string, up to ~120 chars. Imperative phrase.
+- **`description:`** — YAML `|`-literal block (multi-line, up to ~500 chars). Each body line indented 2 spaces. Helpers WRITE it (multi-line aware); only commands read it (Claude parses tracking.yaml as text for `/track` display).
 - **`status:` is derived** — `tracking.sh` recomputes it (via `sync-status`) on every state mutation. Never edit by hand; the next `set-stage` will overwrite drift.
 - **`stages:` block** — exactly 5 entries with names `refinement`, `design`, `decomposition`, `implementation`, `verification`. Each value is one of 6 stage states. Indentation: 2 spaces. Value column alignment is cosmetic.
-- **`history:` block** — append-only flow-style entries. Each entry: `{ at, stage, status, by }`. `at` is `YYYY-MM-DD HH:MM:SS` (seconds precision). Always the **last** section in the file (helpers append to end).
-- **Pseudo-stage `lifecycle`** — used for change-level events: `created`, `declined`, `moved-to-backlog|in-progress|done|declined`. Workflow-stage entries use the actual stage name (`refinement`, `design`, etc.).
+- **`history:` block** — append-only flow-style entries. Each entry: `{ at, stage, status, by }`. `at` is `YYYY-MM-DD HH:MM:SS` (seconds precision). Always the **last** section in the file (helpers append to end). **Only stage transitions** — no `lifecycle`, no `moved-to-*`, no `created`. Empty history at scaffold time is normal.
 
 ### Why strict schema
 

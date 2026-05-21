@@ -20,6 +20,13 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.6.1) — refinement of 0.6.0
+
+- ~~Template dir `_template/` → `.template/`~~ (hidden-file convention).
+- ~~`description:` multi-line up to ~500 chars~~ via YAML `|`-literal block. Title up to ~120 chars.
+- ~~Drop ALL `lifecycle` history entries~~ — `created`, `moved-to-*`, `declined`, `scope-set:*` dropped. History now contains ONLY real stage transitions. Decline audit lives in `decline_reason:` field; scope lives in `scope:` field.
+- `change.sh new` substitution moved from sed to awk + ENVIRON (multi-line aware).
+
 ## Shipped (v0.6.0) — breaking
 
 - ~~Schema rewrite~~: `id` (= slug), `title`, **`description`** (LLM-generated), **`status`** (derived: backlog \| in-progress \| done \| declined), `scope`, `stages`, `history`.

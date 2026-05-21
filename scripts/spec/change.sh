@@ -10,7 +10,7 @@
 #   change.sh list          [--bucket backlog|in-progress|done|declined]
 #
 # Buckets: backlog in-progress done declined
-# Reserved names (cannot be used as change name): backlog in-progress done declined _template
+# Reserved names (cannot be used as change name): backlog in-progress done declined .template
 
 set -eu
 
@@ -19,7 +19,7 @@ TRACKING="$SELF_DIR/tracking.sh"
 ROADMAP="$SELF_DIR/roadmap.sh"
 
 VALID_BUCKETS="backlog in-progress done declined"
-RESERVED_NAMES="backlog in-progress done declined _template"
+RESERVED_NAMES="backlog in-progress done declined .template _template"
 NAME_REGEX='^[a-z][a-z0-9]*(-[a-z0-9]+)*$'
 
 # === helpers ===
@@ -142,12 +142,12 @@ cmd_new() {
   fi
   # Locate template.
   local template=""
-  if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -d "$CLAUDE_PLUGIN_ROOT/.claude-template/spec/changes/_template" ]; then
-    template="$CLAUDE_PLUGIN_ROOT/.claude-template/spec/changes/_template"
-  elif [ -d ".spec/changes/_template" ]; then
-    template=".spec/changes/_template"
+  if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -d "$CLAUDE_PLUGIN_ROOT/.claude-template/spec/changes/.template" ]; then
+    template="$CLAUDE_PLUGIN_ROOT/.claude-template/spec/changes/.template"
+  elif [ -d ".spec/changes/.template" ]; then
+    template=".spec/changes/.template"
   else
-    echo "change new: scaffold template not found (looked for \$CLAUDE_PLUGIN_ROOT/.claude-template/spec/changes/_template and .spec/changes/_template)" >&2
+    echo "change new: scaffold template not found (looked for \$CLAUDE_PLUGIN_ROOT/.claude-template/spec/changes/.template and .spec/changes/.template)" >&2
     exit 3
   fi
   mkdir -p ".spec/changes/backlog"
@@ -157,20 +157,45 @@ cmd_new() {
     exit 3
   fi
   cp -r "$template" "$dest"
-  local now title_escaped description_escaped f tmp
+  local now description_indented tmp
   now=$(now_ts)
-  title_escaped=$(printf '%s' "$title"       | sed 's/[&/\]/\\&/g')
-  description_escaped=$(printf '%s' "$description" | sed 's/[&/\]/\\&/g')
-  for f in "$dest"/tracking.yaml "$dest"/propose.md; do
-    [ -f "$f" ] || continue
+  # Description: indent each line by 2 spaces (YAML | block body). If empty,
+  # use a single literal-empty placeholder line; agent should always supply
+  # non-empty description, but we tolerate empty for safety.
+  if [ -z "$description" ]; then
+    description_indented="  "
+  else
+    description_indented=$(printf '%s' "$description" | awk '{ print "  " $0 }')
+  fi
+  # tracking.yaml — awk-based, multi-line description-aware.
+  # Pass description via ENVIRON (awk's -v does not support newlines).
+  tmp=$(mktemp "${TMPDIR:-/tmp}/change-new.XXXXXX")
+  CHANGE_DESC="$description_indented" \
+  CHANGE_ID="$name" \
+  CHANGE_TITLE="$title" \
+  CHANGE_NOW="$now" \
+  awk '
+    /\{\{description_indented\}\}/ {
+      # Whole line is the placeholder — emit the multi-line description body.
+      print ENVIRON["CHANGE_DESC"]
+      next
+    }
+    {
+      gsub(/\{\{id\}\}/,    ENVIRON["CHANGE_ID"])
+      gsub(/\{\{title\}\}/, ENVIRON["CHANGE_TITLE"])
+      gsub(/\{\{now\}\}/,   ENVIRON["CHANGE_NOW"])
+      print
+    }
+  ' "$dest/tracking.yaml" > "$tmp"
+  mv "$tmp" "$dest/tracking.yaml"
+  # propose.md — single-line title substitution only.
+  if [ -f "$dest/propose.md" ]; then
     tmp=$(mktemp "${TMPDIR:-/tmp}/change-new.XXXXXX")
-    sed -e "s/{{id}}/$name/g" \
-        -e "s/{{title}}/$title_escaped/g" \
-        -e "s/{{description}}/$description_escaped/g" \
-        -e "s/{{now}}/$now/g" \
-        "$f" > "$tmp"
-    mv "$tmp" "$f"
-  done
+    awk -v title="$title" '
+      { gsub(/\{\{title\}\}/, title); print }
+    ' "$dest/propose.md" > "$tmp"
+    mv "$tmp" "$dest/propose.md"
+  fi
   (cd "$dest" && pwd)
 }
 
@@ -214,7 +239,6 @@ cmd_move() {
   fi
   mv "$src" "$dest"
   if [ -f "$dest/tracking.yaml" ]; then
-    "$TRACKING" append-history --change "$dest" --stage lifecycle --status "moved-to-$to" --by "$by"
     "$TRACKING" sync-status --change "$dest" >/dev/null
   fi
   echo "$dest"
@@ -263,7 +287,7 @@ cmd_list() {
     for d in "$bdir"/*/; do
       [ -d "$d" ] || continue
       name=$(basename "$d")
-      [ "$name" = "_template" ] && continue
+      [ "$name" = ".template" ] && continue
       tracking="$d/tracking.yaml"
       if [ ! -f "$tracking" ]; then
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \

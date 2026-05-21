@@ -270,7 +270,8 @@ cmd_set_scope() {
     { print }
   ' "$tracking" > "$tmp"
   mv "$tmp" "$tracking"
-  append_history_entry_quoted "$tracking" refinement "scope-set:$scope" "$by"
+  # Note: scope is recorded in the top-level `scope:` field only — no history
+  # entry. Per 0.6.1, history captures only real stage transitions.
   echo "$scope"
 }
 
@@ -371,7 +372,8 @@ cmd_decline() {
     }
   ' "$tracking" > "$tmp"
   mv "$tmp" "$tracking"
-  append_history_entry "$tracking" lifecycle declined "$by"
+  # Note: decline is recorded in the top-level `decline_reason:` field only —
+  # no history entry. Per 0.6.1, history captures only real stage transitions.
   sync_status_field "$tracking"
 }
 

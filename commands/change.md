@@ -102,21 +102,26 @@ If reached from Step 2a, `TASK_TEXT` is already set. Otherwise `TASK_TEXT` = `$A
 
 This is a thinking step — you (Claude) produce three values from `TASK_TEXT`:
 
-- **`TITLE`** — human-readable phrase, up to ~80 chars. Imperative, specific.
+- **`TITLE`** — human-readable phrase, **up to ~120 chars**, single line. Imperative, specific.
   - Example: TASK_TEXT = `"Добавить двухфакторку через TOTP, чтобы можно было сканировать QR в Google Authenticator. RFC 6238."`
   - TITLE = `"Add two-factor authentication via TOTP"`
 
 - **`SLUG`** — kebab-case identifier, **3-4 segments**, concise but descriptive. Must match `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`. Avoid generic stems like "fix" or "add" if a more specific stem exists. If user provided `--name <slug>` override, use that instead.
   - Example: SLUG = `"add-2fa-totp"`
 
-- **`DESCRIPTION`** — one-line summary, ≤ 160 chars, expands the title by one sentence of context. No newlines.
-  - Example: DESCRIPTION = `"Adds TOTP-based 2FA per RFC 6238 with Google Authenticator compatibility."`
+- **`DESCRIPTION`** — **multi-line, up to ~500 chars**. Several short paragraphs or 2-4 sentences expanding the title with what / why / scope context. Stored as a YAML `|`-literal block.
+  - Example DESCRIPTION:
+    ```
+    Adds TOTP-based 2FA per RFC 6238 with Google Authenticator compatibility.
+    Supports QR-code provisioning and backup recovery codes.
+    Integrates with existing Spring Security configuration without breaking change.
+    ```
 
 If TASK_TEXT is too short to extract a meaningful TITLE / DESCRIPTION (≤ 20 chars), reuse it as TITLE and set DESCRIPTION to TITLE.
 
 **Step 7 — Scaffold.**
 
-`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh new --title "<TITLE>" --name "<SLUG>" --description "<DESCRIPTION>"`. Capture stdout (absolute path) as `CP`.
+`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh new --title "<TITLE>" --name "<SLUG>" --description "<DESCRIPTION>"`. For multi-line descriptions, pass the whole string in double quotes — `change.sh new` reads it via ENVIRON-style awk and indents each line by 2 spaces under `description: |` in the YAML. Capture stdout (absolute path) as `CP`.
 - Exit 1 (slug collision / invalid name) → if collision and user didn't pass `--name`, regenerate SLUG with an extra differentiating segment and retry once. After second failure → ask user for explicit slug.
 - Exit 3 (template missing) → `run /foundry:setup first`. Exit.
 

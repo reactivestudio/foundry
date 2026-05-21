@@ -23,7 +23,7 @@ Each downstream stage reads everything upstream + relevant `.spec/standards/*.md
 |---|---|
 | Owner | Workflow / initiator (user via `/change "<task text>"`) |
 | Artifact | `propose.md` |
-| Lives at | `<change>/propose.md` (scaffold-stub from `_template/`, then `/change` writes full task text into `## Intent`) |
+| Lives at | `<change>/propose.md` (scaffold-stub from `.template/`, then `/change` writes full task text into `## Intent`) |
 | Required sections | `# <title>`, `## Intent` (verbatim user task text — 1+ paragraphs) |
 
 The proposal is **incoming**. Original task text from the user is stored verbatim. Later stages may extend with `## Notes`, `## Open questions`, etc. but never edit `## Intent`.

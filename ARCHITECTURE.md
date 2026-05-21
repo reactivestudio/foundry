@@ -64,7 +64,7 @@ Spec-commands (`/change`, `/track`, etc.) are **state API only** — they don't 
 | `/track <name>` | summary | Title, description, status, all stages, artifacts, roadmap progress, recent history. |
 | `/track <name> <stage>` | stage detail | State + history filtered to stage + owner role + next action. |
 | `/track <name> <stage> <state>` | setter | Validate transition, write tracking.yaml, sync `status:`, auto-move bucket if status changed. |
-| `/foundry:setup` | — | Scaffold `.spec/` (4 buckets + standards/ + _template/) and project `.claude/`. |
+| `/foundry:setup` | — | Scaffold `.spec/` (4 buckets + standards/ + .template/) and project `.claude/`. |
 
 `accept` and "move to in-progress" are **not** slash commands — automatic side effects of `/track` (auto-move into `in-progress/` on `implementation: in-progress`; auto-move into `done/` on `verification: approved` with `implementation: approved|skipped`).
 

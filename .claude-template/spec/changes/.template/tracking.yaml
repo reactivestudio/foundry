@@ -1,6 +1,7 @@
 id: {{id}}
 title: "{{title}}"
-description: "{{description}}"
+description: |
+{{description_indented}}
 status: backlog
 scope: ""
 stages:
@@ -10,4 +11,3 @@ stages:
   implementation: pending
   verification:   pending
 history:
-  - { at: "{{now}}", stage: lifecycle, status: created, by: user }

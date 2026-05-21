@@ -55,7 +55,7 @@ Top-level `status:` is computed from `stages.implementation` + `stages.verificat
 After any stage state change via `/track <name> <stage> <state>`, the command:
 1. Calls `tracking.sh set-stage` (writes new state + history entry + syncs `status:` field).
 2. Calls `tracking.sh derive-status` (computes desired status string).
-3. If desired status ≠ current bucket → `change.sh move` + appends `{ stage: lifecycle, status: moved-to-<bucket>, by: auto }` history entry.
+3. If desired status ≠ current bucket → `change.sh move` (directory move + status re-sync). No history entry is added for the move — history captures only stage transitions.
 
 ## Back-edges (rework loops)
 
@@ -93,7 +93,7 @@ There is no `/decline` command — a decline is rare and user-initiated by natur
 
 1. **Locate.** `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh locate --name <name>`. Capture absolute path as `$CP`.
 2. **Set decline_reason + history.** `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh decline --change $CP --reason "<reason>" --by user`. This also syncs `status: declined`.
-3. **Move.** `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh move --name <name> --to declined --by user` (appends `lifecycle/moved-to-declined`).
+3. **Move.** `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh move --name <name> --to declined --by user`. (No history entry for the move; `decline_reason:` field is the persistent audit.)
 4. Report `from: <bucket>/ → to: declined/`, the reason, and that decline is terminal (revive = new change with new slug).
 
 Declines occupy the name slot — `change.sh validate-name` refuses re-use. That is intentional.
