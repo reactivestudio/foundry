@@ -149,8 +149,8 @@ Producer mapping (lookup via `workflow.sh producer --stage <stage>`):
 | design | `architect` | **wired (Task launch)** |
 | decomposition | `teamlead` | **wired (Task launch)** |
 | implementation | `code-implementor` (per task, in loop) | **wired (task-loop, see Step 6)** |
-| verification | `qa-engineer` | **stub (Phase 2D)** |
-| termination | `termination-handler` | **stub (Phase 2D)** |
+| verification | `qa-engineer` | **wired (Task launch)** |
+| termination | `termination-handler` | **wired (Task launch)** |
 
 For **wired** stages:
 
@@ -194,17 +194,32 @@ Stage-specific prompts:
 
 - **implementation** (code-implementor — see Step 6 task-loop): single-task prompt.
 
-For **stub** stages (Phase 2A): instead of `Task`, print:
+- **verification** (qa-engineer):
+  ```
+  Verify the change at <CP>. Read roadmap.md (run every Q-task), requirements.md
+  (NFR cross-check), system-design.md + application-design.md (for security/perf
+  controls), verification-report.md if it already exists (rework case),
+  tracking.yaml, .spec/standards/*.md.
+  For each Q-task: classify (functional/exploratory/security/performance), execute
+  per spec-verification skill, mark task state via roadmap.sh set-task-state.
+  Aggregate into verification-report.md per the schema. Determine verdict
+  (PASS/FAIL/PARTIAL). Mark verification: review via tracking.sh set-stage.
+  Return the structured 'Verification draft' report.
+  <REWORK_NOTE if any>
+  ```
 
-```
-producer <PRODUCER> for stage <STAGE> is not yet implemented (Phase 2A).
-Options:
-  - mark stage skipped (loop continues)
-  - mark stage review manually (if you wrote the artifact by hand)
-  - pause workflow
-```
-
-Then **AskUserQuestion** with those three options. Apply chosen action and re-enter loop or exit.
+- **termination** (termination-handler):
+  ```
+  Terminate the change at <CP>. Read propose.md + requirements.md + designs +
+  roadmap.md + verification-report.md + tracking.yaml + .spec/standards/*.md.
+  Detect breakingness (NFR-compat + Contracts + Data model). Compose changelog
+  entry; if repo has CHANGELOG.md (root or docs/ or .github/) — append matching
+  its existing format. Write termination.md per spec-termination schema (changelog
+  entry + migration notes + cleanup checklist + retrospective).
+  Mark termination: review via tracking.sh set-stage.
+  Return the structured 'Termination draft' report.
+  <REWORK_NOTE if any>
+  ```
 
 ### Step 6 — Implementation task-loop (when `$STAGE = implementation` and `$STATE = in-progress`)
 
@@ -248,5 +263,5 @@ If a state mutation happened this invocation, list it (e.g. `mutated: refinement
 - **Read `spec-workflow` SKILL.md before driving.** The hand-off protocol is the contract producers follow; orchestrator must enforce it.
 - **One loop iteration = one user input.** Never silent-cycle past an AskUserQuestion.
 - **Orchestrator never writes artifact content.** Only `Read`s for the review preview.
-- **Phase 2B scope:** refinement + design + decomposition + implementation wired (real Task launches). verification + termination still print stub message + AskUserQuestion (skip/mark-review/pause). Wire them in Phase 2D.
+- **All 6 stages wired** as of Phase 2D: refinement, design, decomposition, implementation (task-loop), verification, termination — every stage launches a real producer agent via Task tool.
 - **Auto-bucket move** happens via `tracking.sh sync` (called transitively by `set-stage`). Orchestrator does not call `change.sh move` directly except on Decline.
