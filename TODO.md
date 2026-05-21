@@ -20,6 +20,10 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.11.1) — progress bar glyphs: parallelograms
+
+- ~~Progress bar empty glyph `░` → `▱`~~ (WHITE PARALLELOGRAM, U+25B1). Filled glyph correspondingly `█` → `▰` (BLACK PARALLELOGRAM, U+25B0). Both characters are designed as a purpose-built progress-bar pair: equal width, equal visual weight, no shading effect. Example: `▰▰▰▱▱▱▱▱▱▱▱▱  3/12`.
+
 ## Shipped (v0.11.0) — relative time + progress bar + title cap 150
 
 - ~~`updated_at` column now relative~~: format `[5 sec ago]` / `[12 min ago]` / `[2 h ago]` / `[7 d ago]` / `[3 mo ago]` / `[1 y ago]`. Computed at list time from the stored `updated_at` timestamp. `change.sh format_relative_time()` helper added.

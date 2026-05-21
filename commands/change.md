@@ -82,11 +82,11 @@ Rules:
 - If progress is `"0/0"` or `"—"` or empty → render `—`.
 - Else parse `done` and `total` as integers.
 - Bar width = `min(total, 20)` chars. (For changes with > 20 tasks, scale: `filled = round(done * 20 / total)`. For ≤ 20 tasks, `filled = done` directly.)
-- Filled segment: `█` (U+2588, FULL BLOCK) repeated `filled` times.
-- Empty segment: `░` (U+2591, LIGHT SHADE) repeated `(bar_width - filled)` times.
+- Filled segment: `▰` (U+25B0, BLACK PARALLELOGRAM) repeated `filled` times.
+- Empty segment: `▱` (U+25B1, WHITE PARALLELOGRAM) repeated `(bar_width - filled)` times.
 - Then `  done/total` as a numeric label (two spaces then the raw counts).
-- Example: `"3/12"` → `███░░░░░░░░░  3/12` (12-char bar + label).
-- Example: `"15/30"` → `██████████░░░░░░░░░░  15/30` (scaled 20-char bar + label).
+- Example: `"3/12"` → `▰▰▰▱▱▱▱▱▱▱▱▱  3/12` (12-char bar + label).
+- Example: `"15/30"` → `▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱  15/30` (scaled 20-char bar + label).
 
 **Icon by status (TSV col 4):**
 
@@ -102,9 +102,9 @@ Rules:
 ```
 Tabs: **All [12]** · backlog [4] · in-progress [3] · closed [5]
 
-●  in-progress  Add two-factor authentication via TOTP             [tuesday, 09:00] [19 may]    [12 min ago]  ███░░░░░░░░░  3/12
-●  in-progress  Tune login rate limit                              [tuesday, 14:30] [19 may]    [2 h ago]     █████░░░░░░░░░░░░░░░  5/21
-✓  done         Upgrade Kotlin 2.1                                 [friday, 10:00] [16 may]     [5 d ago]     ████████  8/8
+●  in-progress  Add two-factor authentication via TOTP             [tuesday, 09:00] [19 may]    [12 min ago]  ▰▰▰▱▱▱▱▱▱▱▱▱  3/12
+●  in-progress  Tune login rate limit                              [tuesday, 14:30] [19 may]    [2 h ago]     ▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  5/21
+✓  done         Upgrade Kotlin 2.1                                 [friday, 10:00] [16 may]     [5 d ago]     ▰▰▰▰▰▰▰▰  8/8
 ⊗  declined     Refactor user service                              [thursday, 21:30] [21 may]   [4 min ago]   —
                 reason: duplicate of larger refactor
 ○  backlog      Migrate Postgres 15                                [sunday, 16:00] [18 may]     [3 d ago]     —
