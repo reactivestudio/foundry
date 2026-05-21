@@ -7,6 +7,7 @@ skills:
   - foundry:clarifying-questions
   - foundry:spec-conventions
   - foundry:spec-lifecycle
+  - foundry:spec-workflow
 ---
 
 # System analyst
