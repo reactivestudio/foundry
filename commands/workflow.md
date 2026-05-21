@@ -82,7 +82,9 @@ Actions analogous to 4.1, plus Re-evaluate sets `required`.
 
 #### 4.3 — `in-progress`
 
-Producer was running but didn't reach `review` (timed out, was interrupted, or returned without marking). **AskUserQuestion** (header `"In-progress recovery"`):
+**If `$STAGE = implementation` → jump to Step 6 (task-loop).** The implementation stage iterates roadmap tasks; the generic in-progress prompt below does not apply.
+
+For all other stages (single-shot producers): the producer was running but didn't reach `review` (timed out, was interrupted, or returned without marking). **AskUserQuestion** (header `"In-progress recovery"`):
 - `"Re-invoke producer"` (Recommended) — description `"Re-launches <PRODUCER> with same inputs."`
 - `"Mark review manually"` — description `"Producer finished out-of-band; advance to review state without re-launch."`
 - `"Pause"` — description `"Exit. State stays in-progress."`
@@ -216,7 +218,7 @@ Special-case: instead of one Task launch, iterate roadmap tasks.
    - In-progress tasks exist → print task table (parse via `roadmap.sh parse`), advise picking one up manually.
    - Else (all blocked) → print blocker cycle warning + task table.
    - Exit.
-6. Pick first ready task as `$TASK_ID` (Phase 2A: first, not picker). Phase 2A caps at 1 task per `/workflow` invocation.
+6. Pick first ready task as `$TASK_ID`. (Future enhancement: AskUserQuestion to let user pick from `$READY` list — not in Phase 2.) Phase 2 caps at **1 task per `/workflow` invocation** to avoid runaway.
 7. `Bash`: `roadmap.sh set-task-state --roadmap "$CP/roadmap.md" --task-id "$TASK_ID" --state in-progress`.
 8. **Task** invocation:
    - `subagent_type: "code-implementor"`
@@ -225,7 +227,7 @@ Special-case: instead of one Task launch, iterate roadmap tasks.
 9. After Task returns:
    - If report contains `READY-TO-COMMIT` → `roadmap.sh set-task-state --task-id "$TASK_ID" --state done`.
    - Else → `roadmap.sh set-task-state --task-id "$TASK_ID" --state blocked` + show the BLOCKED reason.
-10. Print task summary. **Exit the command** (do not loop — Phase 2A cap of 1 task per invocation). User re-invokes `/workflow <NAME>` to continue.
+10. Print task summary block (task-id, files-changed count from agent report, verification status, next ready tasks). **Exit the command** (do not loop — Phase 2 cap of 1 task per invocation). User re-invokes `/workflow <NAME>` to continue.
 
 ### Step 7 — Final summary (on pause / completion)
 

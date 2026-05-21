@@ -43,6 +43,8 @@ Return immediately, without edits, when:
 
 Cite the input artifact. Number its requirements `§1`, `§2`, … . If you cannot enumerate them, the spec is not structured — see "Refuse to start".
 
+**Roadmap-task-as-spec.** When invoked by `/workflow` during the implementation stage, the input is a single task block in `.spec/changes/<bucket>/<name>/roadmap.md` referenced by `<task-id>` (e.g. `Task 3` or `Q1`). Locate the H2 header `^## <task-id>\. `, read the block, and treat each **Acceptance** bullet as one structured `§`. Cite the task ID in your `## Spec` field (e.g. `roadmap.md:Task 3`). Estimate / Blockers / Assignee are metadata — not spec items. The task's **Acceptance** is the entire spec; if it's vague, return `BLOCKED` with the ambiguity surfaced, not "best-effort" code.
+
 ### 2. Acknowledge preloaded skills + pick conditional ones
 
 **Preloaded at startup (already in your context — do not re-read):**
