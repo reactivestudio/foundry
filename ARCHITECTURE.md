@@ -5,16 +5,16 @@
 > (orchestrator agent, skill-resolver, conflict-resolver, ADR loop, Foundry MCP, …)
 > that has never been implemented in this repository.
 >
-> The **current** `foundry` plugin (v0.6.0) is a Kotlin / Spring Boot engineer's toolkit.
+> The **current** `foundry` plugin (v0.7.0) is a Kotlin / Spring Boot engineer's toolkit.
 > See [README.md](./README.md) for installed commands. The actually-shipping `.spec/`
-> subsystem is summarised in the [Current `.spec/` subsystem](#current-spec-subsystem-v060)
+> subsystem is summarised in the [Current `.spec/` subsystem](#current-spec-subsystem-v070)
 > section below; the rest of this file is roadmap material kept for reference.
 
 ---
 
-## Current `.spec/` subsystem (v0.6.0)
+## Current `.spec/` subsystem (v0.7.0)
 
-A change in `.spec/changes/` flows through 4 bucket directories (`backlog/`, `in-progress/`, `done/`, `declined/`) and 5 stages (`refinement`, `design`, `decomposition`, `implementation`, `verification`), each with its own state (`pending | in-progress | need-approve | approved | pause | skipped`).
+A change in `.spec/changes/` flows through 4 bucket directories (`backlog/`, `in-progress/`, `done/`, `declined/`) and 6 stages (`refinement`, `design`, `decomposition`, `implementation`, `verification`, `termination`), each with its own state (`pending | in-progress | need-approve | approved | pause | skipped`).
 
 ### State machine (per stage)
 
@@ -34,11 +34,17 @@ Top-level `status:` in `tracking.yaml` mirrors the bucket and is derived from st
 | Condition | Status / Bucket |
 |---|---|
 | `decline_reason:` field present | `declined` (terminal) |
-| `implementation` ∈ {in-progress, need-approve} OR `verification` ∈ same | `in-progress` |
-| `implementation` ∈ {approved, skipped} AND `verification` ∈ same | `done` |
+| Any of `{implementation, verification, termination}` ∈ {in-progress, need-approve, pause} | `in-progress` |
+| All of `{implementation, verification, termination}` ∈ {approved, skipped} | `done` |
 | otherwise | `backlog` |
 
-`pause` does not move the change — it stays where it is. `tracking.sh sync-status` rewrites the field on every state mutation.
+`pause` does not move the change — it stays where it is. `tracking.sh sync` rewrites both `status:` and `stage:` fields on every state mutation.
+
+Top-level `stage:` is the first stage (in canonical order) whose state is in `{in-progress, need-approve, pause}`; `none` if no stage is currently active.
+
+### YAML schema is flat
+
+Stage values live as top-level keys in `tracking.yaml` — there is no nested `stages:` block. Order convention: `refinement` → `design` → `decomposition` → `implementation` → `verification` → `termination`. Both `status:` and `stage:` are derived and resynced on every write.
 
 ### Artifacts (filled by agents)
 
@@ -50,47 +56,40 @@ Top-level `status:` in `tracking.yaml` mirrors the bucket and is derived from st
 | decomposition | `roadmap.md` | teamlead |
 | implementation | code in project tree | code-implementor |
 | verification | (runs Quality gates from roadmap.md) | verifier |
+| termination | post-merge follow-up (docs, announce, deploy confirm) | role TBD |
 
-Spec-commands (`/change`, `/track`, etc.) are **state API only** — they don't generate domain content. The `/change` command additionally generates slug + description + writes the original task text verbatim into `propose.md`. Per-stage artifacts (requirements/design/roadmap/code) are written by agents.
+`/change` is **state API only** — it does not generate domain content (except scaffolding `tracking.yaml` + `propose.md` and LLM-generating the slug/title/description from the original task text). Per-stage artifacts are written by agents.
 
-### Commands (4 + setup)
+### Commands (1 + setup)
 
 | Command | Form | Purpose |
 |---|---|---|
-| `/change` | bare | Interactive backlog list (top 10 + actions: move to in-progress / show in-progress / show closed). |
+| `/change` | bare | Interactive: pick bucket (backlog / in-progress / closed) → table → drill into a change → context-aware actions (start refinement, advance, send-back, pause, skip, decline, set scope). All state mutations happen here. |
 | `/change "<task text>"` | with text | LLM-generate slug (3-4 segments) + title + description. Scaffold in backlog. Write full task text to `propose.md`. Prompt for "Start work now?" |
-| `/in-progress` | bare | List in-progress table. |
-| `/closed` | bare \| `done` \| `declined` | List terminal buckets — both or filter. |
-| `/track <name>` | summary | Title, description, status, all stages, artifacts, roadmap progress, recent history. |
-| `/track <name> <stage>` | stage detail | State + history filtered to stage + owner role + next action. |
-| `/track <name> <stage> <state>` | setter | Validate transition, write tracking.yaml, sync `status:`, auto-move bucket if status changed. |
 | `/foundry:setup` | — | Scaffold `.spec/` (4 buckets + standards/ + .template/) and project `.claude/`. |
 
-`accept` and "move to in-progress" are **not** slash commands — automatic side effects of `/track` (auto-move into `in-progress/` on `implementation: in-progress`; auto-move into `done/` on `verification: approved` with `implementation: approved|skipped`).
-
-`decline` is **not** a slash command — rare and user-initiated by natural language. Agent reads `spec-lifecycle` and invokes `tracking.sh decline` + `change.sh move --to declined` directly.
+There are no `/track`, `/in-progress`, `/closed`, `/done-list`, `/accept`, `/decline` commands — everything folds into `/change`. Auto-move: `change.sh move` is invoked by the `/change` drill flow whenever a state change flips the derived status. Agents that drive state directly call `tracking.sh set-stage` + `change.sh move` via Bash.
 
 ### Bash helpers (4 dispatch scripts in `scripts/spec/`)
 
 | Script | Subcommands |
 |---|---|
 | `stage-state-machine.sh` | `validate --from <s> --to <s>`, `states`, `allowed-from --state <s>` |
-| `tracking.sh` | `get-stage`, `set-stage`, `get-scope`, `set-scope`, `derive-status`, `sync-status`, `active-stage`, `decline`, `append-history` (all with `--change <path>` + topic-specific flags) |
+| `tracking.sh` | `get-stage`, `set-stage`, `get-scope`, `set-scope`, `derive-status`, `derive-stage`, `sync` (= `sync-status` alias), `decline`, `append-history` (all with `--change <path>` + topic-specific flags) |
 | `roadmap.sh` | `parse`, `status`, `ready`, `set-task-state` (all with `--roadmap <path>` + topic-specific flags) |
 | `change.sh` | `validate-name`, `locate`, `new` (requires `--title --name --description`), `move`, `list` |
 
-All pure-bash, portable awk (no gawk extensions, no `yq` dep). Named-flag args throughout. The `tracking.yaml` schema is the contract these helpers depend on — see `skills/spec/conventions/SKILL.md`.
+All pure-bash, portable awk (no gawk extensions, no `yq` dep). Named-flag args throughout. The flat `tracking.yaml` schema is the contract these helpers depend on — see `skills/spec/conventions/SKILL.md`.
 
 ### Role agents — not yet shipped
 
-Stages reference role agents (`system-analyst`, `architect`, `teamlead`, `code-implementor`, `verifier`). Only `code-implementor` exists today; the rest are placeholders for a follow-up phase where workflow commands orchestrate them end-to-end.
+Stages reference role agents (`system-analyst`, `architect`, `teamlead`, `code-implementor`, `verifier`, plus a future termination-owner). Only `code-implementor` exists today; the rest are placeholders for a follow-up phase where orchestration commands drive them end-to-end.
 
 ### Skills
 
-- `spec-lifecycle` — state machine + bucket derivation
-- `spec-conventions` — directory layout, naming, tracking.yaml schema
+- `spec-lifecycle` — state machine + status/stage derivation
+- `spec-conventions` — directory layout, naming, flat tracking.yaml schema
 - `spec-standards` — long-lived project rules (`.spec/standards/*.md`)
-- `spec-workflow` — stages → artifacts → agents mapping
 - `spec-roadmap` — roadmap.md task syntax + Quality gates
 
 ---

@@ -20,6 +20,15 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.7.0) — folded commands + flat YAML + termination stage
+
+- ~~Drop commands `/in-progress`, `/closed`, `/track`~~ — folded into `/change` interactive flow (bucket picker → table → drill → context-aware action menu).
+- ~~Drop skill `spec-workflow`~~ — content moved into `spec-lifecycle` (stage → artifact → role mapping table). 5 skills → 4.
+- ~~Add 6th stage `termination`~~ — post-verification work (docs, announce, deploy confirm). Status derivation now considers all three of `{implementation, verification, termination}`.
+- ~~Flat YAML schema~~: drop nested `stages:` block; each stage = top-level key. Add `stage:` field (derived, mirrors current active stage).
+- ~~Explicit `stage:` field~~ — derived by `tracking.sh derive-stage`, synced alongside `status:` via `tracking.sh sync` (alias kept: `sync-status`).
+- ~~`tracking.sh` API additions~~: `derive-stage`, `sync` (replaces `sync-status`; alias preserved); `active-stage` subcommand removed (covered by `derive-stage`).
+
 ## Shipped (v0.6.1) — refinement of 0.6.0
 
 - ~~Template dir `_template/` → `.template/`~~ (hidden-file convention).

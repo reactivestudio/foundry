@@ -8,23 +8,26 @@
 #   tracking.sh get-scope      --change <path>
 #   tracking.sh set-scope      --change <path> --scope <s> --by <who>
 #   tracking.sh derive-status  --change <path>
-#   tracking.sh active-stage   --change <path>
+#   tracking.sh derive-stage   --change <path>
+#   tracking.sh sync           --change <path>     # syncs both status: and stage: fields
+#   tracking.sh sync-status    --change <path>     # alias of sync
 #   tracking.sh decline        --change <path> --reason <r> --by <who>
 #   tracking.sh append-history --change <path> --stage <s> --status <st> --by <who>
-#   tracking.sh sync-status    --change <path>
 #
-# Stages (5):       refinement design decomposition implementation verification
+# Stages (6):       refinement design decomposition implementation verification termination
 # Stage states (6): pending in-progress need-approve approved pause skipped
 # Scopes (4):       product project feature bugfix
 # Statuses (4):     backlog in-progress done declined
-#                   (declined is set by `decline` subcommand; others are derived from stages)
+#
+# YAML schema (flat): top-level keys for each stage; no nested `stages:` block.
+# Top-level `status:` and `stage:` are derived from stage values + decline_reason.
 
 set -eu
 
 SELF_DIR=$(cd "$(dirname "$0")" && pwd)
 STATE_MACHINE="$SELF_DIR/stage-state-machine.sh"
 
-VALID_STAGES="refinement design decomposition implementation verification"
+VALID_STAGES="refinement design decomposition implementation verification termination"
 VALID_SCOPES="product project feature bugfix"
 
 # === helpers ===
@@ -50,18 +53,19 @@ require_file() {
   fi
 }
 
-# Read one stage's value from tracking.yaml (portable awk).
+is_valid_stage() {
+  printf ' %s ' "$VALID_STAGES" | grep -q " $1 "
+}
+
+# Read one stage's value from tracking.yaml (flat top-level key).
 read_stage() {
   local tracking=$1 stage=$2
   awk -v want="$stage" '
-    /^stages:[[:space:]]*$/ { in_stages = 1; next }
-    in_stages && /^[^[:space:]]/ { in_stages = 0 }
-    in_stages && /^[[:space:]]+[a-z_-]+:[[:space:]]+[a-z-]+[[:space:]]*$/ {
-      n = split($0, parts, ":")
-      key = parts[1]; val = parts[2]
-      gsub(/[[:space:]]/, "", key)
-      gsub(/[[:space:]]/, "", val)
-      if (key == want) { print val; exit }
+    $0 ~ "^"want":[[:space:]]+[a-z-]+[[:space:]]*$" {
+      sub("^"want":[[:space:]]+", "", $0)
+      gsub(/[[:space:]]/, "", $0)
+      print
+      exit
     }
   ' "$tracking"
 }
@@ -103,21 +107,13 @@ rewrite_stage() {
   local tmp
   tmp=$(mktemp "${TMPDIR:-/tmp}/tracking.XXXXXX")
   awk -v want="$stage" -v val="$new_state" '
-    BEGIN { in_stages = 0 }
-    /^stages:[[:space:]]*$/ { in_stages = 1; print; next }
-    in_stages && /^[^[:space:]]/ { in_stages = 0 }
-    in_stages && /^[[:space:]]+[a-z_-]+:[[:space:]]+[a-z-]+[[:space:]]*$/ {
+    $0 ~ "^"want":[[:space:]]+[a-z-]+[[:space:]]*$" {
+      # Preserve key + colon + whitespace, replace value.
       line = $0
-      if (match(line, /^[[:space:]]+[a-z_-]+:[[:space:]]+/) > 0) {
-        key_line = $0
-        sub(/:[[:space:]]+.*$/, "", key_line)
-        key_name = key_line
-        sub(/^[[:space:]]+/, "", key_name)
-        if (key_name == want) {
-          prefix = substr(line, 1, RLENGTH)
-          print prefix val
-          next
-        }
+      if (match(line, "^"want":[[:space:]]+") > 0) {
+        prefix = substr(line, 1, RLENGTH)
+        print prefix val
+        next
       }
     }
     { print }
@@ -127,6 +123,17 @@ rewrite_stage() {
 
 # Compute status from current yaml state (no I/O write).
 # Echoes: backlog | in-progress | done | declined
+#
+# Rules (in order):
+#   1. decline_reason present → declined
+#   2. implementation == pending → backlog (planning still ongoing or not started)
+#   3. all of {implementation, verification, termination} ∈ {approved, skipped} → done
+#   4. otherwise → in-progress
+#
+# Key invariant: once implementation leaves `pending`, the change can only move
+# to `in-progress` or `done` (or `declined`). A pending termination after a
+# completed verification keeps the change `in-progress` until termination is
+# closed (approved or skipped).
 compute_status() {
   local tracking=$1
   local declined_reason
@@ -135,37 +142,62 @@ compute_status() {
     echo declined
     return
   fi
-  local impl verif
+  local impl verif term
   impl=$(read_stage "$tracking" implementation)
   verif=$(read_stage "$tracking" verification)
-  case "$impl" in
-    in-progress|need-approve) echo in-progress; return ;;
-  esac
-  case "$verif" in
-    in-progress|need-approve) echo in-progress; return ;;
-  esac
-  case "$impl" in
-    approved|skipped)
-      case "$verif" in
-        approved|skipped) echo done; return ;;
-      esac
-      ;;
-  esac
-  echo backlog
+  term=$(read_stage "$tracking" termination)
+  if [ "$impl" = pending ]; then
+    echo backlog
+    return
+  fi
+  case "$impl" in approved|skipped) ;; *) echo in-progress; return ;; esac
+  case "$verif" in approved|skipped) ;; *) echo in-progress; return ;; esac
+  case "$term"  in approved|skipped) ;; *) echo in-progress; return ;; esac
+  echo done
 }
 
-# Rewrite the top-level `status:` line in tracking.yaml to match computed value.
+# Compute current active stage (first non-{approved,skipped,pending} stage,
+# or first non-terminal stage if any in-progress/need-approve/pause).
+# Echoes one of $VALID_STAGES, or "none" if no stage active.
+compute_stage() {
+  local tracking=$1 s state
+  for s in $VALID_STAGES; do
+    state=$(read_stage "$tracking" "$s")
+    case "$state" in
+      in-progress|need-approve|pause) echo "$s"; return ;;
+    esac
+  done
+  echo none
+}
+
+# Rewrite top-level `status:` line.
 sync_status_field() {
-  local tracking=$1
-  local computed
+  local tracking=$1 computed tmp
   computed=$(compute_status "$tracking")
-  local tmp
   tmp=$(mktemp "${TMPDIR:-/tmp}/tracking-status.XXXXXX")
   awk -v val="$computed" '
     /^status:[[:space:]]/ { print "status: " val; next }
     { print }
   ' "$tracking" > "$tmp"
   mv "$tmp" "$tracking"
+}
+
+# Rewrite top-level `stage:` line.
+sync_stage_field() {
+  local tracking=$1 computed tmp
+  computed=$(compute_stage "$tracking")
+  tmp=$(mktemp "${TMPDIR:-/tmp}/tracking-stage.XXXXXX")
+  awk -v val="$computed" '
+    /^stage:[[:space:]]/ { print "stage: " val; next }
+    { print }
+  ' "$tracking" > "$tmp"
+  mv "$tmp" "$tracking"
+}
+
+# Sync both derived fields.
+sync_all() {
+  sync_status_field "$1"
+  sync_stage_field "$1"
 }
 
 # === subcommand: get-stage ===
@@ -181,6 +213,10 @@ cmd_get_stage() {
     shift || true
   done
   require_args get-stage "--change|$change" "--stage|$stage"
+  if ! is_valid_stage "$stage"; then
+    echo "tracking get-stage: '$stage' is not a valid stage (one of: $VALID_STAGES)" >&2
+    exit 2
+  fi
   local tracking="$change/tracking.yaml"
   require_file "$tracking"
   local val
@@ -207,6 +243,10 @@ cmd_set_stage() {
     shift || true
   done
   require_args set-stage "--change|$change" "--stage|$stage" "--state|$new_state" "--by|$by"
+  if ! is_valid_stage "$stage"; then
+    echo "tracking set-stage: '$stage' is not a valid stage (one of: $VALID_STAGES)" >&2
+    exit 2
+  fi
   local tracking="$change/tracking.yaml"
   require_file "$tracking"
   local current
@@ -222,7 +262,7 @@ cmd_set_stage() {
     rewrite_stage "$tracking" "$stage" "$new_state"
   fi
   append_history_entry "$tracking" "$stage" "$new_state" "$by"
-  sync_status_field "$tracking"
+  sync_all "$tracking"
   echo "$new_state"
 }
 
@@ -270,12 +310,11 @@ cmd_set_scope() {
     { print }
   ' "$tracking" > "$tmp"
   mv "$tmp" "$tracking"
-  # Note: scope is recorded in the top-level `scope:` field only — no history
-  # entry. Per 0.6.1, history captures only real stage transitions.
+  # Note: scope recorded only in top-level `scope:` field — no history entry.
   echo "$scope"
 }
 
-# === subcommand: derive-status (was: derive-bucket) ===
+# === subcommand: derive-status ===
 
 cmd_derive_status() {
   local change=""
@@ -292,48 +331,39 @@ cmd_derive_status() {
   compute_status "$tracking"
 }
 
-# === subcommand: sync-status (rewrite status field) ===
+# === subcommand: derive-stage ===
 
-cmd_sync_status() {
+cmd_derive_stage() {
   local change=""
   while [ $# -gt 0 ]; do
     case ${1:-} in
       --change) shift; change=${1:-} ;;
-      *) echo "tracking sync-status: unknown arg '$1'" >&2; exit 2 ;;
+      *) echo "tracking derive-stage: unknown arg '$1'" >&2; exit 2 ;;
     esac
     shift || true
   done
-  require_args sync-status "--change|$change"
+  require_args derive-stage "--change|$change"
   local tracking="$change/tracking.yaml"
   require_file "$tracking"
-  sync_status_field "$tracking"
-  compute_status "$tracking"
+  compute_stage "$tracking"
 }
 
-# === subcommand: active-stage ===
+# === subcommand: sync (rewrites both status: and stage: fields) ===
 
-cmd_active_stage() {
+cmd_sync() {
   local change=""
   while [ $# -gt 0 ]; do
     case ${1:-} in
       --change) shift; change=${1:-} ;;
-      *) echo "tracking active-stage: unknown arg '$1'" >&2; exit 2 ;;
+      *) echo "tracking sync: unknown arg '$1'" >&2; exit 2 ;;
     esac
     shift || true
   done
-  require_args active-stage "--change|$change"
+  require_args sync "--change|$change"
   local tracking="$change/tracking.yaml"
   require_file "$tracking"
-  local s
-  for s in $VALID_STAGES; do
-    local state
-    state=$(read_stage "$tracking" "$s")
-    case "$state" in
-      approved|skipped) continue ;;
-      *) echo "$s"; return ;;
-    esac
-  done
-  echo ""
+  sync_all "$tracking"
+  printf '%s\t%s\n' "$(compute_status "$tracking")" "$(compute_stage "$tracking")"
 }
 
 # === subcommand: decline ===
@@ -372,9 +402,8 @@ cmd_decline() {
     }
   ' "$tracking" > "$tmp"
   mv "$tmp" "$tracking"
-  # Note: decline is recorded in the top-level `decline_reason:` field only —
-  # no history entry. Per 0.6.1, history captures only real stage transitions.
-  sync_status_field "$tracking"
+  # Decline recorded only in top-level `decline_reason:` field — no history entry.
+  sync_all "$tracking"
 }
 
 # === subcommand: append-history (utility) ===
@@ -410,8 +439,9 @@ Subcommands:
   get-scope      --change <path>
   set-scope      --change <path> --scope <scope> --by <who>
   derive-status  --change <path>
-  sync-status    --change <path>
-  active-stage   --change <path>
+  derive-stage   --change <path>
+  sync           --change <path>          # rewrites status: + stage: fields
+  sync-status    --change <path>          # alias of sync
   decline        --change <path> --reason <reason> --by <who>
   append-history --change <path> --stage <stage> --status <status> --by <who>
 
@@ -419,6 +449,8 @@ Stages:     $VALID_STAGES
 Scopes:     $VALID_SCOPES
 Statuses:   backlog in-progress done declined
 Stage states (see stage-state-machine.sh): pending in-progress need-approve approved pause skipped
+
+YAML schema is flat — each stage is a top-level key.
 EOF
 }
 
@@ -430,8 +462,9 @@ case "$sub" in
   get-scope)      cmd_get_scope "$@" ;;
   set-scope)      cmd_set_scope "$@" ;;
   derive-status)  cmd_derive_status "$@" ;;
-  sync-status)    cmd_sync_status "$@" ;;
-  active-stage)   cmd_active_stage "$@" ;;
+  derive-stage)   cmd_derive_stage "$@" ;;
+  sync)           cmd_sync "$@" ;;
+  sync-status)    cmd_sync "$@" ;;
   decline)        cmd_decline "$@" ;;
   append-history) cmd_append_history "$@" ;;
   -h|--help|"")   usage; [ -z "$sub" ] && exit 2 || exit 0 ;;

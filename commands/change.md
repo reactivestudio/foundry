@@ -1,131 +1,160 @@
 ---
 name: change
-description: "Change command. Bare = interactive list (top 10 + actions). With text = LLM-scaffold new change in .spec/changes/backlog/."
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh:*) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh:*) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/roadmap.sh:*) Bash(grep:*) Bash(sort:*) Bash(head:*) Bash(wc:*) Bash(test:*) Read Write AskUserQuestion
+description: "Change command. Bare = interactive (pick bucket → list → drill → actions). With text = LLM-scaffold new change in .spec/changes/backlog/."
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh:*) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh:*) Bash(${CLAUDE_PLUGIN_ROOT}/scripts/spec/roadmap.sh:*) Bash(grep:*) Bash(sort:*) Bash(head:*) Bash(tail:*) Bash(wc:*) Bash(test:*) Bash(ls:*) Read Write AskUserQuestion
 ---
 
-Interactive change command — single entry point for working with `.spec/changes/`. Branches on argument presence:
+Single entry point for working with `.spec/changes/`. Branches on argument presence.
 
-- **No args** → list current backlog (top 10 + count), then interactively offer follow-ups.
-- **No args + empty backlog** → show empty table, then interactively offer to add a task.
-- **With free-form task text** → LLM-generate slug + short description, scaffold new change in `backlog/`, write full task text to `propose.md`, then offer to start work.
+- **No args** → pick a bucket (backlog / in-progress / done / declined) or add new. Show table. Optionally drill into a change for stage actions.
+- **Free-form task text** → LLM-generate slug + title + description, scaffold new change in `backlog/`, write full task text to `propose.md`, offer to start work.
 
-Every AskUserQuestion option can be answered with a free-form custom value via the auto-provided "Other" choice.
+Every AskUserQuestion option is overridable via the auto-provided **Other** choice (free-form text).
+
+This is the **only** user-facing slash command for `.spec/changes/` (besides `/setup`). All state setters that aren't user-driven (agent flips, internal moves) call `tracking.sh set-stage` and `change.sh move` directly via Bash — no slash command needed.
 
 ## Procedure
 
 ### Step 0 — Decide form
 
-If `$ARGUMENTS` (after trimming) is empty → **List form** (Steps 1–4). Otherwise → **Add form** (Steps 5–9).
+If `$ARGUMENTS` (trimmed) is empty → **Browse form** (Steps 1–5). Otherwise → **Add form** (Steps 6–10).
 
 ---
 
-### List form
+### Browse form
 
-**Step 1 — Fetch backlog.**
-`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh list --bucket backlog`. Output is TSV with columns `bucket name title active_stage active_stage_state scope roadmap last_event_at path`. Capture row count as `N`.
+**Step 1 — Pick bucket.**
 
-**Step 2a — Empty backlog (N=0).**
-- Print: `backlog/ is empty.`
-- **AskUserQuestion:** `"Backlog is empty. Add a task? (Pick an example, or type your own task text via Other.)"`
-  - Options (header `"New task"`):
-    - `"Add 2FA"` — description: `"Example title."`
-    - `"Fix login rate limit"` — description: `"Example bugfix-style title."`
-    - `"Refactor user service"` — description: `"Example refactor-style title."`
-    - `"Skip — exit"` — description: `"Don't add. Exit."`
-- If user picked an example or supplied custom text via Other → set `TASK_TEXT=<chosen>` and **jump to Step 5** (Add form).
-- If Skip → print `Backlog still empty. Run /change "<text>" to add a task anytime.` and exit.
+- **AskUserQuestion:** `"Which bucket to inspect?"` (header `"Bucket"`):
+  - `"backlog"` — description: `"Not yet picked up. refinement/design/decomposition active or pending."`
+  - `"in-progress"` — description: `"Actively worked on. implementation/verification/termination running."`
+  - `"closed"` — description: `"done/ + declined/. Read-only history."`
+  - `"add new"` — description: `"Skip browsing; scaffold a new change instead."`
 
-**Step 2b — Non-empty backlog (N≥1).**
+- If `"add new"` → ask for task text (single-question prompt — accept free text via Other only), assign to `TASK_TEXT`, jump to **Step 6**.
+- If `"closed"` → set `BUCKET_LIST="done declined"`, skip to Step 2 (list both).
+- Otherwise → set `BUCKET_LIST="<picked>"`.
 
-`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh list --bucket backlog | sort -t$'\t' -k8,8r | head -10` — top 10 by `last_event_at` desc (column 8).
+**Step 2 — Fetch + render table.**
 
-Render markdown table:
+For each bucket in `BUCKET_LIST`:
+
+`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh list --bucket <b>`. TSV columns: `bucket name title status stage stage_state scope roadmap last_event_at path`. Sort by `last_event_at` desc (column 9), keep top 10. Capture row count `N`.
+
+If `N=0`:
+- Print `<b>/ is empty.`
+- Skip to Step 4.
+
+Else render markdown table:
 ```
-| Name | Title | Active stage | State | Scope | Last event |
+| Name | Title | Stage | State | Scope | Last event |
 |---|---|---|---|---|---|
 | add-2fa-totp | Add two-factor authentication via TOTP | refinement | need-approve | feature | 2026-05-21 16:00 |
-...
 ```
 
-If `N > 10`, append: `+ <N-10> more. Run /track <name> for detail on any change.`
+If `N > 10`, append: `+ <N-10> more.`
 
-**Step 3 — Ask follow-up.**
+For `declined/` rows, also surface `decline_reason:` via `grep '^decline_reason:' <path>/tracking.yaml`.
+
+**Step 3 — Build candidate name list.**
+
+Collect top 4 names across all listed buckets (by last_event_at desc) as `DRILL_OPTIONS`. If `N=0` → empty list, skip Step 4 drill option.
+
+**Step 4 — Ask follow-up.**
+
 - **AskUserQuestion:** `"What next?"` (header `"Action"`):
-  - `"Move task(s) to in-progress"` — description: `"Pick one or more changes to start implementation. Auto-moves to in-progress/."`
-  - `"Show in-progress"` — description: `"Display the in-progress table."`
-  - `"Show closed"` — description: `"Display recent done/ and declined/."`
-  - `"Done"` — description: `"Exit. No further action."`
+  - `"Drill into a change"` — description: `"Pick one to see stage history + take action. Skipped if list is empty."` (omit if empty)
+  - `"Switch bucket"` — description: `"Pick a different bucket to inspect."`
+  - `"Add new change"` — description: `"Scaffold a new change in backlog/."`
+  - `"Exit"` — description: `"Done."`
 
-**Step 4 — Branch on answer.**
+- If `"Switch bucket"` → loop to Step 1.
+- If `"Add new change"` → ask for task text via single-question free-text prompt → Step 6.
+- If `"Exit"` → done.
+- If `"Drill into a change"`:
+  - **AskUserQuestion:** `"Which change?"` (header `"Change"`):
+    - Show up to 4 names from `DRILL_OPTIONS` with description `"Title: <title> · stage: <stage>/<state>"`. Other = free-form name.
+  - Set `CHANGE_NAME=<answer>`. Continue to Step 5.
 
-#### 4a. "Move task(s) to in-progress"
+**Step 5 — Drill into change.**
 
-- Take top 4 backlog names (by last_event_at desc) as candidate options.
-- **AskUserQuestion (`multiSelect: true`):** `"Which task(s) to move? (Pick from list, or type names via Other — comma-separated.)"` (header `"Tasks"`):
-  - `"<top1-name>"` — description: `"Title: <title> · scope: <scope>"`
-  - `"<top2-name>"` — description: `"Title: <title> · scope: <scope>"`
-  - `"<top3-name>"` — description: `"Title: <title> · scope: <scope>"`
-  - `"<top4-name>"` — description: `"Title: <title> · scope: <scope>"`
+`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh locate --name <CHANGE_NAME>` → `$CP`. On failure: report + loop back to Step 4.
 
-- For each selected name `n`:
-  1. `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh locate --name <n>` → `CP`. On exit 1/2 → record failure, continue.
-  2. `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh set-stage --change $CP --stage implementation --state in-progress --by user`. On exit 1 (invalid transition) → record failure.
-  3. `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh move --name <n> --to in-progress --by auto`.
+`Read` `$CP/tracking.yaml`. Render:
+```
+<CHANGE_NAME> — <title>
+  status:  <status>          stage: <stage>
+  scope:   <scope>           bucket: <bucket>
 
-- Final report:
-  ```
-  /change (move):
-    moved to in-progress: <list of successful names>
-    failed:               <list with diagnostic>  (omit line if all succeeded)
-    next: /in-progress to see active changes, /track <name> for detail
-  ```
+  refinement     <state>
+  design         <state>
+  decomposition  <state>
+  implementation <state>
+  verification   <state>
+  termination    <state>
 
-#### 4b. "Show in-progress"
+  last 5 history entries:
+    <at>  <stage>  <status>  (by <by>)
+    …
+```
 
-`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh list --bucket in-progress`. Render 6-column table same as `/in-progress` does. Exit.
+If `$CP/roadmap.md` exists → also call `roadmap.sh status --roadmap $CP/roadmap.md` and show one line.
 
-#### 4c. "Show closed"
+**Context-aware action menu.** Based on current `stage:` field and its state:
 
-`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh list --bucket done` and `--bucket declined`. Render two sub-tables. For declined rows: `grep '^decline_reason:' <path>/tracking.yaml` to surface reason. Exit.
+| current `stage` / state | Action options (4 max) |
+|---|---|
+| `none` (all pending) | Start refinement · Set scope · Decline · Back |
+| `<X>` `in-progress` | Mark need-approve · Pause · Skip stage · Back |
+| `<X>` `need-approve` | Approve (advance) · Send back (rework) · Decline · Back |
+| `<X>` `approved` (next stage pending) | Start next stage · Rework current · Decline · Back |
+| `<X>` `pause` | Resume · Skip stage · Decline · Back |
+| terminal (`done`/`declined`) | Show propose.md · Show roadmap · Show requirements · Back |
 
-#### 4d. "Done" → Exit.
+- **AskUserQuestion** with relevant options. Each label = imperative phrase ("Mark need-approve", "Send back", etc.).
+
+**Executing actions** — each is a sequence of Bash calls. Use `--by user` for human-initiated transitions.
+
+- **Start refinement**: `tracking.sh set-stage --change $CP --stage refinement --state in-progress --by user`.
+- **Mark need-approve**: `tracking.sh set-stage --change $CP --stage <current> --state need-approve --by user`.
+- **Approve (advance)**: `tracking.sh set-stage --change $CP --stage <current> --state approved --by user`. Then if status changed (read back via `tracking.sh derive-status`) and differs from bucket → `change.sh move --name <name> --to <new-status> --by auto`.
+- **Send back (rework)**: `tracking.sh set-stage --change $CP --stage <current> --state in-progress --by user`.
+- **Pause**: `tracking.sh set-stage --change $CP --stage <current> --state pause --by user`.
+- **Resume**: `tracking.sh set-stage --change $CP --stage <current> --state in-progress --by user`.
+- **Skip stage**: `tracking.sh set-stage --change $CP --stage <current> --state skipped --by user`. Auto-move on status change.
+- **Start next stage**: identify next pending stage in order (refinement → design → decomposition → implementation → verification → termination); `tracking.sh set-stage --change $CP --stage <next> --state in-progress --by user`. Auto-move if status flipped.
+- **Set scope**: AskUserQuestion with options `product / project / feature / bugfix` → `tracking.sh set-scope --change $CP --scope <value> --by user`.
+- **Decline**: prompt for reason (free text via single AskUserQuestion or Other), then `tracking.sh decline --change $CP --reason "<reason>" --by user` + `change.sh move --name <name> --to declined --by user`.
+- **Show propose.md / roadmap / requirements**: `Read` the file and print.
+
+After each action, re-render the change view (loop in Step 5) until user picks "Back" or "Exit".
 
 ---
 
 ### Add form
 
-**Step 5 — Receive `TASK_TEXT`.**
-If reached from Step 2a, `TASK_TEXT` is already set. Otherwise `TASK_TEXT` = `$ARGUMENTS` verbatim. If `--name <slug>` flag is present, capture explicit slug override and strip from `TASK_TEXT`.
+**Step 6 — Receive `TASK_TEXT`.**
 
-**Step 6 — LLM-generate slug + title + description.**
+If reached from Step 1/4, `TASK_TEXT` is the user's free-form answer. Otherwise `TASK_TEXT` = `$ARGUMENTS` verbatim. If `--name <slug>` is present, capture explicit slug override and strip from `TASK_TEXT`.
 
-This is a thinking step — you (Claude) produce three values from `TASK_TEXT`:
+**Step 7 — LLM-generate slug + title + description.**
 
-- **`TITLE`** — human-readable phrase, **up to ~120 chars**, single line. Imperative, specific.
-  - Example: TASK_TEXT = `"Добавить двухфакторку через TOTP, чтобы можно было сканировать QR в Google Authenticator. RFC 6238."`
-  - TITLE = `"Add two-factor authentication via TOTP"`
+Thinking step. From `TASK_TEXT` produce:
 
-- **`SLUG`** — kebab-case identifier, **3-4 segments**, concise but descriptive. Must match `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`. Avoid generic stems like "fix" or "add" if a more specific stem exists. If user provided `--name <slug>` override, use that instead.
-  - Example: SLUG = `"add-2fa-totp"`
+- **`TITLE`** — single-line imperative phrase, up to ~120 chars.
+- **`SLUG`** — kebab-case, 3-4 segments, matches `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`. Use `--name` override if provided.
+- **`DESCRIPTION`** — multi-line, up to ~500 chars (YAML `|`-literal block).
 
-- **`DESCRIPTION`** — **multi-line, up to ~500 chars**. Several short paragraphs or 2-4 sentences expanding the title with what / why / scope context. Stored as a YAML `|`-literal block.
-  - Example DESCRIPTION:
-    ```
-    Adds TOTP-based 2FA per RFC 6238 with Google Authenticator compatibility.
-    Supports QR-code provisioning and backup recovery codes.
-    Integrates with existing Spring Security configuration without breaking change.
-    ```
+If `TASK_TEXT` ≤ 20 chars, reuse as TITLE and set DESCRIPTION to TITLE.
 
-If TASK_TEXT is too short to extract a meaningful TITLE / DESCRIPTION (≤ 20 chars), reuse it as TITLE and set DESCRIPTION to TITLE.
+**Step 8 — Scaffold.**
 
-**Step 7 — Scaffold.**
+`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh new --title "<TITLE>" --name "<SLUG>" --description "<DESCRIPTION>"`. Pass multi-line DESCRIPTION in double quotes — `change.sh new` indents body lines under `description: |`. Capture stdout (absolute path) as `CP`.
 
-`Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh new --title "<TITLE>" --name "<SLUG>" --description "<DESCRIPTION>"`. For multi-line descriptions, pass the whole string in double quotes — `change.sh new` reads it via ENVIRON-style awk and indents each line by 2 spaces under `description: |` in the YAML. Capture stdout (absolute path) as `CP`.
-- Exit 1 (slug collision / invalid name) → if collision and user didn't pass `--name`, regenerate SLUG with an extra differentiating segment and retry once. After second failure → ask user for explicit slug.
-- Exit 3 (template missing) → `run /foundry:setup first`. Exit.
+- Exit 1 (collision / invalid) → if collision and no `--name` override, regenerate SLUG with an extra differentiating segment and retry once. After second failure → ask user for explicit slug.
+- Exit 3 (template missing) → tell user to run `/foundry:setup` first. Exit.
 
-**Step 8 — Write `propose.md` with full task text.**
+**Step 9 — Write `propose.md` with full task text.**
 
 `Read` `$CP/propose.md` (scaffold contains only `# <TITLE>\n`). `Write` it back as:
 
@@ -134,46 +163,44 @@ If TASK_TEXT is too short to extract a meaningful TITLE / DESCRIPTION (≤ 20 ch
 
 ## Intent
 
-<TASK_TEXT — verbatim, may be multi-paragraph>
+<TASK_TEXT verbatim, may be multi-paragraph>
 ```
 
-Keep TASK_TEXT verbatim. This is the source of truth for "what was originally requested" — agents later enrich it with `## Requirements`, `## Open questions`, etc.
-
-Print scaffold report:
+Print:
 ```
 /change (add):
-  name:  <SLUG>
-  title: "<TITLE>"
+  name:        <SLUG>
+  title:       "<TITLE>"
   description: "<DESCRIPTION>"
-  path:  <CP>
-  status: backlog
-  stages: refinement=pending design=pending decomposition=pending implementation=pending verification=pending
-  propose.md: written (<TASK_TEXT length> chars)
+  path:        <CP>
+  status:      backlog
+  stage:       none
+  propose.md:  written (<TASK_TEXT length> chars)
 ```
 
-**Step 9 — Offer to start work.**
+**Step 10 — Offer to start work.**
+
 - **AskUserQuestion:** `"Start work now?"` (header `"Start work"`):
-  - `"Yes — start refinement"` — description: `"Set refinement to in-progress. Stays in backlog. Recommended for features."`
-  - `"Yes — straight to in-progress (skip planning)"` — description: `"Set implementation to in-progress. Auto-moves to in-progress/. Skips refinement/design/decomposition. Use for trivial bugfixes."`
-  - `"No — leave in backlog"` — description: `"Leave all stages pending. Resume later via /change or /track."`
+  - `"Yes — start refinement"` — description: `"refinement → in-progress. Stays in backlog/. Recommended for features."`
+  - `"Yes — straight to implementation"` — description: `"implementation → in-progress. Auto-moves to in-progress/. Skips refinement/design/decomposition. Trivial bugfixes only."`
+  - `"No — leave in backlog"` — description: `"All stages stay pending. Resume later via /change."`
 
 - On `"start refinement"`:
-  - `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh set-stage --change $CP --stage refinement --state in-progress --by user`.
-  - Final: `Started: refinement in-progress. Status: backlog. Next: agent writes requirements.md → /track <name> refinement need-approve.`
+  - `Bash`: `tracking.sh set-stage --change $CP --stage refinement --state in-progress --by user`.
+  - Final: `Started: refinement in-progress. status=backlog stage=refinement. Next: write requirements.md → /change → drill → Mark need-approve.`
 
-- On `"straight to in-progress"`:
-  - `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh set-stage --change $CP --stage implementation --state in-progress --by user`.
-  - `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh move --name <SLUG> --to in-progress --by auto`.
-  - Final: `Started: implementation in-progress. Status: in-progress (auto-moved). Note: refinement/design/decomposition stayed pending — planning skipped.`
+- On `"straight to implementation"`:
+  - `Bash`: `tracking.sh set-stage --change $CP --stage implementation --state in-progress --by user`.
+  - `Bash`: `change.sh move --name <SLUG> --to in-progress --by auto`.
+  - Final: `Started: implementation in-progress. status=in-progress (auto-moved) stage=implementation. Planning stages stayed pending.`
 
 - On `"leave in backlog"`:
-  - No-op. Final: `Left in backlog. Resume with /change or /track <name>.`
+  - Final: `Left in backlog. Resume via /change.`
 
 ## Important
 
-- Step 6 is **purely LLM** — `change.sh new` requires explicit `--name` and `--description`; no slug auto-derivation.
-- Step 8 writes the full original task text verbatim into `propose.md` — preserve user wording.
-- Step 4a's "move to in-progress" intentionally skips planning. Acceptable for tiny fixes; risky for features.
-- For comma-separated names in multi-select Other field, split on `,`, trim whitespace, validate each via `change.sh locate`.
-- If `multiSelect: true` returns no selections, record `No selection — nothing moved` and exit cleanly.
-- This is the only command that scaffolds changes. There is no legacy `/backlog` or `/backlog-add` alias.
+- Step 7 is purely LLM — `change.sh new` requires explicit `--name` and `--description`.
+- Step 9 writes the full original task text verbatim into `propose.md`.
+- "Straight to implementation" intentionally skips planning. Risky for features.
+- For free-form names supplied via Other, validate via `change.sh locate` (must resolve to exactly one dir).
+- This is the only command that scaffolds, lists, or mutates `.spec/changes/`. Stage setters are invoked from drill-down (Step 5) or directly via Bash by agents.

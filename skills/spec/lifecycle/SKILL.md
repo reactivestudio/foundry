@@ -1,17 +1,17 @@
 ---
 name: spec-lifecycle
-description: "Per-stage state machine + status derivation for .spec/changes/. NOT for artifact content rules — see spec-workflow."
+description: "Per-stage state machine + status/stage derivation for .spec/changes/. NOT for YAML schema — see spec-conventions."
 ---
 
 # spec-lifecycle
 
-A change in `.spec/changes/` has **5 stages** (`refinement`, `design`, `decomposition`, `implementation`, `verification`), each with its own state. The directory `<change>/` lives in one of 4 buckets (`backlog/`, `in-progress/`, `done/`, `declined/`). The top-level `status:` field in `tracking.yaml` mirrors the bucket and is **derived** from the stages — not stored independently.
+A change in `.spec/changes/` has **6 stages** (`refinement`, `design`, `decomposition`, `implementation`, `verification`, `termination`), each with its own state. The directory lives in one of 4 buckets (`backlog/`, `in-progress/`, `done/`, `declined/`). The top-level `status:` and `stage:` fields are **derived** from the stages — not stored independently.
 
 ## When to use
 
-- Implementing the `/track` command (Form 3 setter) or the listing commands (`/change`, `/in-progress`, `/closed`).
-- Performing a decline operation in response to a user request (no slash command — see Decline procedure below).
+- Driving state changes (via `/change` drill or direct `tracking.sh` calls from agents).
 - Reasoning about why a change is in `backlog/` vs `in-progress/`.
+- Performing a decline (no slash command — see Decline procedure).
 
 ## Stage state machine
 
@@ -24,7 +24,7 @@ Each stage has one of 6 states:
 | `need-approve` | Artifact ready, awaiting user review. |
 | `approved` | User approved; downstream stages may proceed. |
 | `pause` | Deferred — we'll come back later. Does **not** trigger bucket change. |
-| `skipped` | Stage deemed unnecessary for this change (e.g. bugfix may skip `design`). |
+| `skipped` | Stage deemed unnecessary for this change. |
 
 Allowed transitions (enforced by `stage-state-machine.sh validate`):
 
@@ -41,32 +41,51 @@ skipped      → in-progress                 (rare: stage reclassified as needed
 
 ## Status derivation
 
-Top-level `status:` is computed from `stages.implementation` + `stages.verification` + presence of `decline_reason`:
+Top-level `status:` is computed from `implementation`, `verification`, `termination` + presence of `decline_reason`, applied in order:
 
-| Condition | Status |
-|---|---|
-| `decline_reason:` field present | `declined` (terminal) |
-| `implementation` ∈ {in-progress, need-approve} OR `verification` ∈ same | `in-progress` |
-| `implementation` ∈ {approved, skipped} AND `verification` ∈ {approved, skipped} | `done` |
-| otherwise (refinement/design/decomposition active, or everything paused/pending) | `backlog` |
+1. `decline_reason:` field present → `declined` (terminal)
+2. `implementation == pending` → `backlog` (planning ongoing or work not yet started)
+3. All of `{implementation, verification, termination}` ∈ `{approved, skipped}` → `done`
+4. Otherwise → `in-progress`
 
-`pause` is a **marker**, not a status driver — a paused change stays where it is. To remove a long-paused change from active listings, perform a decline (see procedure below) with reason `"paused indefinitely"`.
+Key invariant: once `implementation` leaves `pending`, the change cannot return to `backlog` (only to `in-progress`, `done`, or `declined`). A pending `termination` after a completed `verification` keeps the change `in-progress` until termination is closed (approved or skipped). This is intentional — post-merge work like docs/announce belongs in `in-progress/` until done.
 
-After any stage state change via `/track <name> <stage> <state>`, the command:
-1. Calls `tracking.sh set-stage` (writes new state + history entry + syncs `status:` field).
-2. Calls `tracking.sh derive-status` (computes desired status string).
-3. If desired status ≠ current bucket → `change.sh move` (directory move + status re-sync). No history entry is added for the move — history captures only stage transitions.
+`pause` is a **marker**, not a status driver — a paused change stays in its current bucket. To remove a long-paused change from active listings, decline it with reason `"paused indefinitely"`.
+
+## Stage derivation
+
+Top-level `stage:` is the first stage (in order refinement → design → … → termination) whose state is in `{in-progress, need-approve, pause}`. If no such stage exists, `stage: none`.
+
+## After any state change
+
+Whether driven by `/change` drill or direct `tracking.sh set-stage`:
+
+1. `tracking.sh set-stage` writes new state + history entry + calls `sync` (rewrites `status:` and `stage:` fields).
+2. Caller compares new `status` to current bucket. If they differ → `change.sh move --to <new-status>`. No history entry is added for the move; the persistent audit is the bucket location itself + history of stage flips that triggered it.
+
+## Stage purpose (informal)
+
+| Stage | Typical artifact | Owner role |
+|---|---|---|
+| `refinement` | `requirements.md`; `scope` set | system-analyst (future) / user |
+| `design` | `system-design.md` + `application-design.md` | architect (future) / user |
+| `decomposition` | `roadmap.md` (atomic tasks + Q-gates) | teamlead (future) / user |
+| `implementation` | code changes; task states flipped in roadmap.md | code-implementor |
+| `verification` | Q-task runs; bug-fix iterations | verifier (future) / user |
+| `termination` | post-merge follow-up: docs update, announcement, retro, deployment confirmation | role TBD / user |
+
+Role-agents are partly out of scope today; for now treat owners as Claude doing the work directly.
 
 ## Back-edges (rework loops)
 
-When a later stage detects upstream issues, set the upstream stage from `approved` → `in-progress` (or `need-approve` → `in-progress` if it hasn't been approved yet):
+When a later stage detects upstream issues, set the upstream stage from `approved` → `in-progress`:
 
-- `architect` realises requirement R is unimplementable → `/track <n> refinement in-progress` → analyst revises requirements.md → `/track <n> refinement need-approve` → user approves → analyst's fix propagates downstream.
-- `teamlead` finds the design has no realistic decomposition → similar loop for `design`.
+- Architect realises requirement R is unimplementable → set `refinement: in-progress` → revise `requirements.md` → mark `need-approve` → user approves → fix propagates.
+- Teamlead finds the design has no realistic decomposition → similar loop for `design`.
 
-History preserves the full trail (each state flip is one entry).
+History preserves the full trail (each flip = one entry).
 
-## `decline` and `pause`
+## `decline` vs `pause`
 
 | | `decline` | `pause` |
 |---|---|---|
@@ -74,41 +93,41 @@ History preserves the full trail (each state flip is one entry).
 | Bucket effect | move to `declined/` | stay |
 | Terminal? | yes | no (resume any time) |
 | Reason field | yes (`decline_reason:`) | no |
-| Audit | `lifecycle/declined` history entry | per-stage history entry |
+| Audit | `decline_reason:` field | per-stage history entry |
 
 ## Procedure (manual workflow drive)
 
-1. Create: `/change "<task text>"` → LLM generates slug + title + description → scaffold in `backlog/`, all stages = `pending`, status = `backlog`.
-2. Start refinement: `/track <name> refinement in-progress`.
-3. Agent writes `requirements.md`, calls `tracking.sh set-scope --change <path> --scope <s> --by <who>` (via Bash), then `/track <name> refinement need-approve`.
-4. User reviews → `/track <name> refinement approved` (or `/track <name> refinement in-progress` to send back for rework).
-5. Repeat for `design` (writes system-design.md + application-design.md) and `decomposition` (writes roadmap.md).
-6. `/track <name> implementation in-progress` → auto-move to `in-progress/`. Implementor flips roadmap tasks via `roadmap.sh set-task-state`.
-7. When all main roadmap tasks done: `/track <name> implementation need-approve` → user approves.
-8. `/track <name> verification in-progress` → verifier runs Q-tasks. When all green: `/track <name> verification need-approve` → user approves → auto-move to `done/`.
+1. Create: `/change "<task text>"` → LLM-generates slug + title + description → scaffold in `backlog/`, all stages = `pending`, status = `backlog`, stage = `none`.
+2. Start refinement: `/change` → drill → "Start refinement". Or directly: `tracking.sh set-stage --change <path> --stage refinement --state in-progress --by user`.
+3. Agent writes `requirements.md`, calls `tracking.sh set-scope --change <path> --scope <s> --by <who>`, then sets `refinement: need-approve`.
+4. User reviews → drill → "Approve" (or "Send back" → rework).
+5. Repeat for `design` and `decomposition`.
+6. Drill → "Start implementation" (or set directly) → status becomes `in-progress`, auto-move to `in-progress/`. Code-implementor flips roadmap tasks via `roadmap.sh set-task-state`.
+7. All main tasks done → `implementation: need-approve` → user approves.
+8. `verification: in-progress` → verifier runs Q-tasks. All green → `need-approve` → approved.
+9. `termination: in-progress` → post-merge tasks (docs, announce, deploy confirm) → `need-approve` → approved → auto-move to `done/`.
 
 ## Decline procedure (no slash command)
 
-There is no `/decline` command — a decline is rare and user-initiated by natural language ("decline X because Y"). When you receive such a request:
+There is no `/decline`. Decline is rare and user-initiated by natural language ("decline X because Y"), or from `/change` drill-down → "Decline".
 
-1. **Locate.** `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh locate --name <name>`. Capture absolute path as `$CP`.
-2. **Set decline_reason + history.** `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/tracking.sh decline --change $CP --reason "<reason>" --by user`. This also syncs `status: declined`.
-3. **Move.** `Bash`: `${CLAUDE_PLUGIN_ROOT}/scripts/spec/change.sh move --name <name> --to declined --by user`. (No history entry for the move; `decline_reason:` field is the persistent audit.)
-4. Report `from: <bucket>/ → to: declined/`, the reason, and that decline is terminal (revive = new change with new slug).
+Direct sequence:
+1. `change.sh locate --name <name>` → `$CP`.
+2. `tracking.sh decline --change $CP --reason "<reason>" --by user` → writes `decline_reason:` + syncs status to `declined`.
+3. `change.sh move --name <name> --to declined --by user`.
 
 Declines occupy the name slot — `change.sh validate-name` refuses re-use. That is intentional.
 
 ## When NOT to use
 
-- Artifact content / per-stage authorship → `spec-workflow`.
-- Roadmap.md syntax + Quality gates → `spec-roadmap`.
+- YAML schema / field shape → `spec-conventions`.
+- `roadmap.md` syntax + Quality gates → `spec-roadmap`.
 - Standards files / long-lived rules → `spec-standards`.
-- Naming + tracking.yaml schema → `spec-conventions`.
 
 ## Anti-patterns
 
-- Manually editing `tracking.yaml` (especially `status:`) instead of using helpers — bash parsers depend on strict schema; one stray quote breaks `tracking.sh get-stage`. `status:` is derived; manual edits get overwritten on next `set-stage`.
-- Skipping `need-approve` step — flipping straight from `in-progress` → `approved` loses the human checkpoint. Allowed by state machine, but defeats the purpose.
+- Manually editing `tracking.yaml` (especially `status:` / `stage:`) — derived fields; next `set-stage` overwrites. Bash parsers depend on strict schema; one stray quote breaks `tracking.sh get-stage`.
+- Skipping `need-approve` step — flipping `in-progress` → `approved` directly loses the human checkpoint. Allowed by state machine, but defeats the purpose.
 - Using `pause` instead of decline for "we'll never do this" — `pause` keeps the change in active listings forever.
-- Hardcoding bucket name in agent prompts — always derive via `tracking.sh derive-status` to stay consistent.
-- Renumbering history entries or rewriting old `{ stage, status, by }` lines — history is append-only audit.
+- Renumbering or rewriting history entries — append-only audit.
+- Skipping `termination` for non-trivial features — post-merge work (docs, announce) usually exists; either do it (advance to approved) or explicitly skip (`skipped`).

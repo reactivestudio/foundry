@@ -239,7 +239,7 @@ cmd_move() {
   fi
   mv "$src" "$dest"
   if [ -f "$dest/tracking.yaml" ]; then
-    "$TRACKING" sync-status --change "$dest" >/dev/null
+    "$TRACKING" sync --change "$dest" >/dev/null
   fi
   echo "$dest"
 }
@@ -278,9 +278,9 @@ cmd_list() {
   }
 
   # Output columns (TSV):
-  # bucket  name  title  active_stage  active_stage_state  scope  roadmap  last_event_at  path
+  # bucket  name  title  status  stage  stage_state  scope  roadmap  last_event_at  path
 
-  local b d name tracking abs title active active_state scope roadmap_md roadmap_progress last_event
+  local b d name tracking abs title status stage stage_state scope roadmap_md roadmap_progress last_event
   for b in $buckets; do
     local bdir=".spec/changes/$b"
     [ -d "$bdir" ] || continue
@@ -290,18 +290,21 @@ cmd_list() {
       [ "$name" = ".template" ] && continue
       tracking="$d/tracking.yaml"
       if [ ! -f "$tracking" ]; then
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-          "$b" "$name" "—" "—" "—" "—" "—" "—" "$d"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+          "$b" "$name" "—" "—" "—" "—" "—" "—" "—" "$d"
         continue
       fi
       abs=$(cd "$d" && pwd)
       title=$(read_yaml_field "$tracking" title)
       [ -z "$title" ] && title="—"
-      active=$("$TRACKING" active-stage --change "$abs" 2>/dev/null || echo "")
-      if [ -n "$active" ]; then
-        active_state=$("$TRACKING" get-stage --change "$abs" --stage "$active" 2>/dev/null || echo "—")
+      status=$(read_yaml_field "$tracking" status)
+      [ -z "$status" ] && status="—"
+      stage=$(read_yaml_field "$tracking" stage)
+      [ -z "$stage" ] && stage="none"
+      if [ "$stage" != "none" ] && [ "$stage" != "—" ]; then
+        stage_state=$("$TRACKING" get-stage --change "$abs" --stage "$stage" 2>/dev/null || echo "—")
       else
-        active="—"; active_state="—"
+        stage_state="—"
       fi
       scope=$("$TRACKING" get-scope --change "$abs" 2>/dev/null || echo "")
       [ -z "$scope" ] && scope="—"
@@ -313,8 +316,8 @@ cmd_list() {
       fi
       last_event=$(read_last_event_at "$tracking")
       [ -z "$last_event" ] && last_event="—"
-      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$b" "$name" "$title" "$active" "$active_state" "$scope" "$roadmap_progress" "$last_event" "$abs"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$b" "$name" "$title" "$status" "$stage" "$stage_state" "$scope" "$roadmap_progress" "$last_event" "$abs"
     done
   done
 }
@@ -331,7 +334,7 @@ Subcommands:
   list          [--bucket backlog|in-progress|done|declined]
 
 List output columns (TSV):
-  bucket  name  title  active_stage  active_stage_state  scope  roadmap  last_event_at  path
+  bucket  name  title  status  stage  stage_state  scope  roadmap  last_event_at  path
 
 Buckets:        $VALID_BUCKETS
 Reserved names: $RESERVED_NAMES
