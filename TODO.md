@@ -20,6 +20,18 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.13.0) — Phase 2: /workflow orchestrator + 4 new producer agents + 5 new skills
+
+End-to-end orchestration ships. `/workflow <name>` drives a change through all 6 stages, delegating production to a sub-agent per stage and gating advancement on user approval via AskUserQuestion. Implementation stage iterates roadmap tasks via `roadmap.sh ready` + `code-implementor` (1 task per `/workflow` invocation; user re-invokes to continue).
+
+- ~~Phase 2A — Foundation~~: `skills/spec/workflow/SKILL.md` (paradigm doc — stage→agent table + hand-off protocol + state-branch logic + implementation task-loop sub-protocol). `scripts/spec/workflow.sh` (pure-bash lookup helper: `producer`, `artifact`, `next-action`, `stages`). `commands/workflow.md` (orchestration loop with all 6 stage branches + Step 6 task-loop). `agents/system-analyst.md` registered `foundry:spec-workflow` skill.
+- ~~Phase 2B — Design + Decomposition~~: `agents/architect.md` (model: opus) + `agents/teamlead.md` (model: opus). `skills/spec/design/SKILL.md` (system-design.md C4 ctx+container schema + application-design.md modules/ports/adapters/contracts schema + decision quality bar). `skills/spec/decomposition/SKILL.md` (atomicity rules ≤4h, blocker DAG, Q-gate taxonomy, owner assignments).
+- ~~Phase 2C — Implementation task-loop~~: `commands/workflow.md` Step 4.3 (in-progress) now short-circuits to Step 6 (task-loop) when stage = implementation. `agents/code-implementor.md` new §1 paragraph on roadmap-task-as-spec invocation form (each Acceptance bullet → one §; ambiguous Acceptance → return BLOCKED, not best-effort).
+- ~~Phase 2D — Verification + Termination~~: `agents/qa-engineer.md` (model: opus, runs Q-tasks per category: functional/exploratory/security/performance) + `agents/termination-handler.md` (model: opus, detects breakingness, appends CHANGELOG.md, writes termination.md). `skills/spec/verification/SKILL.md` + `skills/spec/termination/SKILL.md`.
+- ~~Phase 2E — Docs + bump 0.13.0~~: plugin.json + marketplace.json description updates; README.md + ARCHITECTURE.md document the orchestrator + 6 producer agents + 5 new skills + workflow.sh helper.
+
+Producer-agents follow a strict 7-step hand-off contract codified in `spec-workflow` skill: assert stage → read inputs → mark in-progress → produce artifact via Write → mark review → return structured report → stop. They do NOT call other agents — composition is the orchestrator's job. Reviewer-agents (peer review between producer and user) deliberately deferred to a future phase.
+
 ## Shipped (v0.12.0) — /change browse UX: tab-args, no AskUserQuestion, quartile-circle progress, hard-cap title
 
 Four coordinated /change browse-view changes addressing pilot feedback:
@@ -147,10 +159,19 @@ Four coordinated /change browse-view changes addressing pilot feedback:
 ## v0.5.0 follow-ups (specific to .spec/ subsystem)
 
 10. `/migrate` command для legacy `.spec/specs/` + `changes/archive/` + `project.md` + `config.yaml` → новая 4-bucket структура.
-11. Role-agents: `architect`, `teamlead`, `verifier`, `terminator` (есть: `code-implementor`, `system-analyst`).
-12. Workflow orchestrator command типа `/feature-request` который автоматически drive state machine end-to-end.
-13. `--parallel` mode для orchestrator'а — worktree-per-task execution для roadmap-ready групп (parallel-safe из disjoint blocker sets).
+11. ~~Role-agents: `architect`, `teamlead`, `verifier`, `terminator`~~ — **shipped in v0.13.0** (qa-engineer вместо verifier, termination-handler вместо terminator).
+12. ~~Workflow orchestrator command типа `/feature-request`~~ — **shipped in v0.13.0 as `/workflow`**.
+13. `--parallel` mode для orchestrator'а — worktree-per-task execution для roadmap-ready групп (parallel-safe из disjoint blocker sets). `roadmap.sh ready` already returns multiple ready tasks; current Phase 2 picks first and caps at 1 task per `/workflow` invocation.
 14. JSON output mode для bash helpers (CI / programmatic consumption).
 15. Lockfile / advisory locks для concurrent state operations на одной change'е.
 16. Optional `yq` для hardened YAML parsing (текущий pure-bash работает но fragile к расхождениям schema).
 17. Per-scope skip rules (e.g. `scope: bugfix` → architecture stage default `skipped`).
+
+## v0.13.0 follow-ups (workflow orchestrator)
+
+18. **Reviewer-агенты** — middle layer between producer's `review` and user's approve. Either single `spec-reviewer` agent + per-stage review skills, or per-stage reviewer agents (5 of them). Decide after running orchestrator in a real project and feeling where peer-review would help. Currently every `review` artifact goes straight to user.
+19. **Parallel implementation** — instead of 1 task per `/workflow` invocation, batch N ready tasks and launch N `code-implementor` sub-agents in parallel (one Task call per ready group with disjoint blocker sets). Requires task-state lockfile to avoid races.
+20. **Scope-conditional stage skipping** — `scope: bugfix` auto-skips `design` + `decomposition`; `scope: product` demands all 6 stages. Currently every stage starts in `estimation` regardless of scope.
+21. **Workflow log persisted per change** — separate `workflow.log` file capturing full Task invocation history (prompts + structured reports). Currently only state transitions land in `tracking.yaml history`.
+22. **`/workflow --resume <name>` flag** — for non-interactive background runs of long stages.
+23. **Migration command** — convert pre-0.13 changes (where stages may be in inconsistent states) into the new orchestrated model.

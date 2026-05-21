@@ -7,7 +7,7 @@
     {
       "name": "foundry",
       "source": "./",
-      "description": "Opinionated senior-engineer toolkit for Kotlin / Spring Boot: agents, methodology / clean-code / DDD / testing / architecture skills, adversarial review commands, end-of-turn sound hook, 4-bucket change workflow (.spec/changes/{backlog,in-progress,done,declined}/) with per-stage tracking (6 stages: refinement/design/decomposition/implementation/verification/termination) and long-lived standards/.",
+      "description": "Opinionated senior-engineer toolkit for Kotlin / Spring Boot: 6 producer agents (system-analyst, architect, teamlead, code-implementor, qa-engineer, termination-handler), methodology / clean-code / DDD / testing / architecture skills, adversarial review commands, end-of-turn sound hook, 4-bucket change workflow (.spec/changes/{backlog,in-progress,done,declined}/) with per-stage tracking + /workflow orchestrator and long-lived standards/.",
       "category": "workflow",
       "keywords": ["kotlin", "spring-boot", "ddd", "testing", "architecture", "spec-driven"]
     }

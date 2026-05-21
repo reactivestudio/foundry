@@ -5,14 +5,14 @@
 > (orchestrator agent, skill-resolver, conflict-resolver, ADR loop, Foundry MCP, …)
 > that has never been implemented in this repository.
 >
-> The **current** `foundry` plugin (v0.7.0) is a Kotlin / Spring Boot engineer's toolkit.
+> The **current** `foundry` plugin (v0.13.0) is a Kotlin / Spring Boot engineer's toolkit.
 > See [README.md](./README.md) for installed commands. The actually-shipping `.spec/`
-> subsystem is summarised in the [Current `.spec/` subsystem](#current-spec-subsystem-v070)
+> subsystem is summarised in the [Current `.spec/` subsystem](#current-spec-subsystem-v0130)
 > section below; the rest of this file is roadmap material kept for reference.
 
 ---
 
-## Current `.spec/` subsystem (v0.7.0)
+## Current `.spec/` subsystem (v0.13.0)
 
 A change in `.spec/changes/` flows through 4 bucket directories (`backlog/`, `in-progress/`, `done/`, `declined/`) and 6 stages (`refinement`, `design`, `decomposition`, `implementation`, `verification`, `termination`), each with its own state from an 8-element set: `estimation | required | skipped | pending | in-progress | review | completed | rejected`.
 
@@ -70,15 +70,17 @@ Stage values live as top-level keys in `tracking.yaml` — there is no nested `s
 
 `/change` is **state API only** — it does not generate domain content (except scaffolding `tracking.yaml` + `propose.md` and LLM-generating the slug/title/description from the original task text). Per-stage artifacts are written by agents.
 
-### Commands (1 + setup)
+### Commands (2 + setup)
 
 | Command | Form | Purpose |
 |---|---|---|
-| `/change` | bare | Interactive: pick bucket (backlog / in-progress / closed) → table → drill into a change → context-aware actions (start refinement, advance, send-back, pause, skip, decline, set scope). All state mutations happen here. |
+| `/change` | bare or `<bucket>` | Read-only tabbed browse: `All` / `backlog` / `in-progress` / `closed`. Each row: status icon · status · title (hard-cap 50) · created (pretty) · updated (relative) · progress (quartile-circle + `[done/total]`). No modal menu; navigate via `/change <arg>`. |
+| `/change <slug>` | with slug | Drill into a change → context-aware action menu (start, send to review, approve, reject, skip, decline, set scope). All manual state mutations happen here. |
 | `/change "<task text>"` | with text | LLM-generate slug (3-4 segments) + title + description. Scaffold in backlog. Write full task text to `propose.md`. Prompt for "Start work now?" |
+| `/workflow <name>` | with slug | Orchestration loop. Reads active stage + state, delegates to the producer agent for that stage via Task tool, runs review-preview + AskUserQuestion (approve / rework / reject / pause), advances to next stage on approve. Implementation stage iterates roadmap tasks (1 per invocation). |
 | `/foundry:setup` | — | Scaffold `.spec/` (4 buckets + standards/ + .template/) and project `.claude/`. |
 
-There are no `/track`, `/in-progress`, `/closed`, `/done-list`, `/accept`, `/decline` commands — everything folds into `/change`. Auto-move: `change.sh move` is invoked by the `/change` drill flow whenever a state change flips the derived status. Agents that drive state directly call `tracking.sh set-stage` + `change.sh move` via Bash.
+There are no `/track`, `/in-progress`, `/closed`, `/done-list`, `/accept`, `/decline` commands — everything folds into `/change` (manual) or `/workflow` (orchestrator). Auto-move: `change.sh move` is invoked by the `/change` drill flow + by producer agents via `tracking.sh set-stage` (which syncs status). Agents that drive state directly call `tracking.sh set-stage` via Bash.
 
 ### Bash helpers (4 dispatch scripts in `scripts/spec/`)
 
@@ -88,19 +90,35 @@ There are no `/track`, `/in-progress`, `/closed`, `/done-list`, `/accept`, `/dec
 | `tracking.sh` | `get-stage`, `set-stage`, `get-scope`, `set-scope`, `derive-status`, `derive-stage`, `sync` (= `sync-status` alias), `decline`, `append-history` (all with `--change <path>` + topic-specific flags) |
 | `roadmap.sh` | `parse`, `status`, `ready`, `set-task-state` (all with `--roadmap <path>` + topic-specific flags) |
 | `change.sh` | `validate-name`, `locate`, `new` (requires `--title --name --description`), `move`, `list` |
+| `workflow.sh` | `producer --stage <s>`, `artifact --stage <s>`, `next-action --change <path>`, `stages` — lookup helpers backing `/workflow` (single source of truth for stage→agent table) |
 
 All pure-bash, portable awk (no gawk extensions, no `yq` dep). Named-flag args throughout. The flat `tracking.yaml` schema is the contract these helpers depend on — see `skills/spec/conventions/SKILL.md`.
 
-### Role agents — not yet shipped
+### Role agents (all shipped as of v0.13.0)
 
-Stages reference role agents (`system-analyst`, `architect`, `teamlead`, `code-implementor`, `verifier`, plus a future termination-owner). Only `code-implementor` exists today; the rest are placeholders for a follow-up phase where orchestration commands drive them end-to-end.
+| Stage | Producer agent | Inputs | Output artifact(s) |
+|---|---|---|---|
+| refinement | `system-analyst` | `propose.md` + standards | `requirements.md` |
+| design | `architect` | `requirements.md` + standards | `system-design.md` + `application-design.md` |
+| decomposition | `teamlead` | requirements + designs | `roadmap.md` (main + Q tasks) |
+| implementation | `code-implementor` (per task) | one `roadmap.md` task spec | code + tests |
+| verification | `qa-engineer` | `roadmap.md` Q-tasks + code | `verification-report.md` |
+| termination | `termination-handler` | full change context | `termination.md` + `CHANGELOG.md` append |
+
+Every producer follows the same 7-step hand-off contract (see `spec-workflow` skill): read inputs → set stage `in-progress` → write artifact → set stage `review` → return structured report → stop. Producers do NOT call other agents — composition is the `/workflow` orchestrator's job.
 
 ### Skills
 
+- `spec-workflow` — orchestration paradigm: stage→producer map, hand-off contract, state-branch logic
 - `spec-lifecycle` — state machine + status/stage derivation
 - `spec-conventions` — directory layout, naming, flat tracking.yaml schema
 - `spec-standards` — long-lived project rules (`.spec/standards/*.md`)
 - `spec-roadmap` — roadmap.md task syntax + Quality gates
+- `spec-refinement` — FR/NFR taxonomy, scope categorisation, requirements.md schema
+- `spec-design` — system-design.md + application-design.md schemas, patterns vocabulary
+- `spec-decomposition` — atomicity rules, blocker DAG, Q-gate taxonomy
+- `spec-verification` — Q-task categories + execution patterns, verification-report.md schema
+- `spec-termination` — changelog conventions, migration notes, cleanup checklist
 
 ---
 
