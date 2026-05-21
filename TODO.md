@@ -20,6 +20,11 @@
 
 - ~~Интерактивный `/backlog`~~ — AskUserQuestion для добавления из пустого, выбора задач для move-to-sprint, переключения на /sprint и /closed inline.
 
+## Shipped (v0.7.2) — /setup: mandatory ask + always-run idempotent scaffold
+
+- ~~Pilot bug v2: even with Read-probe, /setup silently skipped .spec/ scaffolding entirely~~. Root cause: ANY conditional probe (test -d OR Read-marker) gave Claude a place to short-circuit to a "skip silently" branch when context was ambiguous. Fix: drop the probe ENTIRELY. Step 4 now ALWAYS asks "Set up .spec/?". On Yes → ALWAYS runs the scaffold loop (mkdir + per-file Read+Write — existing files never overwritten). No more "if X then skip" branches. Re-asking is cheap because the loop is idempotent.
+- Aligned all setup.md sections (What gets installed / Hard rules / Important) with the new always-ask flow.
+
 ## Shipped (v0.7.1) — /setup probe via Read instead of `test -d`
 
 - ~~Pilot bug: `/foundry:setup` reported `.spec` already exists and skipped copy~~ when `.spec/` was actually absent. Root cause: `Bash test -d` probe + Claude's exit-code interpretation was fragile (literal `R/.spec` if `R` not expanded → relative path; or exit 1 misread as "command failed = exists"). Fix: drop all `test -d` probes; use `Read` of a canonical marker file (`.spec/changes/.template/tracking.yaml`) — file-not-found is unambiguous. Dropped `cp -r` in favour of 3× `Read`+`Write` (only 3 template files). Removed legacy-detection (sunk cost — nobody migrating from 0.4.x anymore).

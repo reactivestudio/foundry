@@ -14,9 +14,9 @@ Always (mandatory, with diff-prompt on conflict):
 - `${CLAUDE_PLUGIN_ROOT}/.claude-template/settings.json` → `<project>/.claude/settings.json`
 - Entry `.claude/` appended to `<project>/.gitignore` if absent.
 
-Optional (asked only when absent — silent skip on re-run):
+Opt-in (always asked, idempotent — re-runs never overwrite existing files):
 
-- `<project>/.spec/` — 4-bucket change workflow with per-stage `tracking.yaml`. Scaffolded **locally** from `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/`. Bash-only file ops; no external deps. Includes `standards/` for long-lived project rules and `changes/.template/` (used by `change.sh new`).
+- `<project>/.spec/` — 4-bucket change workflow with per-stage `tracking.yaml`. Scaffolded **locally** from `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/`. Includes `standards/` for long-lived project rules and `changes/.template/` (used by `change.sh new`).
 - `<project>/.mcp.json` with any subset of `context7`, `serena`.
 
 Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. Toggle per-project with `/plugin disable foundry@reactivestudio`.
@@ -31,7 +31,7 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
   2. `pwd` (fallback when not in a git repo).
   3. `mkdir -p <abs-path>/.spec/changes/backlog <abs-path>/.spec/changes/in-progress <abs-path>/.spec/changes/done <abs-path>/.spec/changes/declined <abs-path>/.spec/changes/.template <abs-path>/.spec/standards` (create scaffold dirs — idempotent, no-op if all exist).
 - **All paths must be absolute and pre-substituted.** When the procedure says `R/.spec/...`, you must expand `R` to the actual project root before placing the Bash call. Never literally type `R/.spec` in a Bash invocation — bash treats `R` as a relative path and probes the wrong location. Same rule for `${CLAUDE_PLUGIN_ROOT}` — that env var is fine to leave unsubstituted *inside Bash* (the shell expands it), but never inside Read/Write `file_path` arguments.
-- **Probe existence via `Read`, not Bash.** To check whether `<abs>/.spec/...` exists, attempt `Read` of a canonical marker file in that subtree. If `Read` returns "file does not exist" → treat as absent. If it returns content → treat as present. This avoids any interpretation of bash exit codes.
+- **Do not probe `.spec/` existence at all.** The procedure now ALWAYS asks the user about `.spec/` and ALWAYS runs the idempotent scaffold loop on Yes. Probing led to wrong-branch heuristics in pilot testing. The only `Read`-as-probe is per-file inside the scaffold loop: each destination file is `Read` to decide whether to `Write` it.
 - **No shell operators in Bash calls.** No `&&`, `||`, `;`, `|`, `>>`, `<<`, backticks, or `\`-continuations. Each Bash call must be a single clean command.
 - **Every Bash call carries a short human `description`.** Example: `"Resolve project root"`, `"Create .spec scaffold dirs"`. Never let bare shell be the only thing the user reads.
 - **Report progress as one human line per phase.** E.g. `Templates: 2 identical · .gitignore: already covers .claude/ · .spec: absent (will ask)`. Don't dump shell stdout to chat.
@@ -54,45 +54,49 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
    - Present without exact-match line `.claude/` → `Edit` to append. Record `gitignore: added`.
    - Already contains `.claude/` → silent skip. Record `gitignore: already present`.
 
-4. **`.spec/` (optional, project-scope).** No Bash probes — `Read` is the existence test.
+4. **`.spec/` — MANDATORY step. Always execute. NEVER skip based on heuristics.**
 
-   **4a. Probe via marker file.** Attempt `Read` of `R/.spec/changes/.template/tracking.yaml` (canonical marker — it's always present in a complete scaffold and absent in everything else).
-   - `Read` returns "file does not exist" → `.spec` is absent OR severely incomplete. Treat as absent. Go to 4b.
-   - `Read` returns file contents → `.spec` is at least partially populated. Go to 4d (top-up).
+   This step has exactly two branches: **Ask** (4a) and **Scaffold-or-Skip** (4b). There is no probe and no "if it already exists, skip silently" shortcut. The AskUserQuestion below MUST fire on every run of `/foundry:setup`, even if you suspect `.spec/` is already populated — re-runs are idempotent by design (existing files are never overwritten), so re-asking costs nothing.
 
-   **4b. Ask to bootstrap (only when 4a says absent).**
+   **4a. Ask the user.** AskUserQuestion: **"Set up `.spec/` scaffold in this project? (Idempotent — existing files are never touched.)"**
+   - **Yes (Recommended)** — `description: "Creates / refreshes <R>/.spec/ with standards/README.md, 4 bucket dirs (backlog/in-progress/done/declined), and changes/.template/ used by /change. Files that already exist are left untouched."`
+   - **Skip** — `description: "Do not touch .spec/ on this run. Re-run /setup later to add or refresh it."`
 
-   AskUserQuestion: **"Bootstrap `.spec/` (4-bucket change workflow) in this project?"**
-   - **Yes, bootstrap** — `description: "Scaffolds <project>/.spec/ with standards/README.md (long-lived rules), 4 bucket dirs (backlog/in-progress/done/declined), and changes/.template/ used by /change. No external deps."`
-   - **No, skip** — `description: "Don't bootstrap. You can re-run /setup later to add it."`
+   On **Skip** → record `.spec: user-skipped`. Skip step 5 entirely. Jump to step 6.
 
-   On No → record `.spec: skipped`, jump to step 6 (skip 5 too — no `.spec/` to gitignore).
-   On Yes → continue to 4c.
+   On **Yes** → execute 4b. **Do not short-circuit.** All three sub-steps below MUST run in order.
 
-   **4c. Bootstrap (full scaffold).**
+   **4b. Scaffold (always runs on Yes — idempotent).**
 
-   1. `Bash`: `mkdir -p <R>/.spec/changes/backlog <R>/.spec/changes/in-progress <R>/.spec/changes/done <R>/.spec/changes/declined <R>/.spec/changes/.template <R>/.spec/standards` (substitute `<R>` with the resolved absolute path).
-   2. For each `(src, dst)` triple:
-      - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/standards/README.md`              → `<R>/.spec/standards/README.md`
-      - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/changes/.template/tracking.yaml`  → `<R>/.spec/changes/.template/tracking.yaml`
-      - `${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/changes/.template/propose.md`     → `<R>/.spec/changes/.template/propose.md`
+   **4b.1. Create directories.** One Bash call with the resolved absolute path `<R>` substituted in literally (NEVER leave `<R>` or `R` unexpanded):
+   ```
+   mkdir -p <R>/.spec/changes/backlog <R>/.spec/changes/in-progress <R>/.spec/changes/done <R>/.spec/changes/declined <R>/.spec/changes/.template <R>/.spec/standards
+   ```
+   `mkdir -p` is a no-op for existing dirs. Always run.
 
-      `Read` source via its absolute path. `Write` destination verbatim. (No cp — Write is more reliable; only 3 files.)
+   **4b.2. Read+Write each of 3 template files.** Initialize counters `written=0`, `existing=0`. For EACH of the following 3 `(src, dst)` pairs — in this order, with NO short-circuit:
 
-   Record `.spec: bootstrapped (3 files written)`. Proceed to step 5.
+   1. `src = ${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/standards/README.md`
+      `dst = <R>/.spec/standards/README.md`
+   2. `src = ${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/changes/.template/tracking.yaml`
+      `dst = <R>/.spec/changes/.template/tracking.yaml`
+   3. `src = ${CLAUDE_PLUGIN_ROOT}/.claude-template/spec/changes/.template/propose.md`
+      `dst = <R>/.spec/changes/.template/propose.md`
 
-   **4d. Top-up (only when 4a says present).** Same files as 4c, but only `Write` the ones whose destination `Read` returns "file does not exist". Never overwrite existing content.
+   For each pair, perform exactly these operations in order:
 
-   For each of the 3 target files:
-   - Attempt `Read <R>/.spec/<dst>`.
-   - If "file does not exist" → `Read` plugin-side source and `Write` dst.
-   - Otherwise → silent skip.
+   1. `Read` the source file via its absolute path (resolves `${CLAUDE_PLUGIN_ROOT}` through the Read tool). This always succeeds — the templates ship with the plugin.
+   2. Attempt `Read` of the destination via its absolute path.
+   3. **If destination Read returns "file does not exist"** → `Write` the source contents to the destination verbatim. Increment `written`.
+   4. **If destination Read returns content** → silent skip. Increment `existing`.
 
-   Also run the `mkdir -p` Bash call once at the start of 4d (idempotent — covers the case where some bucket directory got deleted by the user).
+   You MUST attempt all 3 pairs before reporting. Do not return early after pair #1.
 
-   Record either `.spec: already present (complete)` (zero writes) or `.spec: topped up (<n> files written)`.
+   **4b.3. Report.** Final line for `.spec`: `.spec: scaffold complete (written=<written>, existing=<existing> of 3)`.
 
-5. **`.spec/` gitignore policy** (only if `.spec/` was just bootstrapped, OR exists and `.gitignore` has no opinion). `Read` `R/.gitignore`, look for exact line `.spec/`.
+   Proceed to step 5.
+
+5. **`.spec/` gitignore policy** (only reached on the Yes branch of step 4). `Read` `R/.gitignore`, look for exact line `.spec/`.
    - Already listed → record `.spec gitignore: already ignored`. Don't prompt.
    - Not listed → AskUserQuestion: **"Commit `.spec/` to git, or keep it local?"**
      - **Commit (recommended)** — `description: "Treat specs as project artifacts: PRs review proposals, git history tracks decisions, archive/ preserves history."`
@@ -118,7 +122,7 @@ Plugin hooks live in `hooks/hooks.json` and auto-load when foundry is active. To
 foundry:setup complete:
   templates: written=N, identical=M, overwritten=K, kept=L
   gitignore: <added | already present>
-  .spec: <bootstrapped (3 files written) | topped up: N files | already present (complete) | skipped>
+  .spec: <scaffold complete (written=N, existing=M of 3) | user-skipped>
   .spec gitignore: <committed | added | already ignored | n/a>
   mcp:
     context7: <added | already present | skipped>
@@ -131,8 +135,8 @@ Omit the `.spec` / `mcp` lines if they were never relevant on this run. If Seren
 
 - Writes only inside `R/`. Never touches `~/.claude/` or user-scope MCP config.
 - The project-scope `settings.json` does NOT contain plugin-management state (`enabledPlugins`, `extraKnownMarketplaces` etc.) — that lives in user-scope. Plain copy is safe.
-- `.spec/` and MCP are **opt-in per-project**. Always ask before installing, and only when absent.
+- `.spec/` and MCP are **opt-in per-project**. The procedure ALWAYS asks about `.spec/` (every run); the scaffold loop is idempotent so re-asking is cheap and safe. MCP is asked only when at least one canonical server is absent.
 - `.spec/standards/` is a long-lived freeform directory (stack / architecture / best-practices / anti-patterns / glossary / project context). Edited directly; never archived. Agents read on-demand for relevant context.
 - `.spec/changes/.template/` holds the scaffold (`tracking.yaml`, `propose.md`) copied verbatim by `change.sh new` when running `/change "<text>"`. Edit only if you want to change the per-change starter content for THIS project.
 - `.mcp.json` is project-scope and conventionally checked in. For private config, the user should use `.mcp.local.json` (gitignored) — mention this when MCP is selected for the first time.
-- Idempotent: re-run after `/plugin update` to refresh templates, or anytime to top-up. Already-present `.spec/` / MCP entries are skipped silently.
+- Idempotent: re-run after `/plugin update` to refresh templates, or anytime to top-up. `.spec/` step always asks and always runs its scaffold loop on Yes (loop is per-file Read+Write — existing files are never overwritten). MCP entries are skipped if already configured.
