@@ -52,24 +52,31 @@ Claude Code marketplace plugin, реализующий CRISPY methodology для
 | Human gate на каждой стадии (не аутсорсить мышление) | [CRISPY §9, §13](CRISPY.md) | **M1** | **1** |
 | Serial execution (один in-progress change) | [MISSIONS §7](MISSIONS.md) | **M1** | **1** |
 | State в файлах, не в LLM памяти | [12-FACTOR §6](12-FACTOR.md) | **M1** | **1** |
-| Smart Zone (≤35%) — observability | [NO-VIBES §5](NO-VIBES.md) | M5 (метрики, не блокировка) | 2 |
-| Questions/research БЕЗ знания задачи | [CRISPY §3](CRISPY.md) | **M2** (researcher не читает `proposal.md`) + M3 + M6 | 3 |
-| Sub-agent возвращает `file:line`, ≤30 строк | [NO-VIBES §6](NO-VIBES.md) | M3 + M6 + M7 + **M8** (line count + opinion-words lint) | 3 |
-| Research = только факты, без opinion-words | [CRISPY §3](CRISPY.md) | M6 + M7 + **M8** (grep на `recommend\|should\|better`) | 3 |
-| ≤40 инструкций на агента | [CRISPY §1](CRISPY.md) | self-discipline + **M8** (instruction counter) | 3+ |
+| ≤40 инструкций на агента | [CRISPY §1](CRISPY.md) | **M8** (instruction counter — static, на CI) | **2** |
+| Sub-agent возвращает `file:line`, ≤30 строк | [NO-VIBES §6](NO-VIBES.md) | **M8** (generic line-count) — потом M3+M6+M7 в Phase 3 | **2** |
+| Research = только факты, без opinion-words | [CRISPY §3](CRISPY.md) | **M8** (`opinion-words.sh` grep `recommend\|should\|better`) — потом M6+M7 в Phase 3 | **2** |
+| Design discussion ≤220 строк | [CRISPY §4](CRISPY.md) | **M8** (generic line-count) — потом M6 в Phase 4 | **2** |
+| Structure outline ≤100 строк, vertical | [CRISPY §5, §6](CRISPY.md) | **M8** (line-count + horizontal-pattern lint) — потом M6 в Phase 5 | **2** |
+| Compact errors — PASS/FAIL + первые 20 строк | [12-FACTOR §7](12-FACTOR.md), [NO-VIBES §8 анти](NO-VIBES.md) | **M4** (`build-check.sh`/`test-check.sh`) — wrapper, потом M2 (gradle direct запрещён) в Phase 6 | **2** |
+| Trajectory protection (>2 ошибки подряд = новый контекст) | [NO-VIBES §4](NO-VIBES.md) | **M5** (PostToolUse counter в `handoff.md`) | **2** |
+| Questions/research БЕЗ знания задачи | [CRISPY §3](CRISPY.md) | **M2** (researcher не читает `proposal.md`) + M3 + M6 + M7 + M8 (\*reuse Phase 2\*) | 3 |
 | Не читать whole files | [NO-VIBES](NO-VIBES.md) anti | M7 (skill учит Grep/Read с offset) | 3+ |
-| Design discussion ≤220 строк | [CRISPY §4](CRISPY.md) | M6 + **M8** (line count) | 4 |
 | Validation Contract до кода | [MISSIONS §4](MISSIONS.md) | **M1** (design не → completed без VC файла) | 4 |
-| Structure outline ≤100 строк, vertical | [CRISPY §5, §6](CRISPY.md) | M6 + **M8** (lint horizontal patterns) | 5 |
 | Plan со снипетами до/после, ≤7 шагов | [CRISPY §7](CRISPY.md) | M6 + **M8** (schema validation) | 6 |
-| Compact errors — PASS/FAIL + первые 20 строк | [12-FACTOR §7](12-FACTOR.md), [NO-VIBES §8 анти](NO-VIBES.md) | **M4** (`build-check.sh`) + **M2** (gradle direct запрещён) | 6 |
 | Structured handoffs (Missions schema) | [MISSIONS §6](MISSIONS.md) | M6 + **M8** (schema validation на stage completion) | 6 |
-| Trajectory protection (>2 ошибки = новый контекст) | [NO-VIBES §4](NO-VIBES.md) | **M5** (PostToolUse counter) + state в `handoff.md` | 6 |
 | Read code, not plan | [CRISPY §9](CRISPY.md) | UX flow в `/workflow`: diff перед approve | 6-7 |
 | Adversarial verifier (без design/plan) | [MISSIONS §5](MISSIONS.md) | **M2** (`allowed-tools:` без `design.md`/`plan.md`) | 7 |
 | Model per role (droid whispering) | [MISSIONS §9](MISSIONS.md) | **M9** (`model:` frontmatter) | 10 |
 
 **Жирным** — hard enforcement (структурно невозможно обойти).
+
+### Что фреймворк НЕ enforce'ит (sentinel: discipline + Claude Code built-ins)
+
+| Правило | Источник | Почему не enforce | Замена |
+|---|---|---|---|
+| Smart Zone (≤35% context fill для новичков, ≤60% experienced) | [NO-VIBES §5](NO-VIBES.md), [CRISPY Q&A](CRISPY.md) | Real token count недоступен mid-session; порог fuzzy (Dex сам ходит до 60%); эвристика char-count врёт на 20-30%; Goodhart's law. | Claude Code's built-in `/context` + привычка |
+| «Wrap up при degradation» | [NO-VIBES §1, §4](NO-VIBES.md) | Qualitative («I apologize for the confusion» паттерн), не сводится к числу | Engineer's judgement — framework не блокирует |
+| Compaction infra | [CRISPY §11](CRISPY.md) — явно retract | Artifacts per stage = resume точки, compaction не нужна | — |
 
 ### Worked example: research isolation
 
@@ -276,8 +283,8 @@ stages:
 
 Детализируется по мере прохождения. Список даётся чтобы видеть направление, не как commitment:
 
-- **Phase 2** — Metrics через OTel (real tokens, не heuristic). [NO-VIBES §5](NO-VIBES.md), [12-FACTOR §3](12-FACTOR.md)
-- **Phase 3** — Stages `questions` + `research`: валидация objectivity-разделения. [CRISPY §3](CRISPY.md)
+- **Phase 2** — **M4 + M8 substrate**: generic lint scripts (instruction count, line count, opinion-words, horizontal-pattern) + bash wrappers для build/test (compact errors PASS/FAIL + 20 строк) + trajectory-counter hook. Reusable infra **до** producer-агентов. [CRISPY §1, §3, §4, §5, §7](CRISPY.md), [12-FACTOR §7](12-FACTOR.md), [NO-VIBES §4, §6](NO-VIBES.md). *(Прежний план «Metrics через OTel» drop'нут — runtime token metrics не поддержаны докладами, см. секцию «Что фреймворк НЕ enforce'ит» выше.)*
+- **Phase 3** — Stages `questions` + `research`: валидация objectivity-разделения. Plug в Phase 2 lint substrate. [CRISPY §3](CRISPY.md)
 - **Phase 4** — Stage `design`: главный leverage point, deep human review. [CRISPY §4](CRISPY.md). Здесь же — Validation Contract init. [MISSIONS §4](MISSIONS.md)
 - **Phase 5** — Stage `structure`: vertical outline. [CRISPY §5, §6](CRISPY.md)
 - **Phase 6** — Stages `plan` + `worktree` + `implement` (per-task RPI loop). Structured handoffs. [MISSIONS §6](MISSIONS.md)

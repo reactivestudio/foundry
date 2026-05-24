@@ -1,0 +1,15 @@
+{
+  "name": "foundry",
+  "description": "CRISPY methodology framework for solo senior/staff engineers — change lifecycle, enforcement, opinionated coding-agent pipeline.",
+  "owner": {
+    "name": "Dmitriy Bushin",
+    "email": "bushin.d@vlprojects.pro"
+  },
+  "plugins": [
+    {
+      "name": "foundry",
+      "source": "./",
+      "description": "CRISPY methodology for solo senior/staff engineers."
+    }
+  ]
+}
