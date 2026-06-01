@@ -42,7 +42,7 @@ ui_color_code() {
     # ── foundry brand palette (user-approved) ──
     fd_icon)        echo 153 ;;  # baby blue — status circles + titles
     fd_title)       echo 153 ;;  # alias for clarity
-    fd_created)     echo 84  ;;  # bright mint
+    fd_created)     echo 108 ;;  # sage muted #87af87
     fd_updated)     echo 141 ;;  # electric lavender
     fd_chrome)      echo 117 ;;  # sky blue — action buttons + "+N more" + chrome
     fd_backlog)     echo 105 ;;  # soft indigo
