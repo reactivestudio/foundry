@@ -531,14 +531,14 @@ build_full_row() {
   if [[ "$crt_epoch" != "0" ]]; then
     local iso; iso=$(date -u -r "$crt_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
                 || date -u -d "@$crt_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
-    created_str=$(ui_date_full "$iso")
+    created_str=$(ui_small_caps "$(ui_date_full "$iso")")
   else
     created_str="?"
   fi
   if [[ "$upd_epoch" != "0" ]]; then
     local iso; iso=$(date -u -r "$upd_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
                 || date -u -d "@$upd_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
-    updated_str=$(ui_date_relative "$iso")
+    updated_str=$(ui_small_caps "$(ui_date_relative "$iso")")
   else
     updated_str="?"
   fi
@@ -797,14 +797,17 @@ _picker_widths() {
   printf '%d %d %d %d' "$bucket_w" "$title_w" "$created_w" "$updated_w"
 }
 
-# Build the column-header pseudo-row (dim, aligned with regular rows).
+# Build the column-header pseudo-row (dim small-caps).
+# 4 leading spaces (instead of 3) so STATUS sits ~1 col right of the
+# icon — compensates for icons that render as 2-cell East Asian Wide
+# in some terminals, and looks "чуть правее" otherwise.
 _build_header_row() {
   read -r bw tw cw uw <<< "$(_picker_widths)"
-  printf '   %s  %s  %s  %s' \
-    "$(ui_dim "$(printf '%-*s' "$bw" "STATUS")")" \
-    "$(ui_dim "$(printf '%-*s' "$tw" "TITLE")")" \
-    "$(ui_dim "$(printf '%-*s' "$cw" "CREATED")")" \
-    "$(ui_dim "$(printf '%-*s' "$uw" "UPDATED")")"
+  printf '    %s  %s  %s  %s' \
+    "$(ui_dim "$(printf '%-*s' "$bw" "$(ui_small_caps STATUS)")")" \
+    "$(ui_dim "$(printf '%-*s' "$tw" "$(ui_small_caps TITLE)")")" \
+    "$(ui_dim "$(printf '%-*s' "$cw" "$(ui_small_caps CREATED)")")" \
+    "$(ui_dim "$(printf '%-*s' "$uw" "$(ui_small_caps UPDATED)")")"
 }
 
 # Build a "+N more items..." row formatted like a regular change row,
@@ -819,10 +822,10 @@ _build_more_row() {
     "$(printf '%-*s' "$uw" "")"
 }
 
-# Build summary pseudo-row.
+# Build summary pseudo-row (small-caps "changes").
 _build_summary_row() {
   local total="$1" all_rows="$2"
-  local s="$total changes  "
+  local s="$total $(ui_small_caps changes)  "
   local b
   for b in "${BUCKETS[@]}"; do
     local cnt; cnt=$(printf '%s\n' "$all_rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')

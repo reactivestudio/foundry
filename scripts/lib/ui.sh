@@ -115,6 +115,44 @@ ui_date_short() { ui_date_format "$1" "+%a %b %-d, %H:%M"; }
 # Full format for the list view: "Mon, May 27 23:30"
 ui_date_full() { ui_date_format "$1" "+%a, %b %-d %H:%M"; }
 
+# Replace letters with their Unicode small-caps equivalents. Used for
+# column headers and date strings to give a visually-smaller "font"
+# look (the closest CLI can do without actual font sizing). Plain
+# mode passes through unchanged so Claude / pipelines stay greppable.
+ui_small_caps() {
+  local text="$1"
+  if [[ "$UI_MODE" != "interactive" ]]; then
+    printf '%s' "$text"; return
+  fi
+  text=$(printf '%s' "$text" | tr 'A-Z' 'a-z')
+  text="${text//a/ᴀ}"
+  text="${text//b/ʙ}"
+  text="${text//c/ᴄ}"
+  text="${text//d/ᴅ}"
+  text="${text//e/ᴇ}"
+  text="${text//f/ꜰ}"
+  text="${text//g/ɢ}"
+  text="${text//h/ʜ}"
+  text="${text//i/ɪ}"
+  text="${text//j/ᴊ}"
+  text="${text//k/ᴋ}"
+  text="${text//l/ʟ}"
+  text="${text//m/ᴍ}"
+  text="${text//n/ɴ}"
+  text="${text//o/ᴏ}"
+  text="${text//p/ᴘ}"
+  text="${text//q/ǫ}"
+  text="${text//r/ʀ}"
+  text="${text//s/ꜱ}"
+  text="${text//t/ᴛ}"
+  text="${text//u/ᴜ}"
+  text="${text//v/ᴠ}"
+  text="${text//w/ᴡ}"
+  text="${text//y/ʏ}"
+  text="${text//z/ᴢ}"
+  printf '%s' "$text"
+}
+
 # Section divider — "─── title ──────────────────────" or just dashes.
 ui_divider() {
   local title="${1:-}"
