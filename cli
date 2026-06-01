@@ -531,26 +531,27 @@ build_full_row() {
   if [[ "$crt_epoch" != "0" ]]; then
     local iso; iso=$(date -u -r "$crt_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
                 || date -u -d "@$crt_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
-    created_str=$(ui_date_full "$iso")
+    created_str=$(ui_small_caps "$(ui_date_full "$iso")")
   else
     created_str="?"
   fi
   if [[ "$upd_epoch" != "0" ]]; then
     local iso; iso=$(date -u -r "$upd_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
                 || date -u -d "@$upd_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
-    updated_str=$(ui_date_relative "$iso")
+    updated_str=$(ui_small_caps "$(ui_date_relative "$iso")")
   else
     updated_str="?"
   fi
 
   local t_t; t_t=$(ui_truncate "$title_w" "$title")
 
+  # Dates use ui_pad_visual because small-caps glyphs are 3 bytes / 1 cell.
   printf '%s  %s  %s  %s  %s' \
     "$(ui_status_icon "$b")" \
     "$(ui_paint "$(ui_bucket_color "$b")" "$(printf '%-*s' "$bucket_w" "$b")")" \
     "$(ui_paint fd_title "$(printf '%-*s' "$title_w" "$t_t")")" \
-    "$(ui_paint fd_created "$(printf '%-*s' "$created_w" "$created_str")")" \
-    "$(ui_paint fd_updated "$(printf '%-*s' "$updated_w" "$updated_str")")"
+    "$(ui_paint fd_created "$(ui_pad_visual "$created_str" "$created_w")")" \
+    "$(ui_paint fd_updated "$(ui_pad_visual "$updated_str" "$updated_w")")"
 }
 
 # Linear lookup: find the slug for a selected picker line.
@@ -583,7 +584,7 @@ ui_drill() {
   local ic_start="$(ui_paint fd_inprogress '▶')"   # play → start work
   local ic_finish="$(ui_paint fd_done '✓')"        # check → finish
   local ic_pause="$(ui_paint fd_backlog '⏸')"     # pause bars → pause
-  local ic_revive="$(ui_paint fd_backlog '↺')"    # counter-rotate → revive
+  local ic_revive="$(ui_paint fd_backlog '↩')"    # return arrow → revive (back from declined)
   local ic_decl="$(ui_paint fd_declined '×')"     # multiplication sign → decline
   local ic_back="$(ui_paint fd_chrome '←')"        # left arrow → back
 
@@ -657,10 +658,10 @@ ui_add_new() {
 
 # Horizontal action bar — arrow nav, letter shortcuts, enter selects,
 # esc cancels back to filter mode.
-# Echoes: "0"=Add, "1"=Reload, "2"=Exit, "cancel"=esc.
+# Echoes: "0"=Filter, "1"=Add, "2"=Reload, "3"=Exit, "cancel"=esc.
 horizontal_action_bar() {
-  local labels=("+ Add new" "⟳ Reload" "⏻ Exit")
-  local n=3 idx=0
+  local labels=("⌕ Filter" "+ Add new" "⟳ Reload" "⏻ Exit")
+  local n=4 idx=0
 
   local stty_save; stty_save=$(stty -g)
   stty -echo -icanon
@@ -671,7 +672,7 @@ horizontal_action_bar() {
   while [[ -z "$choice" ]]; do
     printf '\r\033[K  ' >&2
     local i
-    for i in 0 1 2; do
+    for i in 0 1 2 3; do
       if (( i == idx )); then
         printf '%s    ' "$(ui_bright "▸ ${labels[$i]}")" >&2
       else
@@ -695,9 +696,10 @@ horizontal_action_bar() {
           choice="cancel"
         fi ;;
       '') choice="$idx" ;;
-      '+') choice=0 ;;
-      r|R) choice=1 ;;
-      x|X|q|Q) choice=2 ;;
+      f|F) choice=0 ;;
+      '+'|a|A) choice=1 ;;
+      r|R) choice=2 ;;
+      x|X|q|Q) choice=3 ;;
     esac
   done
 
@@ -778,9 +780,9 @@ ui_bucket_view() {
     entries+=("$(ui_paint fd_chrome "← Back to all changes")"); slugs+=("")
 
     local hdr_line; hdr_line=$(_build_header_row)
-    local sum_line; sum_line="   $(ui_paint fd_chrome "$(ui_status "$bucket")  ·  page $page of $pages  ·  $total total")"
+    local sum_line; sum_line="     $(ui_paint fd_chrome "$(ui_status "$bucket")  ·  page $page of $pages  ·  $total total")"
     local fhdr; fhdr=$(printf '%s\n%s\n\n%s' \
-      "$(ui_dim 'Type to filter · ↵ open · esc to back')" \
+      "$(ui_dim '     Type to filter · ↵ open · esc to back')" \
       "$sum_line" \
       "$hdr_line")
 
@@ -827,14 +829,17 @@ _picker_widths() {
   printf '%d %d %d %d' "$bucket_w" "$title_w" "$created_w" "$updated_w"
 }
 
-# Build the column-header line. 3 leading spaces match the
-# "icon(1cell) + 2 separators" layout of regular rows, so STATUS
-# sits flush with the bucket label ("backlog", etc.).
+# Build the column-header line for gum filter's --header.
+# gum filter prefixes each picker row with "▸ " (or 2 blanks for
+# non-cursor) — 2 cells. Then a row is icon(1) + "  "(2) + bucket.
+# So bucket text in rows starts at column 5. The --header line has
+# NO such prefix from gum, so we add 5 leading spaces to make
+# STATUS sit flush over "backlog", TITLE over the title column, etc.
 # Uses ui_pad_visual so small-caps glyphs (multi-byte UTF-8 but
 # 1-cell wide) don't break column alignment.
 _build_header_row() {
   read -r bw tw cw uw <<< "$(_picker_widths)"
-  printf '   %s  %s  %s  %s' \
+  printf '     %s  %s  %s  %s' \
     "$(ui_dim "$(ui_pad_visual "$(ui_small_caps STATUS)" "$bw")")" \
     "$(ui_dim "$(ui_pad_visual "$(ui_small_caps TITLE)" "$tw")")" \
     "$(ui_dim "$(ui_pad_visual "$(ui_small_caps CREATED)" "$cw")")" \
@@ -947,10 +952,10 @@ cmd_interactive() {
       local cnt; cnt=$(printf '%s\n' "$rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
       breakdown+="$(ui_status_icon "$b") $cnt  "
     done
-    local sum_line; sum_line="   $(ui_paint fd_chrome "$total $(ui_small_caps changes)  ·  ${breakdown% }")"
+    local sum_line; sum_line="     $(ui_paint fd_chrome "$total $(ui_small_caps changes)  ·  ${breakdown% }")"
     local hdr_line; hdr_line=$(_build_header_row)
     local fhdr; fhdr=$(printf '%s\n%s\n\n%s' \
-      "$(ui_dim 'Type to filter · ↵ open · esc for action bar')" \
+      "$(ui_dim '     Type to filter · ↵ open · esc for action bar')" \
       "$sum_line" \
       "$hdr_line")
 
@@ -986,9 +991,10 @@ cmd_interactive() {
     echo
     local choice; choice=$(horizontal_action_bar)
     case "$choice" in
-      0)      ui_add_new ;;
-      1)      ;;  # reload — loops back to filter
-      2)      if gum confirm "Exit foundry?"; then clear; exit 0; fi ;;
+      0)      ;;  # filter → fall through to top of loop = filter mode
+      1)      ui_add_new ;;
+      2)      ;;  # reload — loops back to filter
+      3)      if gum confirm "Exit foundry?"; then clear; exit 0; fi ;;
       cancel) ;;  # esc → back to filter
     esac
   done
