@@ -6,7 +6,7 @@
 #   .foundry/changes/.template/{tracking.yaml,proposal.md}
 #
 # With --install-cli, additionally:
-#   .foundry/bin/foundry  →  ${CLAUDE_PLUGIN_ROOT}/bin/foundry  (symlink)
+#   .foundry/cli  →  ${CLAUDE_PLUGIN_ROOT}/cli  (symlink)
 #
 # Templates are copied from ${CLAUDE_PLUGIN_ROOT}/.template/. Target
 # copies are preserved on re-run so users can customize per-project.
@@ -21,9 +21,9 @@ for arg in "$@"; do
       cat <<'EOF'
 usage: setup.sh [--install-cli]
 
-  --install-cli   also create .foundry/bin/foundry symlink to the
-                  plugin's CLI, so you can run `./.foundry/bin/foundry`
-                  in this project's terminal.
+  --install-cli   also create .foundry/cli symlink to the plugin's
+                  CLI, so you can run `./.foundry/cli` in this
+                  project's terminal.
 EOF
       exit 0 ;;
     *) echo "setup.sh: unknown arg: $arg" >&2; exit 64 ;;
@@ -33,7 +33,7 @@ done
 FOUNDRY_ROOT="${FOUNDRY_ROOT:-$PWD/.foundry}"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 SRC_TEMPLATE="$PLUGIN_ROOT/.template"
-SRC_CLI="$PLUGIN_ROOT/bin/foundry"
+SRC_CLI="$PLUGIN_ROOT/cli"
 
 # shellcheck source=lib/constants.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/constants.sh"
@@ -58,19 +58,24 @@ for src in "$SRC_TEMPLATE"/*; do
   [[ -f "$dst" ]] || cp "$src" "$dst"
 done
 
+# Clean up the pre-0.21.3 layout (.foundry/bin/foundry) if present
+if [[ -L "$FOUNDRY_ROOT/bin/foundry" ]]; then
+  rm "$FOUNDRY_ROOT/bin/foundry"
+  rmdir "$FOUNDRY_ROOT/bin" 2>/dev/null || true
+fi
+
 cli_status=""
 if (( INSTALL_CLI )); then
   if [[ ! -x "$SRC_CLI" ]]; then
     echo "setup.sh: CLI not found at $SRC_CLI (CLAUDE_PLUGIN_ROOT wrong?)" >&2
     exit 2
   fi
-  mkdir -p "$FOUNDRY_ROOT/bin"
-  link="$FOUNDRY_ROOT/bin/foundry"
+  link="$FOUNDRY_ROOT/cli"
   # always refresh: ensures upgrade if plugin path changed
   ln -sf "$SRC_CLI" "$link"
   cli_status="
-  bin/foundry      — symlink → $SRC_CLI
-                     run: ./.foundry/bin/foundry  (or add .foundry/bin to PATH)"
+  cli              — symlink → $SRC_CLI
+                     run: ./.foundry/cli  (or add .foundry to PATH)"
 fi
 
 cat <<EOF

@@ -1,31 +1,70 @@
 #!/usr/bin/env bash
-# ui.sh — presentation primitives for bin/foundry.
+# ui.sh — presentation primitives for the foundry CLI.
 #
-# Source this; do not execute. Two modes:
-#
-#   interactive — gum-driven, colors, choose/input prompts. Default
+# Two modes:
+#   interactive — gum-driven; colored cells, panels, prompts. Default
 #                 when stdout is a TTY and FOUNDRY_PLAIN is unset.
-#   plain       — ASCII tables, no prompts, deterministic output for
-#                 Claude Code / pipelines.
+#   plain       — ASCII, no colors, no prompts. For Claude Code,
+#                 pipelines, dumb terminals.
 #
-# Detection:
-#   - FOUNDRY_PLAIN=1                → plain
-#   - stdout not a TTY               → plain
-#   - gum not on PATH                → plain (with one-time stderr note)
-#   - else                           → interactive
+# Design notes (CLI UX practice):
+#   - vertical whitespace: a blank line before/after every block
+#   - color hierarchy: bright = primary data; default = secondary;
+#     dim = labels & metadata
+#   - icons are colored consistently with bucket meaning
+#   - long strings truncate with ellipsis at fixed widths
+#   - empty states give the next action verbatim
 
+# ── mode detection ─────────────────────────────────────────────────────────
 if [[ -n "${FOUNDRY_PLAIN:-}" ]]; then
   UI_MODE=plain
 elif [[ ! -t 1 ]]; then
   UI_MODE=plain
 elif ! command -v gum >/dev/null 2>&1; then
-  echo "foundry: gum not found, falling back to plain output (brew install gum)" >&2
+  echo "foundry: gum not found, falling back to plain (brew install gum)" >&2
   UI_MODE=plain
 else
   UI_MODE=interactive
 fi
 
-# ─── status icons (UTF-8, rendered in both modes) ──────────────────────────
+# ── colors (ANSI 256) ──────────────────────────────────────────────────────
+# Semantic names — readable on light AND dark. macOS bash 3.2 has no
+# associative arrays, so this is a case lookup.
+ui_color_code() {
+  case "$1" in
+    primary) echo 255 ;;  # near-white — main data values
+    muted|dim) echo 244 ;;# mid-gray — labels, metadata
+    subtle)  echo 240 ;;  # dark-gray — separators, dim text
+    accent)  echo 212 ;;  # pink — header titles
+    ok)      echo 40 ;;   # green — success, done bucket
+    warn)    echo 214 ;;  # amber — in-progress
+    danger)  echo 124 ;;  # red — error, declined
+    *)       echo 7 ;;    # default
+  esac
+}
+
+# ui_paint <color-name> <text...>
+ui_paint() {
+  local color; color=$(ui_color_code "$1"); shift
+  if [[ "$UI_MODE" == "interactive" ]]; then
+    printf '\033[38;5;%sm%s\033[0m' "$color" "$*"
+  else
+    printf '%s' "$*"
+  fi
+}
+
+ui_dim()     { ui_paint dim     "$@"; }
+ui_bright()  { ui_paint primary "$@"; }
+ui_accent()  { ui_paint accent  "$@"; }
+
+# Strip ISO-8601 noise: "2026-06-01T11:39:32Z" → "2026-06-01 11:39:32"
+ui_format_ts() {
+  local t="$1"
+  t="${t/T/ }"
+  echo "${t%Z}"
+}
+
+# ── status icons + per-bucket color ────────────────────────────────────────
 ui_icon() {
   case "$1" in
     backlog)     printf '○' ;;
@@ -36,105 +75,95 @@ ui_icon() {
   esac
 }
 
-# ─── gum color for a bucket ────────────────────────────────────────────────
-# Values are ANSI 256 color codes, picked to be readable on light/dark terms.
-ui_color() {
+ui_bucket_color() {
   case "$1" in
-    backlog)     printf '244' ;;  # dim gray
-    in-progress) printf '214' ;;  # amber
-    done)        printf '40'  ;;  # green
-    declined)    printf '124' ;;  # red
-    *)           printf '7'   ;;
+    backlog)     echo muted ;;
+    in-progress) echo warn ;;
+    done)        echo ok ;;
+    declined)    echo danger ;;
+    *)           echo dim ;;
   esac
 }
 
-# Echo "<icon> <bucket>" colored. Plain mode = no color codes.
+# Echo "<icon> <bucket>" colored.
 ui_status() {
-  local bucket="$1"
-  local icon; icon=$(ui_icon "$bucket")
-  if [[ "$UI_MODE" == "interactive" ]]; then
-    gum style --foreground "$(ui_color "$bucket")" "$icon $bucket"
-  else
-    printf '%s %s' "$icon" "$bucket"
-  fi
+  local b="$1"
+  ui_paint "$(ui_bucket_color "$b")" "$(ui_icon "$b") $b"
 }
 
-# Just the icon, colored (for compact use in tables).
+# Just the icon, colored.
 ui_status_icon() {
-  local bucket="$1"
-  local icon; icon=$(ui_icon "$bucket")
-  if [[ "$UI_MODE" == "interactive" ]]; then
-    gum style --foreground "$(ui_color "$bucket")" "$icon"
-  else
-    printf '%s' "$icon"
-  fi
+  local b="$1"
+  ui_paint "$(ui_bucket_color "$b")" "$(ui_icon "$b")"
 }
 
-# ─── section header ────────────────────────────────────────────────────────
+# ── header (used at top of every command output) ───────────────────────────
+# ui_header <title> [subtitle]
 ui_header() {
-  local text="$*"
+  local title="$1" sub="${2:-}"
   if [[ "$UI_MODE" == "interactive" ]]; then
-    gum style --bold --foreground 212 --border-foreground 240 \
-      --border normal --padding "0 1" "$text"
+    if [[ -n "$sub" ]]; then
+      printf '\n%s  %s\n\n' "$(ui_accent "$title")" "$(ui_dim "$sub")"
+    else
+      printf '\n%s\n\n' "$(ui_accent "$title")"
+    fi
   else
-    printf '=== %s ===\n' "$text"
+    if [[ -n "$sub" ]]; then
+      printf '\n%s  %s\n\n' "$title" "$sub"
+    else
+      printf '\n%s\n\n' "$title"
+    fi
   fi
 }
 
-# ─── single info line ──────────────────────────────────────────────────────
-ui_info() {
-  if [[ "$UI_MODE" == "interactive" ]]; then
-    gum style --foreground 244 "$*"
+# ── key-value lines (sectioned show output) ────────────────────────────────
+# Usage: ui_kv <label-width> <key> <value>
+ui_kv() {
+  local w="$1" key="$2" value="$3"
+  printf '  %s  %s\n' \
+    "$(printf '%-*s' "$w" "$(ui_dim "$key")")" \
+    "$(ui_bright "$value")"
+}
+
+# ── single info / success / error lines ────────────────────────────────────
+ui_info()    { printf '  %s\n' "$(ui_dim "$*")"; }
+ui_success() { printf '  %s %s\n' "$(ui_paint ok '✓')" "$*"; }
+ui_warn()    { printf '  %s %s\n' "$(ui_paint warn '!')" "$*" >&2; }
+ui_error()   { printf '  %s %s\n' "$(ui_paint danger '✗')" "$*" >&2; }
+
+# ── truncation with ellipsis ───────────────────────────────────────────────
+# ui_truncate <max> <text>
+ui_truncate() {
+  local max="$1" text="$2"
+  if (( ${#text} > max )); then
+    printf '%s…' "${text:0:max-1}"
   else
-    printf '%s\n' "$*"
+    printf '%s' "$text"
   fi
 }
 
-# ─── error to stderr ───────────────────────────────────────────────────────
-ui_error() {
-  if [[ "$UI_MODE" == "interactive" ]]; then
-    gum style --foreground 196 --bold "✗ $*" >&2
-  else
-    printf 'ERROR: %s\n' "$*" >&2
-  fi
-}
+# ── interactive prompts (caller should branch on UI_MODE before use) ──────
 
-# ─── success ───────────────────────────────────────────────────────────────
-ui_success() {
-  if [[ "$UI_MODE" == "interactive" ]]; then
-    gum style --foreground 40 "✓ $*"
-  else
-    printf '%s\n' "$*"
-  fi
-}
-
-# ─── interactive prompts (no-op in plain mode — caller checks UI_MODE) ────
-
-# ui_choose <header> <opt1> <opt2> ...
-# Prints selected option to stdout. Returns 1 if user cancels.
 ui_choose() {
   local header="$1"; shift
   if [[ "$UI_MODE" == "interactive" ]]; then
     gum choose --header "$header" "$@"
   else
-    ui_error "ui_choose: interactive only; pass --to or use --plain with explicit arg"
+    ui_error "ui_choose: interactive only"
     return 2
   fi
 }
 
-# ui_input <placeholder>
 ui_input() {
   local placeholder="${1:-}"
   if [[ "$UI_MODE" == "interactive" ]]; then
     gum input --placeholder "$placeholder"
   else
-    ui_error "ui_input: interactive only; pass the value as argument"
+    ui_error "ui_input: interactive only"
     return 2
   fi
 }
 
-# ui_confirm <question>
-# Exit 0 = yes, 1 = no.
 ui_confirm() {
   local question="$1"
   if [[ "$UI_MODE" == "interactive" ]]; then
@@ -145,24 +174,3 @@ ui_confirm() {
   fi
 }
 
-# ─── table renderer ────────────────────────────────────────────────────────
-# Input on stdin: TSV rows. First row = headers.
-# In interactive: gum table with selection (echoes chosen row's first column).
-# In plain: aligned columns, no selection.
-#
-# Usage:
-#   printf 'BUCKET\tSLUG\tTITLE\n%s\t%s\t%s\n' ... | ui_table
-ui_table() {
-  if [[ "$UI_MODE" == "interactive" ]]; then
-    # gum table reads CSV; convert TSV → CSV (best-effort: escape quotes)
-    awk -F'\t' 'BEGIN{OFS=","} {
-      for (i=1; i<=NF; i++) {
-        gsub(/"/, "\"\"", $i)
-        $i = "\"" $i "\""
-      }
-      print
-    }' | gum table --print
-  else
-    column -t -s $'\t'
-  fi
-}
