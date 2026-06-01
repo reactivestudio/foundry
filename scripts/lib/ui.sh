@@ -261,6 +261,18 @@ ui_truncate() {
   fi
 }
 
+# Pad a string to visual width $2 (counting multi-byte UTF-8 chars as 1 cell).
+# Plain bash `%-*s` pads by byte count, which breaks alignment for small-caps
+# headers (each glyph is 3 bytes but 1 cell).
+ui_pad_visual() {
+  local s="$1" n="$2"
+  local vlen
+  vlen=$(printf '%s' "$s" | LC_ALL=en_US.UTF-8 wc -m | tr -d ' ')
+  local pad=$((n - vlen))
+  (( pad < 0 )) && pad=0
+  printf '%s%*s' "$s" "$pad" ""
+}
+
 # ── interactive prompts (caller should branch on UI_MODE before use) ──────
 
 ui_choose() {

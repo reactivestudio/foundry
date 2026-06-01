@@ -531,14 +531,14 @@ build_full_row() {
   if [[ "$crt_epoch" != "0" ]]; then
     local iso; iso=$(date -u -r "$crt_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
                 || date -u -d "@$crt_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
-    created_str=$(ui_small_caps "$(ui_date_full "$iso")")
+    created_str=$(ui_date_full "$iso")
   else
     created_str="?"
   fi
   if [[ "$upd_epoch" != "0" ]]; then
     local iso; iso=$(date -u -r "$upd_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
                 || date -u -d "@$upd_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
-    updated_str=$(ui_small_caps "$(ui_date_relative "$iso")")
+    updated_str=$(ui_date_relative "$iso")
   else
     updated_str="?"
   fi
@@ -766,8 +766,6 @@ ui_bucket_view() {
     local page_rows; page_rows=$(printf '%s\n' "$rows" | sed -n "${start},${end}p")
 
     clear
-    ui_header "Foundry · $(ui_status "$bucket")" "page $page / $pages · $total total"
-    echo
 
     local entries=() slugs=()
     while IFS=$'\t' read -r b slug title _ upd crt; do
@@ -777,13 +775,21 @@ ui_bucket_view() {
 
     (( page > 1 ))     && { entries+=("$(ui_paint fd_chrome "◀ Previous page")"); slugs+=(""); }
     (( page < pages )) && { entries+=("$(ui_paint fd_chrome "▶ Next page")");     slugs+=(""); }
-    # vertical gap before Back
-    entries+=("                                                          "); slugs+=("")
     entries+=("$(ui_paint fd_chrome "← Back to all changes")"); slugs+=("")
+
+    local hdr_line; hdr_line=$(_build_header_row)
+    local sum_line; sum_line="   $(ui_paint fd_chrome "$(ui_status "$bucket")  ·  page $page of $pages  ·  $total total")"
+    local fhdr; fhdr=$(printf '%s\n%s\n\n%s' \
+      "$(ui_dim 'Type to filter · ↵ open · esc to back')" \
+      "$sum_line" \
+      "$hdr_line")
 
     local pick
     pick=$(printf '%s\n' "${entries[@]}" \
-      | gum filter --no-strip-ansi --header "Filter $bucket (type to search · ↵ to open)" --indicator='▸') \
+      | gum filter --no-strip-ansi \
+          --header "$fhdr" \
+          --indicator='▸' \
+          --indicator.foreground 255) \
       || return
 
     local pick_clean; pick_clean=$(_norm_picker_line "$pick")
@@ -821,17 +827,18 @@ _picker_widths() {
   printf '%d %d %d %d' "$bucket_w" "$title_w" "$created_w" "$updated_w"
 }
 
-# Build the column-header pseudo-row (dim small-caps).
-# 4 leading spaces (instead of 3) so STATUS sits ~1 col right of the
-# icon — compensates for icons that render as 2-cell East Asian Wide
-# in some terminals, and looks "чуть правее" otherwise.
+# Build the column-header line. 3 leading spaces match the
+# "icon(1cell) + 2 separators" layout of regular rows, so STATUS
+# sits flush with the bucket label ("backlog", etc.).
+# Uses ui_pad_visual so small-caps glyphs (multi-byte UTF-8 but
+# 1-cell wide) don't break column alignment.
 _build_header_row() {
   read -r bw tw cw uw <<< "$(_picker_widths)"
-  printf '    %s  %s  %s  %s' \
-    "$(ui_dim "$(printf '%-*s' "$bw" "$(ui_small_caps STATUS)")")" \
-    "$(ui_dim "$(printf '%-*s' "$tw" "$(ui_small_caps TITLE)")")" \
-    "$(ui_dim "$(printf '%-*s' "$cw" "$(ui_small_caps CREATED)")")" \
-    "$(ui_dim "$(printf '%-*s' "$uw" "$(ui_small_caps UPDATED)")")"
+  printf '   %s  %s  %s  %s' \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps STATUS)" "$bw")")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps TITLE)" "$tw")")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps CREATED)" "$cw")")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps UPDATED)" "$uw")")"
 }
 
 # Build a "+N more items..." row formatted like a regular change row,
@@ -861,20 +868,17 @@ _build_summary_row() {
 # Build picker entries — populates two parallel globals:
 #   PICKER_ENTRIES  — display lines (what gum filter sees & echoes back)
 #   PICKER_SLUGS    — slug per row, or a sentinel:
-#                       __header__   column-header pseudo-row (no-op)
-#                       __summary__  bottom summary pseudo-row (no-op)
 #                       __more__<b>  "+N more in <bucket>" → ui_bucket_view
-#                       ""           action button or separator
+#                       ""           action button
+#
+# Column headers and summary live in gum filter's --header so the
+# selector ▸ only lands on actionable rows.
 build_main_entries() {
   PICKER_ENTRIES=()
   PICKER_SLUGS=()
 
   local limit; limit="$(config_get list_per_bucket_limit 3)"
   local rows; rows=$(collect_rows all)
-
-  # Column header at top
-  PICKER_ENTRIES+=("$(_build_header_row)")
-  PICKER_SLUGS+=("__header__")
 
   for b in "${BUCKETS[@]}"; do
     local bucket_rows; bucket_rows=$(printf '%s\n' "$rows" \
@@ -894,23 +898,12 @@ build_main_entries() {
     fi
   done
 
-  # Visual separator + action buttons
-  PICKER_ENTRIES+=("                                                          ")
-  PICKER_SLUGS+=("")
   PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_ADD")")
   PICKER_SLUGS+=("")
   PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_RELOAD")")
   PICKER_SLUGS+=("")
   PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_EXIT")")
   PICKER_SLUGS+=("")
-
-  # Vertical gap + summary at bottom
-  PICKER_ENTRIES+=("                                                          ")
-  PICKER_SLUGS+=("")
-  local total; total=0
-  [[ -n "$rows" ]] && total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
-  PICKER_ENTRIES+=("$(_build_summary_row "$total" "$rows")")
-  PICKER_SLUGS+=("__summary__")
 }
 
 # Interactive REPL — two modes, esc toggles:
@@ -944,15 +937,32 @@ cmd_interactive() {
       continue
     fi
 
-    # ── filter mode ── (summary moved to bottom of picker entries)
+    # ── filter mode ── summary + column headers in --header (non-selectable)
     build_main_entries
+
+    local total; total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
+    local breakdown=""
+    local b
+    for b in "${BUCKETS[@]}"; do
+      local cnt; cnt=$(printf '%s\n' "$rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
+      breakdown+="$(ui_status_icon "$b") $cnt  "
+    done
+    local sum_line; sum_line="   $(ui_paint fd_chrome "$total $(ui_small_caps changes)  ·  ${breakdown% }")"
+    local hdr_line; hdr_line=$(_build_header_row)
+    local fhdr; fhdr=$(printf '%s\n%s\n\n%s' \
+      "$(ui_dim 'Type to filter · ↵ open · esc for action bar')" \
+      "$sum_line" \
+      "$hdr_line")
+
     local pick
     if pick=$(printf '%s\n' "${PICKER_ENTRIES[@]}" \
-        | gum filter --no-strip-ansi --header "Type to filter · ↵ open · esc for action bar" --indicator='▸'); then
+        | gum filter --no-strip-ansi \
+            --header "$fhdr" \
+            --indicator='▸' \
+            --indicator.foreground 255); then
       local pick_clean; pick_clean=$(_norm_picker_line "$pick")
       local slug; slug=$(lookup_slug_for_entry "$pick")
       case "$slug" in
-        __header__|__summary__) ;;  # pseudo-rows, no action
         __more__*)
           local bucket="${slug#__more__}"
           ui_bucket_view "$bucket"
@@ -962,7 +972,7 @@ cmd_interactive() {
             "$ACT_ADD")    ui_add_new ;;
             "$ACT_RELOAD") ;;
             "$ACT_EXIT")   if gum confirm "Exit foundry?"; then clear; exit 0; fi ;;
-            *) ;;  # separator
+            *) ;;
           esac ;;
         *) ui_drill "$slug" ;;
       esac
