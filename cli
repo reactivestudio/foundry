@@ -531,27 +531,29 @@ build_full_row() {
   if [[ "$crt_epoch" != "0" ]]; then
     local iso; iso=$(date -u -r "$crt_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
                 || date -u -d "@$crt_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
-    created_str=$(ui_small_caps "$(ui_date_full "$iso")")
+    created_str=$(ui_date_full "$iso")
   else
     created_str="?"
   fi
   if [[ "$upd_epoch" != "0" ]]; then
     local iso; iso=$(date -u -r "$upd_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
                 || date -u -d "@$upd_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
-    updated_str=$(ui_small_caps "$(ui_date_relative "$iso")")
+    updated_str=$(ui_date_relative "$iso")
   else
     updated_str="?"
   fi
 
   local t_t; t_t=$(ui_truncate "$title_w" "$title")
 
-  # Dates use ui_pad_visual because small-caps glyphs are 3 bytes / 1 cell.
+  # All cells are now ASCII (no small-caps) so printf %-*s pads correctly
+  # by visual cells. Headers also dropped small-caps to keep alignment
+  # guaranteed in any monospace font.
   printf '%s  %s  %s  %s  %s' \
     "$(ui_status_icon "$b")" \
     "$(ui_paint "$(ui_bucket_color "$b")" "$(printf '%-*s' "$bucket_w" "$b")")" \
     "$(ui_paint fd_title "$(printf '%-*s' "$title_w" "$t_t")")" \
-    "$(ui_paint fd_created "$(ui_pad_visual "$created_str" "$created_w")")" \
-    "$(ui_paint fd_updated "$(ui_pad_visual "$updated_str" "$updated_w")")"
+    "$(ui_paint fd_created "$(printf '%-*s' "$created_w" "$created_str")")" \
+    "$(ui_paint fd_updated "$(printf '%-*s' "$updated_w" "$updated_str")")"
 }
 
 # Linear lookup: find the slug for a selected picker line.
@@ -840,10 +842,10 @@ _picker_widths() {
 _build_header_row() {
   read -r bw tw cw uw <<< "$(_picker_widths)"
   printf '     %s  %s  %s  %s' \
-    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps STATUS)" "$bw")")" \
-    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps TITLE)" "$tw")")" \
-    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps CREATED)" "$cw")")" \
-    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps UPDATED)" "$uw")")"
+    "$(ui_dim "$(printf '%-*s' "$bw" "STATUS")")" \
+    "$(ui_dim "$(printf '%-*s' "$tw" "TITLE")")" \
+    "$(ui_dim "$(printf '%-*s' "$cw" "CREATED")")" \
+    "$(ui_dim "$(printf '%-*s' "$uw" "UPDATED")")"
 }
 
 # Build a "+N more items..." row formatted like a regular change row,
@@ -861,7 +863,7 @@ _build_more_row() {
 # Build summary pseudo-row (small-caps "changes").
 _build_summary_row() {
   local total="$1" all_rows="$2"
-  local s="$total $(ui_small_caps changes)  "
+  local s="$total changes  "
   local b
   for b in "${BUCKETS[@]}"; do
     local cnt; cnt=$(printf '%s\n' "$all_rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
@@ -952,7 +954,7 @@ cmd_interactive() {
       local cnt; cnt=$(printf '%s\n' "$rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
       breakdown+="$(ui_status_icon "$b") $cnt  "
     done
-    local sum_line; sum_line="     $(ui_paint fd_chrome "$total $(ui_small_caps changes)  ·  ${breakdown% }")"
+    local sum_line; sum_line="     $(ui_paint fd_chrome "$total changes  ·  ${breakdown% }")"
     local hdr_line; hdr_line=$(_build_header_row)
     local fhdr; fhdr=$(printf '%s\n%s\n\n%s' \
       "$(ui_dim '     Type to filter · ↵ open · esc for action bar')" \
