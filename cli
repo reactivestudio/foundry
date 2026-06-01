@@ -556,24 +556,11 @@ build_full_row() {
     "$(ui_paint fd_updated "$(printf '%-*s' "$updated_w" "$updated_str")")"
 }
 
-# Linear lookup: find the slug for a selected picker line.
-# Normalizes both sides (strips ANSI codes + trailing whitespace)
-# because gum filter strips trailing whitespace from its echoed
-# selection, breaking exact byte-equality with our padded rows.
+# Strip ANSI + trailing whitespace — used to normalize picker rows for
+# matching. ui_picker now returns the slug directly, but ui_drill / other
+# helpers still use this to clean copy of an entry.
 _norm_picker_line() {
   printf '%s' "$1" | sed -E $'s/\033\\[[0-9;]*[a-zA-Z]//g' | sed -E 's/[[:space:]]+$//'
-}
-
-lookup_slug_for_entry() {
-  local target; target=$(_norm_picker_line "$1")
-  local i entry
-  for i in "${!PICKER_ENTRIES[@]}"; do
-    entry=$(_norm_picker_line "${PICKER_ENTRIES[$i]}")
-    if [[ "$entry" == "$target" ]]; then
-      printf '%s' "${PICKER_SLUGS[$i]}"
-      return
-    fi
-  done
 }
 
 # Drill into one change: show + action menu.
@@ -658,100 +645,11 @@ ui_add_new() {
 # (Sort picker removed in 0.26.0 per user feedback. Sort is set once
 # from .foundry/config.yaml's default_sort.)
 
-# Horizontal action bar — arrow nav, letter shortcuts, enter selects,
-# esc cancels back to filter mode.
-# Echoes: "0"=Filter, "1"=Add, "2"=Reload, "3"=Exit, "cancel"=esc.
-horizontal_action_bar() {
-  local labels=("⌕ Filter" "+ Add new" "⟳ Reload" "⏻ Exit")
-  local n=4 idx=0
+# (horizontal_action_bar + render_static_list removed in 0.31.0 — action
+# items now live as picker entries handled by ui_picker, no separate mode.)
 
-  local stty_save; stty_save=$(stty -g)
-  stty -echo -icanon
-  printf '\033[?25l' >&2  # hide cursor
-  trap 'stty "$stty_save" 2>/dev/null; printf "\033[?25h" >&2' EXIT
-
-  local choice=""
-  while [[ -z "$choice" ]]; do
-    printf '\r\033[K  ' >&2
-    local i
-    for i in 0 1 2 3; do
-      if (( i == idx )); then
-        printf '%s    ' "$(ui_bright "▸ ${labels[$i]}")" >&2
-      else
-        printf '%s    ' "$(ui_paint fd_chrome "  ${labels[$i]}")" >&2
-      fi
-    done
-
-    local key; IFS= read -rsn1 key || break
-    case "$key" in
-      $'\e')
-        local seq
-        IFS= read -rsn1 -t 1 seq 2>/dev/null
-        if [[ "$seq" == '[' ]]; then
-          local dir
-          IFS= read -rsn1 dir
-          case "$dir" in
-            C) idx=$(( (idx + 1) % n )) ;;
-            D) idx=$(( (idx - 1 + n) % n )) ;;
-          esac
-        else
-          choice="cancel"
-        fi ;;
-      '') choice="$idx" ;;
-      f|F) choice=0 ;;
-      '+'|a|A) choice=1 ;;
-      r|R) choice=2 ;;
-      x|X|q|Q) choice=3 ;;
-    esac
-  done
-
-  stty "$stty_save" 2>/dev/null
-  printf '\033[?25h\n' >&2
-  trap - EXIT
-
-  printf '%s' "$choice"
-}
-
-# Render the list statically (no interaction). Used in action mode
-# so the user keeps context while choosing an action.
-render_static_list() {
-  local rows; rows=$(collect_rows all)
-  if [[ -z "$rows" ]]; then
-    ui_header "Foundry" "empty"
-    ui_info "get started: + Add new"
-    echo
-    return
-  fi
-
-  local total; total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
-  local breakdown=""
-  local b
-  for b in "${BUCKETS[@]}"; do
-    local cnt; cnt=$(printf '%s\n' "$rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
-    breakdown+="$(ui_status_icon "$b") $cnt   "
-  done
-  ui_header "Foundry" "$total · ${breakdown% }"
-
-  local limit; limit="$(config_get list_per_bucket_limit 3)"
-  for b in "${BUCKETS[@]}"; do
-    local bucket_rows; bucket_rows=$(printf '%s\n' "$rows" \
-      | awk -F'\t' -v b="$b" '$1 == b' \
-      | apply_sort "$MAIN_SORT" "$MAIN_REVERSE")
-    [[ -z "$bucket_rows" ]] && continue
-    local n; n=$(printf '%s\n' "$bucket_rows" | wc -l | tr -d ' ')
-    local show="$bucket_rows"
-    (( n > limit )) && show=$(printf '%s\n' "$bucket_rows" | head -n "$limit")
-    while IFS=$'\t' read -r bb _slug title _ upd crt; do
-      build_full_row "$bb" "$title" "$upd" "$crt"
-      printf '\n'
-    done <<< "$show"
-    if (( n > limit )); then
-      printf '  %s\n' "$(ui_dim "⋯  +$((n - limit)) more in $b")"
-    fi
-  done
-}
-
-# Single-bucket paged view (entered from "+N more" row).
+# Single-bucket paged view (entered from "+N more" row). Reuses ui_picker
+# with bucket-specific column header, page summary, and pagination actions.
 ui_bucket_view() {
   local bucket="$1"
   local page=1 per_page; per_page="$(config_get bucket_page_size 20)"
@@ -769,47 +667,70 @@ ui_bucket_view() {
     (( end > total )) && end=$total
     local page_rows; page_rows=$(printf '%s\n' "$rows" | sed -n "${start},${end}p")
 
-    clear
+    PICKER_ENTRIES=()
+    PICKER_SLUGS=()
+    PICKER_TYPES=()
+    PICKER_FILTERABLE=()
 
-    local entries=() slugs=()
-    while IFS=$'\t' read -r b slug title _ upd crt; do
-      entries+=("$(build_full_row "$b" "$title" "$upd" "$crt")")
-      slugs+=("$slug")
+    # Column header.
+    PICKER_ENTRIES+=("$(_build_header_row)")
+    PICKER_SLUGS+=("")
+    PICKER_TYPES+=("header")
+    PICKER_FILTERABLE+=("0")
+
+    # Bucket rows.
+    while IFS=$'\t' read -r bb slug title _ upd crt; do
+      PICKER_ENTRIES+=("$(build_full_row "$bb" "$title" "$upd" "$crt")")
+      PICKER_SLUGS+=("$slug")
+      PICKER_TYPES+=("row")
+      PICKER_FILTERABLE+=("1")
     done <<< "$page_rows"
 
-    (( page > 1 ))     && { entries+=("$(ui_paint fd_chrome "◀ Previous page")"); slugs+=(""); }
-    (( page < pages )) && { entries+=("$(ui_paint fd_chrome "▶ Next page")");     slugs+=(""); }
-    entries+=("$(ui_paint fd_chrome "← Back to all changes")"); slugs+=("")
+    # Padding → summary → padding.
+    PICKER_ENTRIES+=("")
+    PICKER_SLUGS+=("")
+    PICKER_TYPES+=("padding")
+    PICKER_FILTERABLE+=("0")
 
-    local hdr_line; hdr_line=$(_build_header_row)
-    local sum_line; sum_line="     $(ui_paint fd_chrome "$(ui_status "$bucket")  ·  page $page of $pages  ·  $total total")"
-    local fhdr; fhdr=$(printf '%s\n%s\n\n%s' \
-      "$(ui_dim '     Type to filter · ↵ open · esc to back')" \
-      "$sum_line" \
-      "$hdr_line")
+    PICKER_ENTRIES+=("   $(ui_paint fd_chrome "$(ui_status "$bucket")  ·  page $page of $pages  ·  $total total")")
+    PICKER_SLUGS+=("")
+    PICKER_TYPES+=("summary")
+    PICKER_FILTERABLE+=("0")
 
-    local pick
-    pick=$(printf '%s\n' "${entries[@]}" \
-      | gum filter --no-strip-ansi \
-          --header "$fhdr" \
-          --indicator='▸' \
-          --indicator.foreground 255) \
-      || return
+    PICKER_ENTRIES+=("")
+    PICKER_SLUGS+=("")
+    PICKER_TYPES+=("padding")
+    PICKER_FILTERABLE+=("0")
 
-    local pick_clean; pick_clean=$(_norm_picker_line "$pick")
-    case "$pick_clean" in
-      "◀ Previous page") page=$((page - 1)) ;;
-      "▶ Next page")     page=$((page + 1)) ;;
-      "← Back"*)         return ;;
-      *)
-        local i slug="" enorm
-        for i in "${!entries[@]}"; do
-          enorm=$(_norm_picker_line "${entries[$i]}")
-          [[ "$enorm" == "$pick_clean" ]] && { slug="${slugs[$i]}"; break; }
-        done
-        [[ -n "$slug" ]] && ui_drill "$slug"
-        ;;
-    esac
+    # Pagination + back actions.
+    if (( page > 1 )); then
+      PICKER_ENTRIES+=("$(ui_paint fd_chrome "◀  Previous page")")
+      PICKER_SLUGS+=("__bv_prev__")
+      PICKER_TYPES+=("action")
+      PICKER_FILTERABLE+=("0")
+    fi
+    if (( page < pages )); then
+      PICKER_ENTRIES+=("$(ui_paint fd_chrome "▶  Next page")")
+      PICKER_SLUGS+=("__bv_next__")
+      PICKER_TYPES+=("action")
+      PICKER_FILTERABLE+=("0")
+    fi
+    PICKER_ENTRIES+=("$(ui_paint fd_chrome "←  Back to all changes")")
+    PICKER_SLUGS+=("__bv_back__")
+    PICKER_TYPES+=("action")
+    PICKER_FILTERABLE+=("0")
+
+    if ui_picker "⌕ Search "; then
+      case "$PICKER_RESULT_SLUG" in
+        __bv_prev__) page=$((page - 1)) ;;
+        __bv_next__) page=$((page + 1)) ;;
+        __bv_back__) return ;;
+        '') ;;
+        *) ui_drill "$PICKER_RESULT_SLUG" ;;
+      esac
+    else
+      return
+    fi
   done
 }
 
@@ -831,21 +752,19 @@ _picker_widths() {
   printf '%d %d %d %d' "$bucket_w" "$title_w" "$created_w" "$updated_w"
 }
 
-# Build the column-header line for gum filter's --header.
-# gum filter prefixes each picker row with "▸ " (or 2 blanks for
-# non-cursor) — 2 cells. Then a row is icon(1) + "  "(2) + bucket.
-# So bucket text in rows starts at column 5. The --header line has
-# NO such prefix from gum, so we add 5 leading spaces to make
-# STATUS sit flush over "backlog", TITLE over the title column, etc.
-# Uses ui_pad_visual so small-caps glyphs (multi-byte UTF-8 but
-# 1-cell wide) don't break column alignment.
+# Build the column-header line for the custom picker. The picker prefixes
+# each rendered row with "▸ " (cursor) or "  " (non-cursor) — 2 cells.
+# Row content is then icon(1) + sep(2) + bucket, so bucket text starts at
+# column 5. The column-header line has no icon, so 3 leading spaces here +
+# 2 cells from the picker = 5 → STATUS aligns with "backlog".
+# Small-caps via ui_pad_visual which counts visual cells (wc -m).
 _build_header_row() {
   read -r bw tw cw uw <<< "$(_picker_widths)"
-  printf '     %s  %s  %s  %s' \
-    "$(ui_dim "$(printf '%-*s' "$bw" "STATUS")")" \
-    "$(ui_dim "$(printf '%-*s' "$tw" "TITLE")")" \
-    "$(ui_dim "$(printf '%-*s' "$cw" "CREATED")")" \
-    "$(ui_dim "$(printf '%-*s' "$uw" "UPDATED")")"
+  printf '   %s  %s  %s  %s' \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps STATUS)" "$bw")")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps TITLE)" "$tw")")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps CREATED)" "$cw")")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps UPDATED)" "$uw")")"
 }
 
 # Build a "+N more items..." row formatted like a regular change row,
@@ -860,10 +779,11 @@ _build_more_row() {
     "$(printf '%-*s' "$uw" "")"
 }
 
-# Build summary pseudo-row (small-caps "changes").
+# Build summary pseudo-row. 3 leading spaces match column-header indent
+# (skip icon column) so the summary aligns with the bucket column.
 _build_summary_row() {
   local total="$1" all_rows="$2"
-  local s="$total changes  "
+  local s="$total $(ui_small_caps changes)  "
   local b
   for b in "${BUCKETS[@]}"; do
     local cnt; cnt=$(printf '%s\n' "$all_rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
@@ -872,21 +792,152 @@ _build_summary_row() {
   printf '   %s' "$(ui_paint fd_chrome "$s")"
 }
 
-# Build picker entries — populates two parallel globals:
-#   PICKER_ENTRIES  — display lines (what gum filter sees & echoes back)
-#   PICKER_SLUGS    — slug per row, or a sentinel:
-#                       __more__<b>  "+N more in <bucket>" → ui_bucket_view
-#                       ""           action button
+# ── ui_picker — custom interactive picker ─────────────────────────────────
 #
-# Column headers and summary live in gum filter's --header so the
-# selector ▸ only lands on actionable rows.
+# Why custom: gum filter and fzf both visit every row with the cursor — no
+# way to skip non-selectables (column headers, summary, padding) in the
+# middle of the list. This picker reads parallel arrays the caller fills:
+#
+#   PICKER_ENTRIES[i]    — display line (may contain ANSI escapes)
+#   PICKER_SLUGS[i]      — return key for selectables; "" otherwise
+#   PICKER_TYPES[i]      — 'row' | 'action' | 'header' | 'padding' | 'summary'
+#   PICKER_FILTERABLE[i] — '1' to include row in text-filter; '0' to always show
+#
+# Cursor only lands on type='row' or 'action'. Type-to-filter is always on:
+# typed chars build a substring filter against filterable entries (rows).
+# Non-filterable entries (headers/summary/padding/actions) always show.
+#
+# Sets globals on selection:
+#   PICKER_RESULT_SLUG, PICKER_RESULT_ENTRY
+# Return: 0 = ↵ selected, 1 = esc.
+ui_picker() {
+  local prompt_label="${1:-⌕ Search }"
+
+  local filter="" cursor=0
+  local stty_save; stty_save=$(stty -g)
+  stty -echo -icanon
+  printf '\033[?25l'
+
+  PICKER_RESULT_SLUG=""
+  PICKER_RESULT_ENTRY=""
+  local rc=0
+  local n_total=${#PICKER_ENTRIES[@]}
+
+  while true; do
+    # Build the visible list for this frame.
+    local -a vis_entries=() vis_slugs=() vis_types=() sel_idx=()
+    local i
+    for (( i = 0; i < n_total; i++ )); do
+      local type="${PICKER_TYPES[$i]:-row}"
+      local filt="${PICKER_FILTERABLE[$i]:-0}"
+      local entry="${PICKER_ENTRIES[$i]}"
+
+      if [[ "$filt" == "1" && -n "$filter" ]]; then
+        local stripped sl fl
+        stripped=$(printf '%s' "$entry" | sed -E $'s/\033\\[[0-9;]*[a-zA-Z]//g')
+        sl=$(printf '%s' "$stripped" | tr '[:upper:]' '[:lower:]')
+        fl=$(printf '%s' "$filter"   | tr '[:upper:]' '[:lower:]')
+        [[ "$sl" != *"$fl"* ]] && continue
+      fi
+
+      vis_entries+=("$entry")
+      vis_slugs+=("${PICKER_SLUGS[$i]}")
+      vis_types+=("$type")
+      if [[ "$type" == "row" || "$type" == "action" ]]; then
+        sel_idx+=("$((${#vis_entries[@]} - 1))")
+      fi
+    done
+
+    local n_sel=${#sel_idx[@]}
+    if (( n_sel == 0 )); then
+      cursor=0
+    else
+      (( cursor >= n_sel )) && cursor=$((n_sel - 1))
+      (( cursor < 0 )) && cursor=0
+    fi
+    local current=-1
+    (( n_sel > 0 )) && current="${sel_idx[$cursor]}"
+
+    # Render.
+    clear
+    printf '\n  %s%s\n\n' \
+      "$(ui_paint fd_chrome "$prompt_label")" \
+      "$(ui_bright "$filter")"
+    local j
+    for (( j = 0; j < ${#vis_entries[@]}; j++ )); do
+      if (( j == current )); then
+        printf ' %s %s\n' "$(ui_bright '▸')" "${vis_entries[$j]}"
+      else
+        printf '   %s\n' "${vis_entries[$j]}"
+      fi
+    done
+
+    # Read 1 key.
+    local key
+    IFS= read -rsn1 key || { rc=1; break; }
+    if [[ -z "$key" ]]; then
+      if (( n_sel > 0 )); then
+        PICKER_RESULT_SLUG="${vis_slugs[$current]}"
+        PICKER_RESULT_ENTRY="${vis_entries[$current]}"
+      fi
+      break
+    fi
+    case "$key" in
+      $'\e')
+        local seq
+        IFS= read -rsn1 -t 0.1 seq 2>/dev/null
+        if [[ "$seq" == '[' ]]; then
+          local dir
+          IFS= read -rsn1 dir
+          case "$dir" in
+            A) (( cursor > 0 )) && cursor=$((cursor - 1)) ;;
+            B) (( cursor < n_sel - 1 )) && cursor=$((cursor + 1)) ;;
+          esac
+        else
+          rc=1; break
+        fi ;;
+      $'\x7f'|$'\b')
+        filter="${filter%?}"; cursor=0 ;;
+      *)
+        if [[ "$key" =~ ^[[:print:]]$ ]]; then
+          filter+="$key"; cursor=0
+        fi ;;
+    esac
+  done
+
+  stty "$stty_save" 2>/dev/null
+  printf '\033[?25h'
+  return $rc
+}
+
+# Build picker entries — populates four parallel globals consumed by
+# ui_picker:
+#   PICKER_ENTRIES    — display lines (ANSI-styled)
+#   PICKER_SLUGS      — return key per selectable; sentinels for actions:
+#                         __more__<b>  "+N more" expand bucket
+#                         __act_add__  "+ Add new"
+#                         __act_reload__ reload
+#                         __act_exit__ exit
+#   PICKER_TYPES      — 'row'|'action'|'header'|'padding'|'summary'
+#   PICKER_FILTERABLE — '1' for rows (subject to search filter), '0' for rest
+#
+# Layout: column header → rows (per bucket, capped + "+N more") → blank
+# padding → summary → blank padding → action items.
 build_main_entries() {
   PICKER_ENTRIES=()
   PICKER_SLUGS=()
+  PICKER_TYPES=()
+  PICKER_FILTERABLE=()
 
-  local limit; limit="$(config_get list_per_bucket_limit 3)"
   local rows; rows=$(collect_rows all)
 
+  # Column headers.
+  PICKER_ENTRIES+=("$(_build_header_row)")
+  PICKER_SLUGS+=("")
+  PICKER_TYPES+=("header")
+  PICKER_FILTERABLE+=("0")
+
+  local limit; limit="$(config_get list_per_bucket_limit 3)"
   for b in "${BUCKETS[@]}"; do
     local bucket_rows; bucket_rows=$(printf '%s\n' "$rows" \
       | awk -F'\t' -v b="$b" '$1 == b' \
@@ -898,24 +949,54 @@ build_main_entries() {
     while IFS=$'\t' read -r bb slug title _ upd crt; do
       PICKER_ENTRIES+=("$(build_full_row "$bb" "$title" "$upd" "$crt")")
       PICKER_SLUGS+=("$slug")
+      PICKER_TYPES+=("row")
+      PICKER_FILTERABLE+=("1")
     done <<< "$show"
     if (( n > limit )); then
       PICKER_ENTRIES+=("$(_build_more_row "$b" "$((n - limit))")")
       PICKER_SLUGS+=("__more__$b")
+      PICKER_TYPES+=("action")
+      PICKER_FILTERABLE+=("0")
     fi
   done
 
+  # Padding → summary → padding.
+  PICKER_ENTRIES+=("")
+  PICKER_SLUGS+=("")
+  PICKER_TYPES+=("padding")
+  PICKER_FILTERABLE+=("0")
+
+  PICKER_ENTRIES+=("$(_build_summary_row "$(printf '%s\n' "$rows" | wc -l | tr -d ' ')" "$rows")")
+  PICKER_SLUGS+=("")
+  PICKER_TYPES+=("summary")
+  PICKER_FILTERABLE+=("0")
+
+  PICKER_ENTRIES+=("")
+  PICKER_SLUGS+=("")
+  PICKER_TYPES+=("padding")
+  PICKER_FILTERABLE+=("0")
+
+  # Action items at bottom (always selectable, never filtered).
   PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_ADD")")
-  PICKER_SLUGS+=("")
+  PICKER_SLUGS+=("__act_add__")
+  PICKER_TYPES+=("action")
+  PICKER_FILTERABLE+=("0")
+
   PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_RELOAD")")
-  PICKER_SLUGS+=("")
+  PICKER_SLUGS+=("__act_reload__")
+  PICKER_TYPES+=("action")
+  PICKER_FILTERABLE+=("0")
+
   PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_EXIT")")
-  PICKER_SLUGS+=("")
+  PICKER_SLUGS+=("__act_exit__")
+  PICKER_TYPES+=("action")
+  PICKER_FILTERABLE+=("0")
 }
 
-# Interactive REPL — two modes, esc toggles:
-#   F = filter mode (gum filter, fuzzy-pick a change)
-#   A = action mode (static list + horizontal action bar)
+# Interactive REPL — single screen via custom ui_picker:
+#   ⌕ Search prompt → column headers → list rows → padding →
+#   summary → padding → action items.
+# Cursor skips header/padding/summary; only row/action types are selectable.
 cmd_interactive() {
   require_foundry
   if [[ "$UI_MODE" != "interactive" ]]; then
@@ -930,10 +1011,10 @@ cmd_interactive() {
   trap 'clear; exit 0' INT
 
   while true; do
-    clear
     local rows; rows=$(collect_rows all)
 
     if [[ -z "$rows" ]]; then
+      clear
       ui_header "Foundry" "empty"
       echo
       if gum confirm "Add your first change now?"; then
@@ -944,61 +1025,27 @@ cmd_interactive() {
       continue
     fi
 
-    # ── filter mode ── summary + column headers in --header (non-selectable)
     build_main_entries
-
-    local total; total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
-    local breakdown=""
-    local b
-    for b in "${BUCKETS[@]}"; do
-      local cnt; cnt=$(printf '%s\n' "$rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
-      breakdown+="$(ui_status_icon "$b") $cnt  "
-    done
-    local sum_line; sum_line="     $(ui_paint fd_chrome "$total changes  ·  ${breakdown% }")"
-    local hdr_line; hdr_line=$(_build_header_row)
-    local fhdr; fhdr=$(printf '%s\n%s\n\n%s' \
-      "$(ui_dim '     Type to filter · ↵ open · esc for action bar')" \
-      "$sum_line" \
-      "$hdr_line")
-
-    local pick
-    if pick=$(printf '%s\n' "${PICKER_ENTRIES[@]}" \
-        | gum filter --no-strip-ansi \
-            --header "$fhdr" \
-            --indicator='▸' \
-            --indicator.foreground 255); then
-      local pick_clean; pick_clean=$(_norm_picker_line "$pick")
-      local slug; slug=$(lookup_slug_for_entry "$pick")
+    if ui_picker "⌕ Search "; then
+      local slug="$PICKER_RESULT_SLUG"
       case "$slug" in
         __more__*)
-          local bucket="${slug#__more__}"
-          ui_bucket_view "$bucket"
-          ;;
+          ui_bucket_view "${slug#__more__}" ;;
+        __act_add__)
+          ui_add_new ;;
+        __act_reload__)
+          : ;;   # loop back, rebuild entries
+        __act_exit__)
+          if gum confirm "Exit foundry?"; then clear; exit 0; fi ;;
         '')
-          case "$pick_clean" in
-            "$ACT_ADD")    ui_add_new ;;
-            "$ACT_RELOAD") ;;
-            "$ACT_EXIT")   if gum confirm "Exit foundry?"; then clear; exit 0; fi ;;
-            *) ;;
-          esac ;;
-        *) ui_drill "$slug" ;;
+          : ;;   # non-selectable somehow — re-render
+        *)
+          ui_drill "$slug" ;;
       esac
-      continue
+    else
+      # esc — confirm exit
+      if gum confirm "Exit foundry?"; then clear; exit 0; fi
     fi
-
-    # ── action mode (esc from filter) — horizontal bar over static list ──
-    clear
-    render_static_list
-    echo
-    echo
-    local choice; choice=$(horizontal_action_bar)
-    case "$choice" in
-      0)      ;;  # filter → fall through to top of loop = filter mode
-      1)      ui_add_new ;;
-      2)      ;;  # reload — loops back to filter
-      3)      if gum confirm "Exit foundry?"; then clear; exit 0; fi ;;
-      cancel) ;;  # esc → back to filter
-    esac
   done
 }
 
