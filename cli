@@ -507,16 +507,17 @@ pause_for_user() {
 # (Action buttons live in a separate bar — see horizontal_action_bar.
 # Earlier sentinels SENT_ADD/SORT/RELOAD/EXIT were removed in 0.26.0.)
 
-# Format one change row for the picker.
-# Columns: icon, bucket-text, slug, title, created, updated
+# Format one change row for the picker (slug NOT displayed — looked up
+# via parallel arrays PICKER_ENTRIES + PICKER_SLUGS in cmd_interactive).
+# Columns: icon, bucket-text, title, created, updated
 build_full_row() {
-  local b="$1" slug="$2" title="$3" upd_epoch="$4" crt_epoch="$5"
+  local b="$1" title="$2" upd_epoch="$3" crt_epoch="$4"
 
   local cols=${COLUMNS:-$(tput cols 2>/dev/null || echo 100)}
   (( cols > 130 )) && cols=130
-  local bucket_w=12 slug_w=24 created_w=10 updated_w=11
-  local title_w=$(( cols - bucket_w - slug_w - created_w - updated_w - 12 ))
-  (( title_w < 16 )) && title_w=16
+  local bucket_w=12 created_w=10 updated_w=11
+  local title_w=$(( cols - bucket_w - created_w - updated_w - 10 ))
+  (( title_w < 20 )) && title_w=20
 
   local created_str updated_str
   if [[ "$crt_epoch" != "0" ]]; then
@@ -534,23 +535,26 @@ build_full_row() {
     updated_str="?"
   fi
 
-  local s_t; s_t=$(ui_truncate "$slug_w" "$slug")
   local t_t; t_t=$(ui_truncate "$title_w" "$title")
 
-  printf '%s  %s  %s  %s  %s  %s' \
+  printf '%s  %s  %s  %s  %s' \
     "$(ui_status_icon "$b")" \
     "$(ui_paint "$(ui_bucket_color "$b")" "$(printf '%-*s' "$bucket_w" "$b")")" \
-    "$(ui_bright "$(printf '%-*s' "$slug_w" "$s_t")")" \
-    "$(printf '%-*s' "$title_w" "$t_t")" \
+    "$(ui_bright "$(printf '%-*s' "$title_w" "$t_t")")" \
     "$(ui_dim "$(printf '%-*s' "$created_w" "$created_str")")" \
     "$(ui_dim "$(printf '%-*s' "$updated_w" "$updated_str")")"
 }
 
-# Slug column starts after icon + 2sp + bucket_w(12) + 2sp.
-# Use ui_strip_ansi to remove colors before splitting by whitespace.
-parse_slug_from_row() {
-  local line="$1"
-  printf '%s' "$line" | ui_strip_ansi | awk '{print $3}'
+# Linear lookup: find the slug for a selected picker line.
+lookup_slug_for_entry() {
+  local target="$1"
+  local i
+  for i in "${!PICKER_ENTRIES[@]}"; do
+    if [[ "${PICKER_ENTRIES[$i]}" == "$target" ]]; then
+      printf '%s' "${PICKER_SLUGS[$i]}"
+      return
+    fi
+  done
 }
 
 # Drill into one change: show + action menu.
@@ -610,7 +614,7 @@ ui_add_new() {
 # esc cancels back to filter mode.
 # Echoes: "0"=Add, "1"=Reload, "2"=Exit, "cancel"=esc.
 horizontal_action_bar() {
-  local labels=("+ Add new" "⟳ Reload" "✕ Exit")
+  local labels=("+ Add new" "⟳ Reload" "⏻ Exit")
   local n=3 idx=0
 
   local stty_save; stty_save=$(stty -g)
@@ -688,8 +692,8 @@ render_static_list() {
     local n; n=$(printf '%s\n' "$bucket_rows" | wc -l | tr -d ' ')
     local show="$bucket_rows"
     (( n > limit )) && show=$(printf '%s\n' "$bucket_rows" | head -n "$limit")
-    while IFS=$'\t' read -r bb slug title _ upd crt; do
-      build_full_row "$bb" "$slug" "$title" "$upd" "$crt"
+    while IFS=$'\t' read -r bb _slug title _ upd crt; do
+      build_full_row "$bb" "$title" "$upd" "$crt"
       printf '\n'
     done <<< "$show"
     if (( n > limit )); then
@@ -720,14 +724,15 @@ ui_bucket_view() {
     ui_header "Foundry · $(ui_status "$bucket")" "page $page / $pages · $total total"
     echo
 
-    local entries=()
+    local entries=() slugs=()
     while IFS=$'\t' read -r b slug title _ upd crt; do
-      entries+=("$(build_full_row "$b" "$slug" "$title" "$upd" "$crt")")
+      entries+=("$(build_full_row "$b" "$title" "$upd" "$crt")")
+      slugs+=("$slug")
     done <<< "$page_rows"
 
-    (( page > 1 ))     && entries+=("◀ Previous page")
-    (( page < pages )) && entries+=("▶ Next page")
-    entries+=("← Back to all changes")
+    (( page > 1 ))     && { entries+=("◀ Previous page");      slugs+=(""); }
+    (( page < pages )) && { entries+=("▶ Next page");          slugs+=(""); }
+                          { entries+=("← Back to all changes"); slugs+=(""); }
 
     local pick
     pick=$(printf '%s\n' "${entries[@]}" \
@@ -739,20 +744,26 @@ ui_bucket_view() {
       "▶ Next page")     page=$((page + 1)) ;;
       "← Back"*)         return ;;
       *)
-        local slug; slug=$(parse_slug_from_row "$pick")
+        local i slug=""
+        for i in "${!entries[@]}"; do
+          [[ "${entries[$i]}" == "$pick" ]] && { slug="${slugs[$i]}"; break; }
+        done
         [[ -n "$slug" ]] && ui_drill "$slug"
         ;;
     esac
   done
 }
 
-# Build picker entries: change rows grouped by bucket, per-bucket cap
-# collapsing to "⋯ +N more". Actions live in horizontal_action_bar.
+# Build picker entries — populates two parallel globals:
+#   PICKER_ENTRIES  — display lines (what gum filter sees & echoes back)
+#   PICKER_SLUGS    — slug per row, "" for "+N more" specials
 build_main_entries() {
+  PICKER_ENTRIES=()
+  PICKER_SLUGS=()
+
   local limit; limit="$(config_get list_per_bucket_limit 3)"
   local rows; rows=$(collect_rows all)
 
-  local out=()
   for b in "${BUCKETS[@]}"; do
     local bucket_rows; bucket_rows=$(printf '%s\n' "$rows" \
       | awk -F'\t' -v b="$b" '$1 == b' \
@@ -762,14 +773,14 @@ build_main_entries() {
     local show="$bucket_rows"
     (( n > limit )) && show=$(printf '%s\n' "$bucket_rows" | head -n "$limit")
     while IFS=$'\t' read -r bb slug title _ upd crt; do
-      out+=("$(build_full_row "$bb" "$slug" "$title" "$upd" "$crt")")
+      PICKER_ENTRIES+=("$(build_full_row "$bb" "$title" "$upd" "$crt")")
+      PICKER_SLUGS+=("$slug")
     done <<< "$show"
     if (( n > limit )); then
-      out+=("⋯  +$((n - limit)) more in $b")
+      PICKER_ENTRIES+=("⋯  +$((n - limit)) more in $b")
+      PICKER_SLUGS+=("")
     fi
   done
-
-  printf '%s\n' "${out[@]}"
 }
 
 # Interactive REPL — two modes, esc toggles:
@@ -812,9 +823,9 @@ cmd_interactive() {
     done
     ui_header "Foundry" "$total · ${breakdown% }"
 
-    local entries; entries=$(build_main_entries)
+    build_main_entries
     local pick
-    if pick=$(printf '%s\n' "$entries" \
+    if pick=$(printf '%s\n' "${PICKER_ENTRIES[@]}" \
         | gum filter --header "Type to filter · ↵ open · esc for actions" --indicator='▸'); then
       case "$pick" in
         "⋯  +"*" more in "*)
@@ -822,7 +833,7 @@ cmd_interactive() {
           ui_bucket_view "$bucket"
           ;;
         *)
-          local slug; slug=$(parse_slug_from_row "$pick")
+          local slug; slug=$(lookup_slug_for_entry "$pick")
           [[ -n "$slug" ]] && ui_drill "$slug"
           ;;
       esac

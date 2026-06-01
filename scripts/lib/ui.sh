@@ -130,7 +130,7 @@ ui_icon() {
     backlog)     printf '○' ;;  # U+25CB WHITE CIRCLE
     in-progress) printf '⊙' ;;  # U+2299 CIRCLED DOT OPERATOR
     done)        printf '●' ;;  # U+25CF BLACK CIRCLE
-    declined)    printf '⊘' ;;  # U+2298 CIRCLED DIVISION SLASH
+    declined)    printf '⊗' ;;  # U+2297 CIRCLED TIMES
     *)           printf '?' ;;
   esac
 }
