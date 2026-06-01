@@ -132,59 +132,126 @@ collect_rows() {
 
 cmd_list() {
   require_foundry
-  local filter="all"
+  local filter="all" sort="updated" reverse=0
   for arg in "$@"; do
     case "$arg" in
       --bucket=*) filter="${arg#--bucket=}" ;;
+      --sort=*)   sort="${arg#--sort=}" ;;
+      --reverse)  reverse=1 ;;
       *) ui_error "unknown flag: $arg"; exit 64 ;;
     esac
   done
 
-  local rows
-  rows=$(collect_rows "$filter" | sort -t$'\t' -k5 -nr)
+  case "$sort" in
+    updated|created|slug|title) ;;
+    *) ui_error "--sort must be one of: updated, created, slug, title"; exit 64 ;;
+  esac
+
+  local rows; rows=$(collect_rows "$filter")
 
   if [[ -z "$rows" ]]; then
-    local sub="empty"
-    [[ "$filter" != "all" ]] && sub="empty in $filter"
-    ui_header "Changes" "$sub"
+    ui_header "Changes" "$( [[ "$filter" == "all" ]] && echo 'empty' || echo "empty in $filter" )"
     ui_info "get started: foundry new \"your idea\""
     echo
     return 0
   fi
 
+  # collect_rows columns: 1=bucket 2=slug 3=title 4=age_str 5=updated_epoch
+  # add created_epoch by post-processing? simpler: re-read tracking for created.
+  # For now sort by what we have:
+  #   updated → -k5 numeric desc
+  #   created → fall back to updated (collect doesn't track it)
+  #   slug    → -k2 desc
+  #   title   → -k3 desc
+  local order_flag="-r"; (( reverse )) && order_flag=""
+  case "$sort" in
+    updated|created) rows=$(printf '%s\n' "$rows" | sort -t$'\t' -k5 -n $order_flag) ;;
+    slug)            rows=$(printf '%s\n' "$rows" | sort -t$'\t' -k2 $order_flag) ;;
+    title)           rows=$(printf '%s\n' "$rows" | sort -t$'\t' -k3 -f $order_flag) ;;
+  esac
+
   local n; n=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
   local subtitle="$n"
   [[ "$filter" != "all" ]] && subtitle="$n in $filter"
+  local arrow; (( reverse )) && arrow='↑' || arrow='↓'
+  subtitle+=" · sorted by $sort $arrow"
   ui_header "Changes" "$subtitle"
 
   # column widths — pad uncolored text first, then wrap with colors,
   # so visible alignment stays correct regardless of ANSI codes.
   local cols=${COLUMNS:-$(tput cols 2>/dev/null || echo 100)}
+  (( cols > 120 )) && cols=120
   local slug_w=28
-  local age_w=4
-  local title_w=$(( cols - 4 - slug_w - 2 - age_w - 4 ))
+  local upd_w=12
+  local title_w=$(( cols - 4 - slug_w - 2 - upd_w - 4 ))
   (( title_w < 20 )) && title_w=20
 
-  while IFS=$'\t' read -r b slug title age _; do
+  # column header row + divider
+  printf '     %s  %s  %s\n' \
+    "$(ui_dim "$(printf '%-*s' "$slug_w" "SLUG")")" \
+    "$(ui_dim "$(printf '%-*s' "$title_w" "TITLE")")" \
+    "$(ui_dim "$(printf '%-*s' "$upd_w" "UPDATED")")"
+
+  while IFS=$'\t' read -r b slug title _ updated_epoch; do
+    local updated_rel="?"
+    if [[ "$updated_epoch" != "0" ]]; then
+      # reconstruct ISO from epoch for the relative formatter
+      local iso
+      iso=$(date -u -r "$updated_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+         || date -u -d "@$updated_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+         || echo "")
+      [[ -n "$iso" ]] && updated_rel=$(ui_date_relative "$iso")
+    fi
     local s_t; s_t=$(ui_truncate "$slug_w" "$slug")
     local t_t; t_t=$(ui_truncate "$title_w" "$title")
     local s_pad; s_pad=$(printf '%-*s' "$slug_w" "$s_t")
     local t_pad; t_pad=$(printf '%-*s' "$title_w" "$t_t")
-    local a_pad; a_pad=$(printf '%*s' "$age_w" "$age")
+    local u_pad; u_pad=$(printf '%-*s' "$upd_w" "$updated_rel")
     printf '  %s  %s  %s  %s\n' \
       "$(ui_status_icon "$b")" \
       "$(ui_bright "$s_pad")" \
       "$t_pad" \
-      "$(ui_dim "$a_pad")"
+      "$(ui_dim "$u_pad")"
   done <<< "$rows"
   echo
+
+  if [[ "$UI_MODE" == "interactive" ]]; then
+    printf '  %s  %s\n' \
+      "$(ui_dim 'sort   :')" \
+      "$(ui_dim 'foundry list --sort=updated|created|slug|title [--reverse]')"
+    printf '  %s  %s\n' \
+      "$(ui_dim 'filter :')" \
+      "$(ui_dim 'foundry list --bucket=backlog|in-progress|done|declined')"
+    echo
+  fi
 }
 
 cmd_show() {
   require_foundry
   local slug="${1:-}"
   [[ -n "$slug" ]] || { ui_error "show: missing slug"; exit 64; }
-  local b; b=$(find_bucket "$slug") || { ui_error "not found: $slug"; exit 1; }
+  local b
+  if ! b=$(find_bucket "$slug" 2>/dev/null); then
+    ui_error "not found: $slug"
+    # offer near matches
+    local hits
+    hits=$(collect_rows all 2>/dev/null | awk -F'\t' -v q="$slug" '
+      BEGIN { lq = tolower(q) }
+      index(tolower($2), lq) > 0 || index(tolower($3), lq) > 0 { print $0 }
+    ' | head -5)
+    if [[ -n "$hits" ]]; then
+      echo
+      ui_info "did you mean:"
+      while IFS=$'\t' read -r bb ss tt _ _; do
+        printf '    %s  %s  %s\n' \
+          "$(ui_status_icon "$bb")" \
+          "$(ui_bright "$ss")" \
+          "$(ui_dim "$tt")"
+      done <<< "$hits"
+      echo
+    fi
+    exit 1
+  fi
   local dir="$CHANGES_DIR/$b/$slug"
 
   local title;   title=$("$TRACKING_SH" get "$dir" title 2>/dev/null)
@@ -193,25 +260,86 @@ cmd_show() {
   local updated; updated=$("$TRACKING_SH" get "$dir" updated_at 2>/dev/null)
   local reason;  reason=$("$TRACKING_SH" get "$dir" decline_reason 2>/dev/null || true)
 
-  ui_header "$(ui_status_icon "$b") $slug" ""
-  ui_kv 10 "title"   "$title"
+  # ── header: icon + slug, then title as h1, then metadata ──
+  echo
+  printf '  %s  %s\n' "$(ui_status_icon "$b")" "$(ui_bright "$slug")"
+  printf '  %s\n' "$title"
+  echo
   ui_kv 10 "status"  "$status"
-  ui_kv 10 "created" "$(ui_format_ts "$created")"
-  ui_kv 10 "updated" "$(ui_format_ts "$updated")"
+  ui_kv 10 "updated" "$(ui_date_relative "$updated") · $(ui_date_short "$updated")"
+  ui_kv 10 "created" "$(ui_date_short "$created")"
   [[ -n "$reason" ]] && ui_kv 10 "reason" "$reason"
   echo
-  printf '  %s\n' "$(ui_dim "history")"
-  if [[ -f "$dir/history.log" ]]; then
-    "$TRACKING_SH" history-tail "$dir" 10 \
-      | while IFS=$'\t' read -r ts actor event details; do
-          printf '    %s  %s  %s%s\n' \
-            "$(ui_dim "$(ui_format_ts "$ts")")" \
-            "$(ui_dim "$(printf '%-14s' "$actor")")" \
-            "$event" \
-            "${details:+ — $details}"
-        done
+
+  # ── proposal preview: first N content lines, dim, blanks collapsed ──
+  if [[ -f "$dir/proposal.md" ]]; then
+    ui_divider "proposal"
+    local n=12
+    local shown=0 total_content
+    total_content=$(grep -cE '[^[:space:]]' "$dir/proposal.md" || echo 0)
+    grep -E '[^[:space:]]' "$dir/proposal.md" | head -n "$n" | while IFS= read -r line; do
+      printf '  %s\n' "$(ui_dim "$line")"
+    done
+    if (( total_content > n )); then
+      printf '  %s\n' "$(ui_dim "  … $((total_content - n)) more lines in proposal.md")"
+    fi
+    echo
   fi
-  echo
+
+  # ── history: log-style, newest first ──
+  if [[ -f "$dir/history.log" ]]; then
+    ui_divider "history"
+    {
+      tac "$dir/history.log" 2>/dev/null || tail -r "$dir/history.log"
+    } | head -10 | while IFS=$'\t' read -r ts actor event details; do
+      local rel; rel=$(ui_date_relative "$ts")
+      local actor_color=muted
+      [[ "$actor" == "user" ]] && actor_color=ok
+      [[ "$actor" == "state-machine" ]] && actor_color=accent
+      # Pretty details: "backlog->declined (reason)" → "backlog → declined"
+      # with reason rendered as a second indented line.
+      local pretty="$details" reason_line=""
+      pretty="${pretty//->/ → }"
+      if [[ "$pretty" =~ ^(.+)\ \((.+)\)$ ]]; then
+        pretty="${BASH_REMATCH[1]}"
+        reason_line="${BASH_REMATCH[2]}"
+      fi
+      printf '  %s  %s  %s  %s\n' \
+        "$(ui_dim "$(printf '%-12s' "$rel")")" \
+        "$(ui_paint "$actor_color" "$(printf '%-14s' "$actor")")" \
+        "$(ui_bright "$(printf '%-8s' "$event")")" \
+        "$pretty"
+      if [[ -n "$reason_line" ]]; then
+        printf '  %s  %s  %s  %s\n' \
+          "            " "              " "        " \
+          "$(ui_dim "\"$reason_line\"")"
+      fi
+    done
+    echo
+  fi
+
+  # ── next actions ──
+  if [[ "$UI_MODE" == "interactive" ]]; then
+    ui_divider "next"
+    case "$b" in
+      backlog)
+        printf '  %s  %s\n' "$(ui_dim "foundry move $slug --to=in-progress")" "$(ui_dim '— start')"
+        printf '  %s  %s\n' "$(ui_dim "foundry move $slug --to=declined --reason=\"…\"")" "$(ui_dim '— decline')"
+        ;;
+      in-progress)
+        printf '  %s  %s\n' "$(ui_dim "foundry move $slug --to=done")" "$(ui_dim '— finish')"
+        printf '  %s  %s\n' "$(ui_dim "foundry move $slug --to=backlog")" "$(ui_dim '— pause')"
+        printf '  %s  %s\n' "$(ui_dim "foundry move $slug --to=declined --reason=\"…\"")" "$(ui_dim '— decline')"
+        ;;
+      done)
+        printf '  %s\n' "$(ui_dim '(terminal — no transitions out)')"
+        ;;
+      declined)
+        printf '  %s  %s\n' "$(ui_dim "foundry move $slug --to=backlog")" "$(ui_dim '— revive')"
+        ;;
+    esac
+    echo
+  fi
 }
 
 cmd_new() {
@@ -308,7 +436,7 @@ cmd_setup() {
   bash "$SETUP_SH" "$@"
 }
 
-# Interactive zero-arg: pick a change → drill → choose action.
+# Interactive zero-arg: fuzzy-pick a change → drill → choose action.
 cmd_interactive() {
   require_foundry
   if [[ "$UI_MODE" != "interactive" ]]; then
@@ -317,37 +445,58 @@ cmd_interactive() {
   fi
 
   local rows; rows=$(collect_rows all | sort -t$'\t' -k5 -nr)
-  [[ -z "$rows" ]] && { ui_info "no changes — try: foundry new"; return 0; }
+  [[ -z "$rows" ]] && {
+    ui_header "Changes" "empty"
+    ui_info "get started: foundry new \"your idea\""
+    echo
+    return 0
+  }
 
-  # build choice strings as "<icon> <slug> — <title>"
-  local opts=()
-  while IFS=$'\t' read -r b slug title _ _; do
-    opts+=("$(ui_icon "$b") $slug — $title")
+  # build display rows: "<icon> <slug>  <title>  <updated>"
+  # store slug separately so we can map back after the user picks.
+  local picker_lines=()
+  while IFS=$'\t' read -r b slug title _ epoch; do
+    local rel="?"
+    if [[ "$epoch" != "0" ]]; then
+      local iso
+      iso=$(date -u -r "$epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+         || date -u -d "@$epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "")
+      [[ -n "$iso" ]] && rel=$(ui_date_relative "$iso")
+    fi
+    local s_t; s_t=$(ui_truncate 28 "$slug")
+    local t_t; t_t=$(ui_truncate 40 "$title")
+    picker_lines+=("$(printf '%s  %-28s  %-40s  %s' "$(ui_icon "$b")" "$s_t" "$t_t" "$rel")")
   done <<< "$rows"
-  local pick; pick=$(gum choose --header "Pick a change:" "${opts[@]}") || exit 0
 
-  local slug="${pick#* }"; slug="${slug%% —*}"
+  local pick
+  pick=$(printf '%s\n' "${picker_lines[@]}" \
+    | gum filter --header "Pick a change (type to filter, ↵ to open, esc to cancel)" \
+                 --indicator='▸') || exit 0
+
+  # extract slug — second whitespace-delimited token
+  local slug; slug=$(printf '%s' "$pick" | awk '{print $2}')
+  [[ -z "$slug" ]] && exit 0
+
   cmd_show "$slug"
-  echo
 
   # action menu based on current bucket
-  local b; b=$(find_bucket "$slug")
+  local b; b=$(find_bucket "$slug") || exit 1
   local actions=()
   case "$b" in
-    backlog)     actions=("Start" "Decline" "Cancel") ;;
-    in-progress) actions=("Finish" "Pause back to backlog" "Decline" "Cancel") ;;
-    done)        actions=("Cancel") ;;
-    declined)    actions=("Revive" "Cancel") ;;
+    backlog)     actions=("▸ Start (move to in-progress)" "▸ Decline" "─ Cancel") ;;
+    in-progress) actions=("▸ Finish (move to done)" "▸ Pause back to backlog" "▸ Decline" "─ Cancel") ;;
+    done)        actions=("─ Cancel (terminal — no transitions out)") ;;
+    declined)    actions=("▸ Revive (back to backlog)" "─ Cancel") ;;
   esac
-  local action; action=$(gum choose --header "Action:" "${actions[@]}") || exit 0
+  local action; action=$(gum choose --header "What next?" "${actions[@]}") || exit 0
 
   case "$action" in
-    Start)                cmd_move "$slug" --to=in-progress ;;
-    Finish)               cmd_move "$slug" --to=done ;;
-    "Pause back to backlog") cmd_move "$slug" --to=backlog ;;
-    Revive)               cmd_move "$slug" --to=backlog ;;
-    Decline)              cmd_move "$slug" --to=declined ;;
-    Cancel|*)             ui_info "cancelled" ;;
+    *"Start"*)   cmd_move "$slug" --to=in-progress ;;
+    *"Finish"*)  cmd_move "$slug" --to=done ;;
+    *"Pause"*)   cmd_move "$slug" --to=backlog ;;
+    *"Revive"*)  cmd_move "$slug" --to=backlog ;;
+    *"Decline"*) cmd_move "$slug" --to=declined ;;
+    *)           ui_info "cancelled" ;;
   esac
 }
 

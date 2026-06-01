@@ -64,6 +64,65 @@ ui_format_ts() {
   echo "${t%Z}"
 }
 
+# Format ISO-8601 with strftime — handles macOS BSD date and GNU date.
+# Falls back to original string when both fail.
+ui_date_format() {
+  local ts="$1" fmt="$2"
+  date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ts" "$fmt" 2>/dev/null \
+    || date -u -d "$ts" "$fmt" 2>/dev/null \
+    || echo "$ts"
+}
+
+# ISO-8601 → epoch (UTC). Echoes 0 on parse failure.
+ui_ts_to_epoch() {
+  local ts="$1"
+  date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null \
+    || date -u -d "$ts" +%s 2>/dev/null \
+    || echo 0
+}
+
+# Human-readable age: "just now", "5m ago", "3h ago", "yesterday",
+# "3d ago", "Mon Jun 1".
+ui_date_relative() {
+  local ts="$1"
+  local then; then=$(ui_ts_to_epoch "$ts")
+  if [[ "$then" == "0" ]]; then echo "$ts"; return; fi
+  local now; now=$(date -u +%s)
+  local d=$((now - then))
+  if   (( d < 0 ));       then echo "in future"
+  elif (( d < 60 ));      then echo "just now"
+  elif (( d < 3600 ));    then echo "$((d/60))m ago"
+  elif (( d < 86400 ));   then echo "$((d/3600))h ago"
+  elif (( d < 172800 ));  then echo "yesterday"
+  elif (( d < 604800 ));  then echo "$((d/86400))d ago"
+  else ui_date_format "$ts" "+%a %b %-d"
+  fi
+}
+
+# Compact absolute: "Mon Jun 1, 11:40"
+ui_date_short() { ui_date_format "$1" "+%a %b %-d, %H:%M"; }
+
+# Section divider — "─── title ──────────────────────" or just dashes.
+ui_divider() {
+  local title="${1:-}"
+  local width; width=${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}
+  (( width > 100 )) && width=100
+  local dash_count
+  if [[ -n "$title" ]]; then
+    dash_count=$(( width - ${#title} - 6 ))
+    (( dash_count < 4 )) && dash_count=4
+    local dashes; printf -v dashes '%*s' "$dash_count" ''
+    dashes="${dashes// /─}"
+    printf '  %s %s %s\n' \
+      "$(ui_dim '───')" \
+      "$(ui_paint primary "$title")" \
+      "$(ui_dim "$dashes")"
+  else
+    local dashes; printf -v dashes '%*s' "$((width - 2))" ''
+    printf '  %s\n' "$(ui_dim "${dashes// /─}")"
+  fi
+}
+
 # ── status icons + per-bucket color ────────────────────────────────────────
 ui_icon() {
   case "$1" in
