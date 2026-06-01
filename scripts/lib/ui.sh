@@ -29,7 +29,7 @@ fi
 ui_icon() {
   case "$1" in
     backlog)     printf '○' ;;
-    in-progress) printf '◉' ;;
+    in-progress) printf '⊙' ;;
     done)        printf '●' ;;
     declined)    printf '⊗' ;;
     *)           printf '?' ;;
