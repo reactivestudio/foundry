@@ -50,6 +50,7 @@ ui_color_code() {
     fd_done)        echo 121 ;;  # soft mint
     fd_declined)    echo 218 ;;  # pale pink
     fd_search)      echo 135 ;;  # neon purple (softer #af5fff) — search prompt + cursor
+    fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
     *)       echo 7 ;;
   esac
 }

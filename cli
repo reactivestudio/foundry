@@ -518,7 +518,17 @@ pause_for_user() {
 # Format one change row for the picker (slug NOT displayed — looked up
 # via parallel arrays PICKER_ENTRIES + PICKER_SLUGS in cmd_interactive).
 # Columns: icon, bucket-text, title, created, updated
-build_full_row() {
+# build_row_parts — populate per-row globals consumed by build_full_row and
+# by ui_picker (for filter-match title highlighting). Side-effects:
+#   ROW_LEFT       — painted "<icon>  <padded bucket>  "
+#   ROW_TITLE      — raw, ANSI-free, truncated title text (unpadded)
+#   ROW_TITLE_W    — visual width to pad title to (column alignment)
+#   ROW_RIGHT      — painted "  <padded created>  <padded updated>"
+# build_full_row composes ROW_LEFT + painted(padded(ROW_TITLE)) + ROW_RIGHT.
+# ui_picker, when a filter is active and the title matches, re-paints the
+# title slot with highlight ANSI around the match while keeping LEFT/RIGHT
+# unchanged.
+build_row_parts() {
   local b="$1" title="$2" upd_epoch="$3" crt_epoch="$4"
 
   local cols=${COLUMNS:-$(tput cols 2>/dev/null || echo 100)}
@@ -543,17 +553,20 @@ build_full_row() {
     updated_str="?"
   fi
 
-  local t_t; t_t=$(ui_truncate "$title_w" "$title")
-
-  # All cells are now ASCII (no small-caps) so printf %-*s pads correctly
-  # by visual cells. Headers also dropped small-caps to keep alignment
-  # guaranteed in any monospace font.
-  printf '%s  %s  %s  %s  %s' \
+  ROW_TITLE=$(ui_truncate "$title_w" "$title")
+  ROW_TITLE_W=$title_w
+  ROW_LEFT=$(printf '%s  %s  ' \
     "$(ui_status_icon "$b")" \
-    "$(ui_paint "$(ui_bucket_color "$b")" "$(printf '%-*s' "$bucket_w" "$b")")" \
-    "$(ui_paint fd_title "$(printf '%-*s' "$title_w" "$t_t")")" \
+    "$(ui_paint "$(ui_bucket_color "$b")" "$(printf '%-*s' "$bucket_w" "$b")")")
+  ROW_RIGHT=$(printf '  %s  %s' \
     "$(ui_paint fd_created "$(printf '%-*s' "$created_w" "$created_str")")" \
-    "$(ui_paint fd_updated "$(printf '%-*s' "$updated_w" "$updated_str")")"
+    "$(ui_paint fd_updated "$(printf '%-*s' "$updated_w" "$updated_str")")")
+}
+
+build_full_row() {
+  build_row_parts "$@"
+  local padded; padded=$(printf '%-*s' "$ROW_TITLE_W" "$ROW_TITLE")
+  printf '%s%s%s' "$ROW_LEFT" "$(ui_paint fd_title "$padded")" "$ROW_RIGHT"
 }
 
 # Strip ANSI + trailing whitespace — used to normalize picker rows for
@@ -671,19 +684,33 @@ ui_bucket_view() {
     PICKER_SLUGS=()
     PICKER_TYPES=()
     PICKER_FILTERABLE=()
+    PICKER_BUCKET=()
+    PICKER_TITLE=()
+    PICKER_TITLE_W=()
+    PICKER_LEFT=()
+    PICKER_RIGHT=()
 
     # Column header.
     PICKER_ENTRIES+=("$(_build_header_row)")
     PICKER_SLUGS+=("")
     PICKER_TYPES+=("header")
     PICKER_FILTERABLE+=("0")
+    _picker_meta_empty
 
-    # Bucket rows.
+    # Bucket rows.  Same parts plumbing as build_main_entries so that
+    # filter-match title highlighting works here too.
     while IFS=$'\t' read -r bb slug title _ upd crt; do
-      PICKER_ENTRIES+=("$(build_full_row "$bb" "$title" "$upd" "$crt")")
+      build_row_parts "$bb" "$title" "$upd" "$crt"
+      local _padded; _padded=$(printf '%-*s' "$ROW_TITLE_W" "$ROW_TITLE")
+      PICKER_ENTRIES+=("${ROW_LEFT}$(ui_paint fd_title "$_padded")${ROW_RIGHT}")
       PICKER_SLUGS+=("$slug")
       PICKER_TYPES+=("row")
       PICKER_FILTERABLE+=("1")
+      PICKER_BUCKET+=("$bb")
+      PICKER_TITLE+=("$ROW_TITLE")
+      PICKER_TITLE_W+=("$ROW_TITLE_W")
+      PICKER_LEFT+=("$ROW_LEFT")
+      PICKER_RIGHT+=("$ROW_RIGHT")
     done <<< "$page_rows"
 
     # Padding → summary → padding.
@@ -691,16 +718,19 @@ ui_bucket_view() {
     PICKER_SLUGS+=("")
     PICKER_TYPES+=("padding")
     PICKER_FILTERABLE+=("0")
+    _picker_meta_empty
 
     PICKER_ENTRIES+=("   $(ui_paint fd_chrome "$(ui_status "$bucket")  ·  page $page of $pages  ·  $total total")")
     PICKER_SLUGS+=("")
     PICKER_TYPES+=("summary")
     PICKER_FILTERABLE+=("0")
+    _picker_meta_empty
 
     PICKER_ENTRIES+=("")
     PICKER_SLUGS+=("")
     PICKER_TYPES+=("padding")
     PICKER_FILTERABLE+=("0")
+    _picker_meta_empty
 
     # Pagination + back actions.
     if (( page > 1 )); then
@@ -708,17 +738,20 @@ ui_bucket_view() {
       PICKER_SLUGS+=("__bv_prev__")
       PICKER_TYPES+=("action")
       PICKER_FILTERABLE+=("0")
+      _picker_meta_empty
     fi
     if (( page < pages )); then
       PICKER_ENTRIES+=("$(ui_paint fd_chrome "▶  Next page")")
       PICKER_SLUGS+=("__bv_next__")
       PICKER_TYPES+=("action")
       PICKER_FILTERABLE+=("0")
+      _picker_meta_empty
     fi
     PICKER_ENTRIES+=("$(ui_paint fd_chrome "←  Back to all changes")")
     PICKER_SLUGS+=("__bv_back__")
     PICKER_TYPES+=("action")
     PICKER_FILTERABLE+=("0")
+    _picker_meta_empty
 
     if ui_picker "⌕ Search "; then
       case "$PICKER_RESULT_SLUG" in
@@ -810,9 +843,28 @@ _build_summary_row() {
 #   PICKER_TYPES[i]      — 'row' | 'action' | 'header' | 'padding' | 'summary'
 #   PICKER_FILTERABLE[i] — '1' to include row in text-filter; '0' to always show
 #
+# Optional per-row (set only for type='row'; default to '' for the rest):
+#   PICKER_BUCKET[i]   — bucket name; powers Tab → jump to next bucket
+#   PICKER_TITLE[i]    — raw title text (truncated, unpadded, no ANSI)
+#   PICKER_TITLE_W[i]  — target visual width for padding the title cell
+#   PICKER_LEFT[i]     — pre-painted "<icon>  <bucket>  " segment
+#   PICKER_RIGHT[i]    — pre-painted "  <created>  <updated>" segment
+# When a filter is active and the row's title contains the filter substring
+# (case-insensitive), the picker rebuilds the row from LEFT + highlighted
+# title + RIGHT so the match appears in fd_match (pale gold) while the rest
+# of the title stays in fd_title.
+#
 # Cursor only lands on type='row' or 'action'. Type-to-filter is always on:
 # typed chars build a substring filter against filterable entries (rows).
 # Non-filterable entries (headers/summary/padding/actions) always show.
+#
+# Keys:
+#   ↑ / ↓     move cursor through selectables
+#   Tab       on 'row'    → jump to first selectable of the NEXT bucket
+#             on 'action' → behave like ↓
+#   ↵         select (sets PICKER_RESULT_SLUG and returns 0)
+#   ⌫         delete one char from filter
+#   ⎋         cancel (returns 1)
 #
 # Sets globals on selection:
 #   PICKER_RESULT_SLUG, PICKER_RESULT_ENTRY
@@ -839,7 +891,8 @@ ui_picker() {
   #   entries_lc[i]     — ANSI-stripped lowercase for substring filtering
   #   entries_bright[i] — entry recoloured as primary (used when cursor
   #                       lands on an action item)
-  local -a entries_lc=() entries_bright=()
+  #   title_lc[i]       — lowercase raw title for filter-match highlighting
+  local -a entries_lc=() entries_bright=() title_lc=()
   local i stripped
   for (( i = 0; i < n_total; i++ )); do
     stripped=""
@@ -856,36 +909,75 @@ ui_picker() {
     else
       entries_bright[$i]=""
     fi
+    if [[ "${PICKER_TYPES[$i]}" == "row" && -n "${PICKER_TITLE[$i]:-}" ]]; then
+      title_lc[$i]=$(printf '%s' "${PICKER_TITLE[$i]}" | tr '[:upper:]' '[:lower:]')
+    else
+      title_lc[$i]=""
+    fi
   done
 
   # Static render fragments.
   local prompt_painted; prompt_painted=$(ui_paint fd_search "$prompt_label")
   local cursor_arrow;   cursor_arrow=$(ui_bright '▸')
 
-  # Three-phase soft fade for the caret.  SGR 2 (faint) on the same color
-  # produces a dimmer rendering on iTerm2 / macOS Terminal / Alacritty /
-  # WezTerm; terminals that ignore SGR 2 just draw it at full intensity,
-  # which still feels softer than SGR-5 blink (only two abrupt states).
-  local cursor_bright; cursor_bright=$(ui_paint fd_search '▌')
-  local cursor_faint;  cursor_faint=$(printf '\033[2m%s' "$cursor_bright")
-  local cursor_blank=$'\033[0m '
+  # ── caret pulse sidecar ──────────────────────────────────────────────────
+  # A background process drives the caret animation while the main loop
+  # blocks on read().  The animator cycles through a 6-phase smooth fade
+  # at row 2, painting a single ▌ glyph per tick.  This decouples cursor
+  # animation from input — read() can block forever on the main loop and
+  # the caret keeps breathing.
+  #
+  # Coordination: before drawing a full frame the main loop SIGSTOPs the
+  # animator so its writes can't interleave with the frame's bytes, then
+  # SIGCONTs after the frame and the new cursor column have been written.
+  # Cleanup on exit: rm the col file (animator loop sees missing file and
+  # exits), then SIGTERM, then wait.
+  local anim_col_file; anim_col_file=$(mktemp -t fdcaret 2>/dev/null || mktemp)
+  printf '%d' 14 > "$anim_col_file"
 
-  # Geometry for partial cursor redraws.
-  #   row 2 (after the leading "\n" in the frame)
-  #   col  = PROMPT_COLS + 1 + ${#filter}
-  #   PROMPT_COLS = 4 leading spaces + len("⌕ Search ") = 4 + 9 = 13
-  # 4-space indent puts 'S' of "Search" at column 7 — flush under 'S' of
-  # the "STATUS" column header (which sits at 3 picker-render spaces +
-  # 3 entry-internal spaces + 1 = column 7).
+  (
+    # The subshell inherits set -euo pipefail from the parent; disable so
+    # transient failures (kill races on parent shutdown, tmp-file read
+    # blips) can't tear down the animator prematurely.
+    set +eu
+    trap 'exit 0' TERM INT
+    phase=0
+    while [[ -f "$anim_col_file" ]]; do
+      col=$(<"$anim_col_file" 2>/dev/null) || break
+      [[ -z "$col" ]] && col=14
+      # Six-phase breath: 135 → 141 → 147 → 183 → 147 → 141 → (back to 135).
+      # All on the purple ramp — same hue, gently desaturating then back to
+      # full neon.  Eye reads it as a soft pulse, not a hard blink.  At
+      # 150 ms / tick the full cycle is ~900 ms — close to natural breath.
+      case "$phase" in
+        0) printf '\033[2;%sH\033[38;5;135m▌\033[0m' "$col" ;;
+        1) printf '\033[2;%sH\033[38;5;141m▌\033[0m' "$col" ;;
+        2) printf '\033[2;%sH\033[38;5;147m▌\033[0m' "$col" ;;
+        3) printf '\033[2;%sH\033[38;5;183m▌\033[0m' "$col" ;;
+        4) printf '\033[2;%sH\033[38;5;147m▌\033[0m' "$col" ;;
+        5) printf '\033[2;%sH\033[38;5;141m▌\033[0m' "$col" ;;
+      esac
+      phase=$(( (phase + 1) % 6 ))
+      sleep 0.15
+    done
+  ) </dev/null >/dev/tty 2>/dev/null &
+  local anim_pid=$!
+
+  # PROMPT_COLS = 4 leading spaces + len("⌕ Search ") = 4 + 9 = 13.
+  # Caret column at row 2 = PROMPT_COLS + 1 + ${#filter}.
   local PROMPT_COLS=13
 
-  local blink_phase=0  # 0 bright, 1 faint, 2 blank
   local needs_full_redraw=1
   local n_sel=0 current=-1
   local -a vis_idx=() sel_idx=()
 
   while true; do
     if (( needs_full_redraw )); then
+      # Freeze the animator so its mid-tick write can't tear the frame.
+      # `|| true` because under set -e a missing pid would abort the loop;
+      # if the animator already died, we just keep going without a pulse.
+      kill -STOP "$anim_pid" 2>/dev/null || true
+
       # ── filter pass ─────────────────────────────────────────────────────
       vis_idx=(); sel_idx=()
       for (( i = 0; i < n_total; i++ )); do
@@ -910,52 +1002,68 @@ ui_picker() {
 
       # ── render one frame in one printf ──────────────────────────────────
       # \033[H\033[2J replaces the external `clear`.  4 leading spaces
-      # aligns prompt 'S' with column-header 'S'.
-      local frame=$'\033[H\033[2J\n    '"${prompt_painted}$(ui_bright "$filter")${cursor_bright}"$'\n\n'
-      local j idx
+      # aligns prompt 'S' with column-header 'S'.  A bright caret glyph
+      # is painted here once; the animator will overwrite the same cell
+      # on its next tick to continue the pulse.
+      local frame=$'\033[H\033[2J\n    '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;5;135m▌\033[0m\n\n'
+      local j idx row_render
       for (( j = 0; j < ${#vis_idx[@]}; j++ )); do
         idx="${vis_idx[$j]}"
+        # Filter-match title highlight: if the user is typing and the
+        # row's lowercase title contains the filter, rebuild the row from
+        # LEFT + highlighted-title + RIGHT.  Otherwise use the pre-rendered
+        # PICKER_ENTRIES[idx].
+        if [[ -n "$filter_lc" && "${PICKER_TYPES[$idx]}" == "row" \
+              && -n "${title_lc[$idx]}" && "${title_lc[$idx]}" == *"$filter_lc"* ]]; then
+          local _t="${PICKER_TITLE[$idx]}" _tw="${PICKER_TITLE_W[$idx]}"
+          local _lc="${title_lc[$idx]}"
+          local _before_lc="${_lc%%"$filter_lc"*}"
+          local _pos=${#_before_lc} _mlen=${#filter_lc}
+          local _pre="${_t:0:_pos}"
+          local _mat="${_t:_pos:_mlen}"
+          local _suf="${_t:_pos+_mlen}"
+          local _vlen=${#_t} _pad=$((_tw - _vlen))
+          (( _pad < 0 )) && _pad=0
+          local _padding; printf -v _padding '%*s' "$_pad" ''
+          # Title-color prefix, match-color match, back to title-color suffix
+          # + trailing pad, reset.  fd_title=153, fd_match=222.
+          local _hl
+          printf -v _hl '\033[38;5;153m%s\033[38;5;222m%s\033[38;5;153m%s%s\033[0m' \
+            "$_pre" "$_mat" "$_suf" "$_padding"
+          row_render="${PICKER_LEFT[$idx]}${_hl}${PICKER_RIGHT[$idx]}"
+        else
+          row_render="${PICKER_ENTRIES[$idx]}"
+        fi
         if (( j == current )); then
           if [[ "${PICKER_TYPES[$idx]}" == "action" ]]; then
             frame+=" ${cursor_arrow} ${entries_bright[$idx]}"$'\n'
           else
-            frame+=" ${cursor_arrow} ${PICKER_ENTRIES[$idx]}"$'\n'
+            frame+=" ${cursor_arrow} ${row_render}"$'\n'
           fi
         else
-          frame+="   ${PICKER_ENTRIES[$idx]}"$'\n'
+          frame+="   ${row_render}"$'\n'
         fi
       done
       printf '%s' "$frame"
 
-      needs_full_redraw=0
-      blink_phase=0  # restart cycle — cursor stays bright right after redraw
-    fi
-
-    # ── poll for a key ────────────────────────────────────────────────────
-    # min 0 time 4 = up to 400 ms wait, 0-byte returns allowed.  Any
-    # keystroke wakes the read immediately, so input never lags.
-    stty -icanon min 0 time 4
-    local key=""
-    IFS= read -rsn1 key
-    local read_rc=$?
-    stty -icanon min 1 time 0
-
-    if (( read_rc != 0 )); then
-      # Timeout — advance the soft-fade cycle and repaint ONLY the caret
-      # cell with an absolute-position write.  Total render cost per phase
-      # change: one tiny ANSI sequence.  No flicker possible.
-      blink_phase=$(( (blink_phase + 1) % 3 ))
+      # Tell the animator the new caret column, then resume the pulse.
       local cur_col=$((PROMPT_COLS + 1 + ${#filter}))
-      case "$blink_phase" in
-        0) printf '\033[2;%dH%s'        "$cur_col" "$cursor_bright" ;;
-        1) printf '\033[2;%dH%s\033[0m' "$cur_col" "$cursor_faint" ;;
-        2) printf '\033[2;%dH%s'        "$cur_col" "$cursor_blank" ;;
-      esac
-      continue
+      printf '%d' "$cur_col" > "$anim_col_file"
+      kill -CONT "$anim_pid" 2>/dev/null || true
+
+      needs_full_redraw=0
     fi
+
+    # Block on read — sidecar handles caret pulse in background.  The
+    # `|| true` masks read's non-zero return on EOF / signal interrupt so
+    # set -e doesn't unwind the picker; an empty key is then treated as
+    # Enter, which is what would normally happen anyway.
+    local key=""
+    IFS= read -rsn1 key || true
 
     if [[ -z "$key" ]]; then
-      # Enter — read swallowed the line terminator, leaving $key empty.
+      # `read -n1` returns rc=0 with empty $key when the line terminator
+      # (Enter) arrives — the delimiter is consumed but not stored.
       if (( n_sel > 0 )); then
         local orig_idx="${vis_idx[$current]}"
         PICKER_RESULT_SLUG="${PICKER_SLUGS[$orig_idx]}"
@@ -983,6 +1091,31 @@ ui_picker() {
         else
           rc=1; break
         fi ;;
+      $'\t')
+        # Tab: on a row jump to first selectable in the next bucket; on
+        # an action item (or anywhere with no bucket) behave like ↓.
+        if (( n_sel > 0 )); then
+          local _cv="${sel_idx[$cursor]}" _co
+          _co="${vis_idx[$_cv]}"
+          local _ctype="${PICKER_TYPES[$_co]}" _cbuck="${PICKER_BUCKET[$_co]:-}"
+          if [[ "$_ctype" == "action" || -z "$_cbuck" ]]; then
+            cursor=$(( (cursor + 1) % n_sel ))
+          else
+            local _target="$cursor" _k _kv _ko _kb
+            for (( _k = 1; _k <= n_sel; _k++ )); do
+              local _cand=$(( (cursor + _k) % n_sel ))
+              _kv="${sel_idx[$_cand]}"
+              _ko="${vis_idx[$_kv]}"
+              _kb="${PICKER_BUCKET[$_ko]:-}"
+              # First selectable with a different bucket (or no bucket,
+              # i.e. an action) — land there.
+              if [[ "$_kb" != "$_cbuck" ]]; then
+                _target="$_cand"; break
+              fi
+            done
+            cursor="$_target"
+          fi
+        fi ;;
       $'\x7f'|$'\b')
         filter="${filter%?}"
         filter_lc="${filter_lc%?}"
@@ -996,7 +1129,13 @@ ui_picker() {
     needs_full_redraw=1
   done
 
-  stty "$stty_save" 2>/dev/null
+  # Stop the animator before restoring terminal state.  All three calls
+  # tolerate failure — the animator may have died on its own already.
+  rm -f "$anim_col_file" 2>/dev/null || true
+  kill "$anim_pid" 2>/dev/null || true
+  wait "$anim_pid" 2>/dev/null || true
+
+  stty "$stty_save" 2>/dev/null || true
   printf '\033[?25h'  # show hardware cursor again
   return $rc
 }
@@ -1014,11 +1153,26 @@ ui_picker() {
 #
 # Layout: column header → rows (per bucket, capped + "+N more") → blank
 # padding → summary → blank padding → action items.
+# Append empty placeholders to all per-row metadata arrays.  Keeps them
+# parallel with PICKER_ENTRIES so the picker can index any slot safely.
+_picker_meta_empty() {
+  PICKER_BUCKET+=("")
+  PICKER_TITLE+=("")
+  PICKER_TITLE_W+=("0")
+  PICKER_LEFT+=("")
+  PICKER_RIGHT+=("")
+}
+
 build_main_entries() {
   PICKER_ENTRIES=()
   PICKER_SLUGS=()
   PICKER_TYPES=()
   PICKER_FILTERABLE=()
+  PICKER_BUCKET=()
+  PICKER_TITLE=()
+  PICKER_TITLE_W=()
+  PICKER_LEFT=()
+  PICKER_RIGHT=()
 
   local rows; rows=$(collect_rows all)
 
@@ -1027,6 +1181,7 @@ build_main_entries() {
   PICKER_SLUGS+=("")
   PICKER_TYPES+=("header")
   PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
 
   local limit; limit="$(config_get list_per_bucket_limit 3)"
   for b in "${BUCKETS[@]}"; do
@@ -1038,10 +1193,19 @@ build_main_entries() {
     local show="$bucket_rows"
     (( n > limit )) && show=$(printf '%s\n' "$bucket_rows" | head -n "$limit")
     while IFS=$'\t' read -r bb slug title _ upd crt; do
-      PICKER_ENTRIES+=("$(build_full_row "$bb" "$title" "$upd" "$crt")")
+      # Use build_row_parts so we can keep the title-cell data around for
+      # filter-match highlighting in the picker.
+      build_row_parts "$bb" "$title" "$upd" "$crt"
+      local _padded; _padded=$(printf '%-*s' "$ROW_TITLE_W" "$ROW_TITLE")
+      PICKER_ENTRIES+=("${ROW_LEFT}$(ui_paint fd_title "$_padded")${ROW_RIGHT}")
       PICKER_SLUGS+=("$slug")
       PICKER_TYPES+=("row")
       PICKER_FILTERABLE+=("1")
+      PICKER_BUCKET+=("$bb")
+      PICKER_TITLE+=("$ROW_TITLE")
+      PICKER_TITLE_W+=("$ROW_TITLE_W")
+      PICKER_LEFT+=("$ROW_LEFT")
+      PICKER_RIGHT+=("$ROW_RIGHT")
     done <<< "$show"
     if (( n > limit )); then
       PICKER_ENTRIES+=("$(_build_more_row "$b" "$((n - limit))")")
@@ -1050,12 +1214,21 @@ build_main_entries() {
       # Filterable=1 so "+N more" hides when the user is searching by text
       # (its label "+N more items..." rarely matches a query).
       PICKER_FILTERABLE+=("1")
+      # Tag the +N more action with the bucket it belongs to — Tab on the
+      # last row of bucket X then lands on the next bucket (not on +N more
+      # which still belongs to bucket X).
+      PICKER_BUCKET+=("$b")
+      PICKER_TITLE+=("")
+      PICKER_TITLE_W+=("0")
+      PICKER_LEFT+=("")
+      PICKER_RIGHT+=("")
       # Small breathing-room pad after "+N more" so the next bucket (or
       # the summary block) isn't crammed up against it.
       PICKER_ENTRIES+=("")
       PICKER_SLUGS+=("")
       PICKER_TYPES+=("padding")
       PICKER_FILTERABLE+=("0")
+      _picker_meta_empty
     fi
   done
 
@@ -1064,32 +1237,38 @@ build_main_entries() {
   PICKER_SLUGS+=("")
   PICKER_TYPES+=("padding")
   PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
 
   PICKER_ENTRIES+=("$(_build_summary_row "$(printf '%s\n' "$rows" | wc -l | tr -d ' ')" "$rows")")
   PICKER_SLUGS+=("")
   PICKER_TYPES+=("summary")
   PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
 
   PICKER_ENTRIES+=("")
   PICKER_SLUGS+=("")
   PICKER_TYPES+=("padding")
   PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
 
   # Action items at bottom (always selectable, never filtered).
   PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_ADD")")
   PICKER_SLUGS+=("__act_add__")
   PICKER_TYPES+=("action")
   PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
 
   PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_RELOAD")")
   PICKER_SLUGS+=("__act_reload__")
   PICKER_TYPES+=("action")
   PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
 
   PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_EXIT")")
   PICKER_SLUGS+=("__act_exit__")
   PICKER_TYPES+=("action")
   PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
 }
 
 # Interactive REPL — single screen via custom ui_picker:
