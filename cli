@@ -753,16 +753,16 @@ ui_bucket_view() {
     PICKER_FILTERABLE+=("0")
     _picker_meta_empty
 
-    # Two-line branded header.  Line 1 is the constant brand strip.
-    # Line 2 carries this view's context — active bucket badge, range of
-    # rows on screen, and page number.
-    local _bucket_painted _range_lbl _page_lbl _hdr_line2
+    # Two-line branded header — matching the main view layout so the
+    # eye doesn't have to relearn the strip on bucket drill-down.
+    # Line 2 carries this view's context: active bucket badge, visible
+    # range, and page number, prefixed with the └─ subtitle marker.
+    local _bucket_painted _hdr_line2
     _bucket_painted="$(ui_paint fd_icon "$(ui_icon "$bucket")") $(ui_paint "$(ui_bucket_color "$bucket")" "$bucket")"
-    _range_lbl="$(ui_dim "showing ${start}-${end} of ${total}")"
-    _page_lbl="$(ui_dim "page ${page} of ${pages}")"
-    _hdr_line2="${_bucket_painted}  $(ui_dim '·')  ${_range_lbl}  $(ui_dim '·')  ${_page_lbl}"
+    _hdr_line2="$(ui_dim '└─')  ${_bucket_painted}"
+    _hdr_line2+="  $(ui_dim "·  showing ${start}-${end} of ${total}  ·  page ${page} of ${pages}")"
     PICKER_HEADER="$(build_picker_header "$_hdr_line2")"
-    if ui_picker "⌕ Search "; then
+    if ui_picker "⌕  Search "; then
       case "$PICKER_RESULT_SLUG" in
         __bv_prev__) page=$((page - 1)) ;;
         __bv_next__) page=$((page + 1)) ;;
@@ -812,7 +812,9 @@ build_picker_header() {
   out+="$(ui_dim '·')  "
   out+="$(ui_dim 'change ledger')"
   if [[ -n "$line2" ]]; then
-    out+=$'\n    '"$line2"
+    # 3-space indent matches the picker frame's 3-space prefix so the
+    # subtitle aligns column-wise with line 1 (⬢ at col 4, └─ at col 4).
+    out+=$'\n   '"$line2"
   fi
   printf '%s' "$out"
 }
@@ -876,19 +878,11 @@ _build_stats_inline() {
   printf '%s' "$s"
 }
 
-# "Half-row" gap after +N more.  True 0.5-cell vertical spacing isn't a
-# thing in cell-based terminals — rows are atomic units — but a row whose
-# content is a faint ▁ (LOWER ONE EIGHTH BLOCK) line in subtle colour
-# hugs the bottom 1/8 of the cell and reads, perceptually, as a soft
-# shelf rather than a full empty row.  Same row count as an empty pad
-# (1) but ~70-80% lighter visual weight.  Width = bucket + title columns.
-_build_half_gap() {
-  local bw tw cw uw
-  read -r bw tw cw uw <<< "$(_picker_widths)"
-  local gap_w=$((bw + tw + 2))
-  local line; printf -v line '%*s' "$gap_w" ''
-  line="${line// /▁}"
-  printf '   %s' "$(ui_paint subtle "$line")"
+# Bottom summary row — picker-formatted (leading indent matches the
+# column-header / +N-more / row prefix so everything aligns).  Wraps
+# _build_stats_inline.
+_build_summary_row() {
+  printf '   %s' "$(_build_stats_inline "$1" "$2")"
 }
 
 # ── ui_picker — custom interactive picker ─────────────────────────────────
@@ -1027,7 +1021,7 @@ ui_picker() {
       # column 14 covering the first typed char" — when the race fired
       # the caret got nailed to position 14 regardless of filter length.
       if [[ -z "$col" || ! "$col" =~ ^[0-9]+$ ]]; then
-        sleep 0.5
+        sleep 2
         continue
       fi
       # Ten-phase symmetric breath on the purple ramp:
@@ -1035,7 +1029,8 @@ ui_picker() {
       # Same hue, gently desaturating to pale lilac then climbing back.
       # The trough is held for one extra tick (phases 4 & 5 both = 189)
       # so the dim moment lingers — reads as a real "in / out" breath.
-      # At 500 ms / tick the full cycle is ~5 s, slow and breath-like.
+      # At 2 s / tick the full cycle is ~20 s — extremely slow, more like
+      # a meditation than a blink.  4× slower than the previous 0.5 s tick.
       # $caret_row is captured from the parent scope at subshell fork time.
       case "$phase" in
         0) printf '\033[%s;%sH\033[38;5;135m▌\033[0m' "$caret_row" "$col" ;;
@@ -1050,13 +1045,20 @@ ui_picker() {
         9) printf '\033[%s;%sH\033[38;5;135m▌\033[0m' "$caret_row" "$col" ;;
       esac
       phase=$(( (phase + 1) % 10 ))
-      sleep 0.5
+      sleep 2
     done
   ) </dev/null >/dev/tty 2>/dev/null &
   local anim_pid=$!
 
-  # PROMPT_COLS = 4 leading spaces + len("⌕ Search ") = 4 + 9 = 13.
-  # Caret column at row 2 = PROMPT_COLS + 1 + ${#filter}.
+  # Prompt cell layout (0.32.9 — ⌕ shifted 1 column left):
+  #   col 1-3 : leading indent (3 spaces, was 4)
+  #   col 4   : ⌕            (search icon — was col 5)
+  #   col 5-6 : 2 gap spaces (was 1)
+  #   col 7-12: "Search"    (unchanged anchor — aligns with STATUS / foundry)
+  #   col 13  : trailing space
+  #   col 14  : caret
+  # Net: same caret column (14), same PROMPT_COLS, only the icon moved.
+  # caret_col = PROMPT_COLS + 1 + ${#filter}
   local PROMPT_COLS=13
 
   local needs_full_redraw=1
@@ -1093,17 +1095,18 @@ ui_picker() {
       (( n_sel > 0 )) && current="${sel_idx[$cursor]}"
 
       # ── render one frame in one printf ──────────────────────────────────
-      # \033[H\033[2J replaces the external `clear`.  4 leading spaces
-      # aligns prompt 'S' with column-header 'S'.  A bright caret glyph
-      # is painted here once; the animator will overwrite the same cell
-      # on its next tick to continue the pulse.  When PICKER_HEADER is set
-      # the header sits on row 2 with a blank row 3 buffer, pushing the
-      # prompt down to row 4 (matches caret_row above).
+      # \033[H\033[2J replaces the external `clear`.  3 leading spaces
+      # (was 4 pre-0.32.9) so ⬢ on the brand strip and ⌕ on the prompt
+      # both anchor at col 4, while "foundry" / "Search" / "STATUS" all
+      # share col 7.  A bright caret is painted once here; the sidecar
+      # animator overwrites it on its next tick to continue the pulse.
+      # When PICKER_HEADER is set, the header sits on rows 2..2+n with
+      # a blank buffer row, pushing the prompt down by (1 + n_lines).
       local frame=$'\033[H\033[2J\n'
       if [[ -n "$picker_header" ]]; then
-        frame+=$'    '"${picker_header}"$'\n\n'
+        frame+=$'   '"${picker_header}"$'\n\n'
       fi
-      frame+=$'    '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;5;135m▌\033[0m\n\n'
+      frame+=$'   '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;5;135m▌\033[0m\n\n'
       local j idx row_render is_cursor
       for (( j = 0; j < ${#vis_idx[@]}; j++ )); do
         idx="${vis_idx[$j]}"
@@ -1358,12 +1361,14 @@ build_main_entries() {
       PICKER_TITLE_W+=("0")
       PICKER_LEFT+=("")
       PICKER_RIGHT+=("")
-      # Half-row gap after +N more — a row of ▁ in subtle colour.  The
-      # terminal can't render literal 0.5-cell vertical spacing, but the
-      # bottom-eighth glyph hugs the cell's bottom edge so visually it
-      # reads as a thin shelf between buckets rather than a full empty
-      # row.  See _build_half_gap above for the design note.
-      PICKER_ENTRIES+=("$(_build_half_gap)")
+      # Empty padding row after +N more.  Note: the user has asked
+      # multiple times for "half a row" of gap here.  In a cell-based
+      # terminal that's physically not possible — rows are atomic units
+      # of the grid, so the available choices are 0 rows or 1 row of
+      # gap.  0.32.7's ▁-glyph approximation drew a visible line
+      # instead of empty space, which the user rejected; restoring a
+      # plain empty pad here is the only "non-zero, non-glyph" option.
+      PICKER_ENTRIES+=("")
       PICKER_SLUGS+=("")
       PICKER_TYPES+=("padding")
       PICKER_FILTERABLE+=("0")
@@ -1371,10 +1376,22 @@ build_main_entries() {
     fi
   done
 
-  # Bottom summary block (padding → summary → padding) removed in 0.32.7:
-  # the stats moved to the header's second line so duplicating them at
-  # the bottom is just noise.  One padding row remains before the action
-  # block so the data list doesn't collide with Add/Reload/Exit.
+  # Bottom summary block — restored in 0.32.9 (user asked for the
+  # familiar layout back).  padding → "N changes · ⊙ a · ⊗ b · ..."
+  # → padding so it doesn't crash into Add/Reload/Exit below.
+  local _total; _total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
+  PICKER_ENTRIES+=("")
+  PICKER_SLUGS+=("")
+  PICKER_TYPES+=("padding")
+  PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
+
+  PICKER_ENTRIES+=("$(_build_summary_row "$_total" "$rows")")
+  PICKER_SLUGS+=("")
+  PICKER_TYPES+=("summary")
+  PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
+
   PICKER_ENTRIES+=("")
   PICKER_SLUGS+=("")
   PICKER_TYPES+=("padding")
@@ -1435,17 +1452,36 @@ cmd_interactive() {
 
     build_main_entries
     # Two-line branded header.  Line 1 is the constant brand strip.
-    # Line 2 carries the dashboard — total count + per-bucket badges + the
-    # current sort, all on one row.  Replaces the bottom summary block.
-    local _total _stats _sort_arrow _sort_lbl _hdr_line2
-    _total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
-    _stats="$(_build_stats_inline "$_total" "$rows")"
+    # Line 2 carries info that does NOT live anywhere else in the
+    # layout — the bottom summary already shows per-bucket counts, so
+    # repeating them here would be noise.  Instead we surface:
+    #
+    #   └─ <project>  ·  last activity <relative>  ·  sort: <s> <arrow>
+    #
+    # The └─ glyph reads as a "subtitle / continuation" marker
+    # (familiar from tree views) and gives the brand strip a structural
+    # anchor.  Project name = basename(pwd) painted in fd_chrome (sky
+    # blue) so the user spots their location at a glance.  Last
+    # activity = max(updated_epoch) → relative phrasing — tells the
+    # user how fresh the data is without making them scan every row.
+    local _project _last_upd _last_iso _last_rel _sort_arrow _hdr_line2
+    _project=$(basename "$PWD")
+    _last_upd=$(printf '%s\n' "$rows" \
+      | awk -F'\t' 'BEGIN{m=0} { if ($5+0 > m+0) m=$5 } END{print m+0}')
+    if [[ "$_last_upd" != "0" ]]; then
+      _last_iso=$(date -u -r "$_last_upd" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+                || date -u -d "@$_last_upd" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+                || true)
+      _last_rel="$(ui_date_relative "${_last_iso:-}")"
+    else
+      _last_rel='never'
+    fi
     _sort_arrow='↓'
     (( MAIN_REVERSE )) && _sort_arrow='↑'
-    _sort_lbl="$(ui_dim "sort: ${MAIN_SORT} ${_sort_arrow}")"
-    _hdr_line2="${_stats}  $(ui_dim '·')  ${_sort_lbl}"
+    _hdr_line2="$(ui_dim '└─')  $(ui_paint fd_chrome "$_project")"
+    _hdr_line2+="  $(ui_dim "·  last activity ${_last_rel}  ·  sort: ${MAIN_SORT} ${_sort_arrow}")"
     PICKER_HEADER="$(build_picker_header "$_hdr_line2")"
-    if ui_picker "⌕ Search "; then
+    if ui_picker "⌕  Search "; then
       local slug="$PICKER_RESULT_SLUG"
       case "$slug" in
         __more__*)
