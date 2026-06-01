@@ -11,8 +11,19 @@
 set -euo pipefail
 export LC_ALL="${LC_ALL:-en_US.UTF-8}"
 
-# ── locate ourselves ──────────────────────────────────────────────────────
-BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# ── locate ourselves (resolve symlink chain so .foundry/bin/foundry
+# pointing back at the plugin works the same as a direct call) ──────────────
+resolve_self() {
+  local src="${BASH_SOURCE[0]}"
+  while [[ -L "$src" ]]; do
+    local tgt; tgt="$(readlink "$src")"
+    if [[ "$tgt" = /* ]]; then src="$tgt"
+    else src="$(dirname "$src")/$tgt"
+    fi
+  done
+  cd "$(dirname "$src")" && pwd
+}
+BIN_DIR="$(resolve_self)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$BIN_DIR/.." && pwd)}"
 SCRIPTS="$PLUGIN_ROOT/scripts"
 CHANGE_SH="$SCRIPTS/change.sh"
@@ -238,7 +249,7 @@ cmd_move() {
 }
 
 cmd_setup() {
-  bash "$SETUP_SH"
+  bash "$SETUP_SH" "$@"
 }
 
 # Interactive zero-arg: pick a change → drill → choose action.
