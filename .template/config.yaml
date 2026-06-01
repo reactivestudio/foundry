@@ -1,0 +1,11 @@
+# foundry per-project config — uncomment to override defaults.
+
+# Max items per bucket section in `foundry list`. Surplus items
+# collapse to "⋯ +N more in <bucket>".
+# list_per_bucket_limit: 3
+
+# Default sort within each bucket section.
+# Values: updated | created | slug | title
+# default_sort: updated
+
+# default_reverse: false

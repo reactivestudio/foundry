@@ -50,13 +50,16 @@ for b in "${BUCKETS[@]}"; do
   [[ -f "$FOUNDRY_ROOT/changes/$b/.gitkeep" ]] || : > "$FOUNDRY_ROOT/changes/$b/.gitkeep"
 done
 
-# .template dir — copy each file only if missing (idempotent, user-editable)
-mkdir -p "$FOUNDRY_ROOT/changes/.template"
-for src in "$SRC_TEMPLATE"/*; do
-  name=$(basename "$src")
-  dst="$FOUNDRY_ROOT/changes/.template/$name"
-  [[ -f "$dst" ]] || cp "$src" "$dst"
-done
+# Mirror plugin's .template/ into .foundry/, preserving structure;
+# never overwrites existing files (idempotent + user-editable).
+while IFS= read -r rel; do
+  rel="${rel#./}"
+  dst="$FOUNDRY_ROOT/$rel"
+  if [[ ! -f "$dst" ]]; then
+    mkdir -p "$(dirname "$dst")"
+    cp "$SRC_TEMPLATE/$rel" "$dst"
+  fi
+done < <(cd "$SRC_TEMPLATE" && find . -type f)
 
 # Clean up the pre-0.21.3 layout (.foundry/bin/foundry) if present
 if [[ -L "$FOUNDRY_ROOT/bin/foundry" ]]; then

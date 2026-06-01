@@ -45,6 +45,8 @@ set -- "${ARGS[@]+"${ARGS[@]}"}"
 . "$SCRIPTS/lib/ui.sh"
 # shellcheck source=../scripts/lib/constants.sh
 . "$SCRIPTS/lib/constants.sh"
+# shellcheck source=../scripts/lib/config.sh
+. "$SCRIPTS/lib/config.sh"
 
 # ── helpers ───────────────────────────────────────────────────────────────
 FOUNDRY_ROOT="${FOUNDRY_ROOT:-$PWD/.foundry}"
@@ -130,9 +132,89 @@ collect_rows() {
 
 # ── subcommands ───────────────────────────────────────────────────────────
 
+# Render a single row of the list (icon + slug + title + age, all
+# padded/colored). Used by both the grouped renderer and --bucket flat.
+render_row() {
+  local b="$1" slug="$2" title="$3" epoch="$4"
+  local slug_w="$5" title_w="$6" upd_w="$7"
+
+  local rel="?"
+  if [[ "$epoch" != "0" ]]; then
+    local iso
+    iso=$(date -u -r "$epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+       || date -u -d "@$epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "")
+    [[ -n "$iso" ]] && rel=$(ui_date_relative "$iso")
+  fi
+  local s_t; s_t=$(ui_truncate "$slug_w" "$slug")
+  local t_t; t_t=$(ui_truncate "$title_w" "$title")
+  printf '  %s  %s  %s  %s\n' \
+    "$(ui_status_icon "$b")" \
+    "$(ui_bright "$(printf '%-*s' "$slug_w" "$s_t")")" \
+    "$(printf '%-*s' "$title_w" "$t_t")" \
+    "$(ui_dim "$(printf '%-*s' "$upd_w" "$rel")")"
+}
+
+# Apply --sort within a set of rows.
+apply_sort() {
+  local sort="$1" reverse="$2"
+  local order_flag="-r"; [[ "$reverse" == "1" ]] && order_flag=""
+  case "$sort" in
+    updated|created) sort -t$'\t' -k5 -n $order_flag ;;
+    slug)            sort -t$'\t' -k2 $order_flag ;;
+    title)           sort -t$'\t' -k3 -f $order_flag ;;
+    *)               cat ;;
+  esac
+}
+
+# Resolve column widths from terminal size.
+col_widths() {
+  local cols=${COLUMNS:-$(tput cols 2>/dev/null || echo 100)}
+  (( cols > 120 )) && cols=120
+  local slug_w=28 upd_w=12
+  local title_w=$(( cols - 4 - slug_w - 2 - upd_w - 4 ))
+  (( title_w < 20 )) && title_w=20
+  printf '%d %d %d' "$slug_w" "$title_w" "$upd_w"
+}
+
+# Render one bucket section: divider with name + count, capped rows,
+# "⋯ +N more" footer when truncated. Skips empty buckets.
+render_bucket_section() {
+  local b="$1" all_rows="$2" sort="$3" reverse="$4" limit="$5"
+  local bucket_rows; bucket_rows=$(printf '%s\n' "$all_rows" | awk -F'\t' -v b="$b" '$1 == b')
+  [[ -z "$bucket_rows" ]] && return
+
+  local n; n=$(printf '%s\n' "$bucket_rows" | wc -l | tr -d ' ')
+
+  printf '\n'
+  ui_divider "$(ui_status "$b") · $n"
+
+  bucket_rows=$(printf '%s\n' "$bucket_rows" | apply_sort "$sort" "$reverse")
+
+  local show="$bucket_rows"
+  if (( n > limit )); then
+    show=$(printf '%s\n' "$bucket_rows" | head -n "$limit")
+  fi
+
+  read -r slug_w title_w upd_w <<< "$(col_widths)"
+  while IFS=$'\t' read -r bb slug title _ epoch; do
+    render_row "$bb" "$slug" "$title" "$epoch" "$slug_w" "$title_w" "$upd_w"
+  done <<< "$show"
+
+  if (( n > limit )); then
+    local more=$((n - limit))
+    printf '  %s  %s\n' \
+      "$(ui_dim '⋯')" \
+      "$(ui_dim "+$more more in $b — foundry list --bucket=$b")"
+  fi
+}
+
 cmd_list() {
   require_foundry
-  local filter="all" sort="updated" reverse=0
+  local filter="all" sort
+  sort="$(config_get default_sort updated)"
+  local reverse=0
+  [[ "$(config_get default_reverse false)" == "true" ]] && reverse=1
+
   for arg in "$@"; do
     case "$arg" in
       --bucket=*) filter="${arg#--bucket=}" ;;
@@ -147,81 +229,59 @@ cmd_list() {
     *) ui_error "--sort must be one of: updated, created, slug, title"; exit 64 ;;
   esac
 
-  local rows; rows=$(collect_rows "$filter")
+  local rows; rows=$(collect_rows all)
 
   if [[ -z "$rows" ]]; then
-    ui_header "Changes" "$( [[ "$filter" == "all" ]] && echo 'empty' || echo "empty in $filter" )"
+    ui_header "Foundry" "empty"
     ui_info "get started: foundry new \"your idea\""
     echo
     return 0
   fi
 
-  # collect_rows columns: 1=bucket 2=slug 3=title 4=age_str 5=updated_epoch
-  # add created_epoch by post-processing? simpler: re-read tracking for created.
-  # For now sort by what we have:
-  #   updated → -k5 numeric desc
-  #   created → fall back to updated (collect doesn't track it)
-  #   slug    → -k2 desc
-  #   title   → -k3 desc
-  local order_flag="-r"; (( reverse )) && order_flag=""
-  case "$sort" in
-    updated|created) rows=$(printf '%s\n' "$rows" | sort -t$'\t' -k5 -n $order_flag) ;;
-    slug)            rows=$(printf '%s\n' "$rows" | sort -t$'\t' -k2 $order_flag) ;;
-    title)           rows=$(printf '%s\n' "$rows" | sort -t$'\t' -k3 -f $order_flag) ;;
-  esac
-
-  local n; n=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
-  local subtitle="$n"
-  [[ "$filter" != "all" ]] && subtitle="$n in $filter"
+  local total; total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
   local arrow; (( reverse )) && arrow='↑' || arrow='↓'
-  subtitle+=" · sorted by $sort $arrow"
-  ui_header "Changes" "$subtitle"
 
-  # column widths — pad uncolored text first, then wrap with colors,
-  # so visible alignment stays correct regardless of ANSI codes.
-  local cols=${COLUMNS:-$(tput cols 2>/dev/null || echo 100)}
-  (( cols > 120 )) && cols=120
-  local slug_w=28
-  local upd_w=12
-  local title_w=$(( cols - 4 - slug_w - 2 - upd_w - 4 ))
-  (( title_w < 20 )) && title_w=20
-
-  # column header row + divider
-  printf '     %s  %s  %s\n' \
-    "$(ui_dim "$(printf '%-*s' "$slug_w" "SLUG")")" \
-    "$(ui_dim "$(printf '%-*s' "$title_w" "TITLE")")" \
-    "$(ui_dim "$(printf '%-*s' "$upd_w" "UPDATED")")"
-
-  while IFS=$'\t' read -r b slug title _ updated_epoch; do
-    local updated_rel="?"
-    if [[ "$updated_epoch" != "0" ]]; then
-      # reconstruct ISO from epoch for the relative formatter
-      local iso
-      iso=$(date -u -r "$updated_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
-         || date -u -d "@$updated_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
-         || echo "")
-      [[ -n "$iso" ]] && updated_rel=$(ui_date_relative "$iso")
+  if [[ "$filter" != "all" ]]; then
+    # single-bucket view — no grouping, no cap.
+    local bucket_rows; bucket_rows=$(printf '%s\n' "$rows" | awk -F'\t' -v b="$filter" '$1 == b')
+    local n=0
+    [[ -n "$bucket_rows" ]] && n=$(printf '%s\n' "$bucket_rows" | wc -l | tr -d ' ')
+    if (( n == 0 )); then
+      ui_header "Foundry" "$(ui_status "$filter") · empty"
+      echo
+      return 0
     fi
-    local s_t; s_t=$(ui_truncate "$slug_w" "$slug")
-    local t_t; t_t=$(ui_truncate "$title_w" "$title")
-    local s_pad; s_pad=$(printf '%-*s' "$slug_w" "$s_t")
-    local t_pad; t_pad=$(printf '%-*s' "$title_w" "$t_t")
-    local u_pad; u_pad=$(printf '%-*s' "$upd_w" "$updated_rel")
-    printf '  %s  %s  %s  %s\n' \
-      "$(ui_status_icon "$b")" \
-      "$(ui_bright "$s_pad")" \
-      "$t_pad" \
-      "$(ui_dim "$u_pad")"
-  done <<< "$rows"
+    ui_header "Foundry" "$(ui_status "$filter") · $n · sort: $sort $arrow"
+    read -r slug_w title_w upd_w <<< "$(col_widths)"
+    while IFS=$'\t' read -r bb slug title _ epoch; do
+      render_row "$bb" "$slug" "$title" "$epoch" "$slug_w" "$title_w" "$upd_w"
+    done < <(printf '%s\n' "$bucket_rows" | apply_sort "$sort" "$reverse")
+    echo
+    return 0
+  fi
+
+  # Grouped view: summary line + section per non-empty bucket.
+  local breakdown=""
+  for b in "${BUCKETS[@]}"; do
+    local cnt; cnt=$(printf '%s\n' "$rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
+    breakdown+="$(ui_status_icon "$b") $cnt  "
+  done
+  ui_header "Foundry" "$total · ${breakdown% } · sort: $sort $arrow"
+  local limit; limit="$(config_get list_per_bucket_limit 3)"
+  for b in "${BUCKETS[@]}"; do
+    render_bucket_section "$b" "$rows" "$sort" "$reverse" "$limit"
+  done
   echo
 
   if [[ "$UI_MODE" == "interactive" ]]; then
     printf '  %s  %s\n' \
-      "$(ui_dim 'sort   :')" \
-      "$(ui_dim 'foundry list --sort=updated|created|slug|title [--reverse]')"
+      "$(ui_dim 'open      :')" "$(ui_dim 'foundry show <slug>')"
     printf '  %s  %s\n' \
-      "$(ui_dim 'filter :')" \
-      "$(ui_dim 'foundry list --bucket=backlog|in-progress|done|declined')"
+      "$(ui_dim 'add       :')" "$(ui_dim 'foundry new "your idea"')"
+    printf '  %s  %s\n' \
+      "$(ui_dim 'one bucket:')" "$(ui_dim 'foundry list --bucket=<status>')"
+    printf '  %s  %s\n' \
+      "$(ui_dim 'configure :')" "$(ui_dim '.foundry/config.yaml')"
     echo
   fi
 }
@@ -436,7 +496,120 @@ cmd_setup() {
   bash "$SETUP_SH" "$@"
 }
 
-# Interactive zero-arg: fuzzy-pick a change → drill → choose action.
+# Build the picker row format used by `gum filter`.
+build_picker_line() {
+  local b="$1" slug="$2" title="$3" epoch="$4"
+  local rel="?"
+  if [[ "$epoch" != "0" ]]; then
+    local iso
+    iso=$(date -u -r "$epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+       || date -u -d "@$epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "")
+    [[ -n "$iso" ]] && rel=$(ui_date_relative "$iso")
+  fi
+  printf '%s  %-28s  %-40s  %s\n' \
+    "$(ui_icon "$b")" \
+    "$(ui_truncate 28 "$slug")" \
+    "$(ui_truncate 40 "$title")" \
+    "$rel"
+}
+
+# Press-any-key gate; used between an action's output and the next redraw.
+pause_for_user() {
+  printf '\n  %s ' "$(ui_dim 'press ↵ to continue')"
+  read -r _ || true
+}
+
+# Pick a change → show → action menu.
+ui_pick_and_act() {
+  local rows; rows=$(collect_rows all | sort -t$'\t' -k5 -nr)
+  [[ -z "$rows" ]] && return
+
+  local lines=()
+  while IFS=$'\t' read -r b slug title _ epoch; do
+    lines+=("$(build_picker_line "$b" "$slug" "$title" "$epoch")")
+  done <<< "$rows"
+
+  local pick
+  pick=$(printf '%s\n' "${lines[@]}" \
+    | gum filter --header "Pick a change (type to filter)" --indicator='▸') || return
+
+  local slug; slug=$(printf '%s' "$pick" | awk '{print $2}')
+  [[ -z "$slug" ]] && return
+
+  clear
+  cmd_show "$slug"
+
+  local b; b=$(find_bucket "$slug") || { pause_for_user; return; }
+  local actions=()
+  case "$b" in
+    backlog)     actions=("▸ Start (move to in-progress)" "▸ Decline" "─ Back") ;;
+    in-progress) actions=("▸ Finish (move to done)" "▸ Pause back to backlog" "▸ Decline" "─ Back") ;;
+    done)        actions=("─ Back (terminal — no transitions out)") ;;
+    declined)    actions=("▸ Revive (back to backlog)" "─ Back") ;;
+  esac
+  local action
+  action=$(gum choose --header "What next?" "${actions[@]}") || return
+
+  case "$action" in
+    *"Start"*)
+      cmd_move "$slug" --to=in-progress
+      pause_for_user ;;
+    *"Finish"*)
+      cmd_move "$slug" --to=done
+      pause_for_user ;;
+    *"Pause"*)
+      cmd_move "$slug" --to=backlog
+      pause_for_user ;;
+    *"Revive"*)
+      cmd_move "$slug" --to=backlog
+      pause_for_user ;;
+    *"Decline"*)
+      local reason
+      reason=$(gum input --placeholder "Reason for declining" --header "Decline $slug")
+      if [[ -n "$reason" ]]; then
+        cmd_move "$slug" --to=declined --reason="$reason"
+        pause_for_user
+      fi ;;
+    *) ;;  # Back / cancel — silent
+  esac
+}
+
+# Prompt for a title, then create.
+ui_add_new() {
+  clear
+  ui_header "Foundry" "new change"
+  local title
+  title=$(gum input --placeholder "Change title (free text)" --width 60)
+  [[ -z "$title" ]] && return
+  cmd_new "$title"
+  pause_for_user
+}
+
+# Reconfigure the sort/reverse pair for the current session.
+ui_sort_picker() {
+  local choice
+  choice=$(gum choose --header "Sort by..." \
+    "updated · newest first" \
+    "updated · oldest first" \
+    "created · newest first" \
+    "created · oldest first" \
+    "slug · A → Z" \
+    "slug · Z → A" \
+    "title · A → Z" \
+    "title · Z → A") || return
+  case "$choice" in
+    "updated · newest first") MAIN_SORT=updated; MAIN_REVERSE=0 ;;
+    "updated · oldest first") MAIN_SORT=updated; MAIN_REVERSE=1 ;;
+    "created · newest first") MAIN_SORT=created; MAIN_REVERSE=0 ;;
+    "created · oldest first") MAIN_SORT=created; MAIN_REVERSE=1 ;;
+    "slug · A → Z")           MAIN_SORT=slug;    MAIN_REVERSE=0 ;;
+    "slug · Z → A")           MAIN_SORT=slug;    MAIN_REVERSE=1 ;;
+    "title · A → Z")          MAIN_SORT=title;   MAIN_REVERSE=0 ;;
+    "title · Z → A")          MAIN_SORT=title;   MAIN_REVERSE=1 ;;
+  esac
+}
+
+# Interactive REPL — main entry when called with no args in a TTY.
 cmd_interactive() {
   require_foundry
   if [[ "$UI_MODE" != "interactive" ]]; then
@@ -444,60 +617,42 @@ cmd_interactive() {
     exit 64
   fi
 
-  local rows; rows=$(collect_rows all | sort -t$'\t' -k5 -nr)
-  [[ -z "$rows" ]] && {
-    ui_header "Changes" "empty"
-    ui_info "get started: foundry new \"your idea\""
-    echo
-    return 0
-  }
+  MAIN_SORT="$(config_get default_sort updated)"
+  MAIN_REVERSE=0
+  [[ "$(config_get default_reverse false)" == "true" ]] && MAIN_REVERSE=1
 
-  # build display rows: "<icon> <slug>  <title>  <updated>"
-  # store slug separately so we can map back after the user picks.
-  local picker_lines=()
-  while IFS=$'\t' read -r b slug title _ epoch; do
-    local rel="?"
-    if [[ "$epoch" != "0" ]]; then
-      local iso
-      iso=$(date -u -r "$epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
-         || date -u -d "@$epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "")
-      [[ -n "$iso" ]] && rel=$(ui_date_relative "$iso")
+  trap 'clear; exit 0' INT
+  local esc_streak=0
+
+  while true; do
+    clear
+    cmd_list --sort="$MAIN_SORT" $([[ "$MAIN_REVERSE" == 1 ]] && echo --reverse)
+
+    local action
+    if action=$(gum choose --header "" --cursor='▸ ' --cursor-prefix='' \
+                  "▸ Pick a change" \
+                  "+ Add new change" \
+                  "⇅ Sort: $MAIN_SORT $([[ "$MAIN_REVERSE" == 1 ]] && echo '↑' || echo '↓')" \
+                  "⟳ Reload" \
+                  "✗ Exit"); then
+      esc_streak=0
+      case "$action" in
+        *"Pick"*)     ui_pick_and_act ;;
+        *"Add new"*)  ui_add_new ;;
+        *"Sort"*)     ui_sort_picker ;;
+        *"Reload"*)   ;;
+        *"Exit"*)
+          if gum confirm "Exit foundry?"; then clear; exit 0; fi ;;
+      esac
+    else
+      esc_streak=$((esc_streak + 1))
+      if (( esc_streak >= 2 )); then
+        if gum confirm "Exit foundry?"; then clear; exit 0; fi
+        esc_streak=0
+      fi
+      # first esc: silently re-render
     fi
-    local s_t; s_t=$(ui_truncate 28 "$slug")
-    local t_t; t_t=$(ui_truncate 40 "$title")
-    picker_lines+=("$(printf '%s  %-28s  %-40s  %s' "$(ui_icon "$b")" "$s_t" "$t_t" "$rel")")
-  done <<< "$rows"
-
-  local pick
-  pick=$(printf '%s\n' "${picker_lines[@]}" \
-    | gum filter --header "Pick a change (type to filter, ↵ to open, esc to cancel)" \
-                 --indicator='▸') || exit 0
-
-  # extract slug — second whitespace-delimited token
-  local slug; slug=$(printf '%s' "$pick" | awk '{print $2}')
-  [[ -z "$slug" ]] && exit 0
-
-  cmd_show "$slug"
-
-  # action menu based on current bucket
-  local b; b=$(find_bucket "$slug") || exit 1
-  local actions=()
-  case "$b" in
-    backlog)     actions=("▸ Start (move to in-progress)" "▸ Decline" "─ Cancel") ;;
-    in-progress) actions=("▸ Finish (move to done)" "▸ Pause back to backlog" "▸ Decline" "─ Cancel") ;;
-    done)        actions=("─ Cancel (terminal — no transitions out)") ;;
-    declined)    actions=("▸ Revive (back to backlog)" "─ Cancel") ;;
-  esac
-  local action; action=$(gum choose --header "What next?" "${actions[@]}") || exit 0
-
-  case "$action" in
-    *"Start"*)   cmd_move "$slug" --to=in-progress ;;
-    *"Finish"*)  cmd_move "$slug" --to=done ;;
-    *"Pause"*)   cmd_move "$slug" --to=backlog ;;
-    *"Revive"*)  cmd_move "$slug" --to=backlog ;;
-    *"Decline"*) cmd_move "$slug" --to=declined ;;
-    *)           ui_info "cancelled" ;;
-  esac
+  done
 }
 
 # ── dispatch ──────────────────────────────────────────────────────────────
