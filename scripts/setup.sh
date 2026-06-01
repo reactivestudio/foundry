@@ -6,14 +6,24 @@
 #   .foundry/changes/.template/{tracking.yaml,proposal.md}
 #
 # With --install-cli, additionally:
-#   .foundry/cli  →  ${CLAUDE_PLUGIN_ROOT}/cli  (symlink)
-#   ./foundry     →  ${CLAUDE_PLUGIN_ROOT}/cli  (symlink at project root)
-#   .gitignore    ← /foundry and /.foundry/cli appended if missing
+#   .foundry/cli           →  ${CLAUDE_PLUGIN_ROOT}/cli   (symlink to plugin)
+#   ./foundry              →  .foundry/cli                (RELATIVE symlink —
+#                                                          chains through the
+#                                                          local file so the
+#                                                          plugin path lives in
+#                                                          exactly one place)
+#   .foundry/aliases.sh    →  `alias foundry=…` and `alias f=…`
+#                              both expanding to ./.foundry/cli
+#   .gitignore             ← /foundry, /.foundry/cli, /.foundry/aliases.sh
 #
-# The root-level `foundry` symlink lets you type `./foundry` from anywhere
-# in the project tree (combined with bash's auto-PATH search for "./" it
-# IS your project-local entry point).  Both symlinks point at the same
-# plugin binary, so a plugin upgrade lights them up automatically.
+# Why a chained symlink instead of two independent symlinks?  So that a
+# plugin-path move only requires updating .foundry/cli — ./foundry and
+# the aliases automatically follow through the local chain.
+#
+# Why aliases AND a symlink?  The symlink lets `./foundry list` work
+# from the project root and from scripts (no shell sourcing needed).
+# The aliases let `foundry list` and `f list` work as bare commands in
+# an interactive shell — once the user sources .foundry/aliases.sh.
 #
 # Templates are copied from ${CLAUDE_PLUGIN_ROOT}/.template/. Target
 # copies are preserved on re-run so users can customize per-project.
@@ -29,8 +39,9 @@ for arg in "$@"; do
 usage: setup.sh [--install-cli]
 
   --install-cli   also create the CLI symlinks (.foundry/cli AND
-                  ./foundry at the project root) and add them to
-                  the project .gitignore.
+                  ./foundry at the project root), write the
+                  per-project aliases file (.foundry/aliases.sh), and
+                  add all three to the project .gitignore.
 EOF
       exit 0 ;;
     *) echo "setup.sh: unknown arg: $arg" >&2; exit 64 ;;
@@ -100,21 +111,65 @@ if (( INSTALL_CLI )); then
     echo "setup.sh: CLI not found at $SRC_CLI (CLAUDE_PLUGIN_ROOT wrong?)" >&2
     exit 2
   fi
-  # Always refresh both links so a plugin-path move (e.g. version upgrade
-  # under ~/.claude/plugins/) lights them up without manual cleanup.
+  # .foundry/cli is the canonical local pointer to the plugin's CLI.
+  # ./foundry is a RELATIVE symlink that chains through it, so the
+  # plugin path only appears once — re-running setup after a plugin
+  # version bump updates the chain without manual cleanup.
   inner_link="$FOUNDRY_ROOT/cli"
   root_link="$PROJECT_ROOT/foundry"
   ln -sf "$SRC_CLI" "$inner_link"
-  ln -sf "$SRC_CLI" "$root_link"
-  # Both links are plugin-path-dependent and per-developer, so they
-  # don't belong in version control.
+  ln -sf ".foundry/cli" "$root_link"
+
+  # Write the per-project aliases file.  Sourcing it makes `foundry`
+  # and `f` work as bare commands in the user's interactive shell,
+  # without polluting their PATH.  Both alias targets are relative
+  # to ./.foundry/cli — the local file, NOT the plugin cache path
+  # — so the user's shell config doesn't need to know where the
+  # plugin lives.  Rewritten on every setup run to stay in sync.
+  aliases_file="$FOUNDRY_ROOT/aliases.sh"
+  cat > "$aliases_file" <<'ALIASES'
+#!/usr/bin/env bash
+# foundry per-project aliases.
+#
+# Both aliases expand to ./.foundry/cli — a project-local symlink that
+# in turn resolves to the plugin's CLI.  Because the path is relative,
+# the aliases ONLY work when your shell's cwd is the foundry project
+# root.  cd elsewhere and they'll fail with "no such file or directory"
+# — which is intentional: foundry state is per-project.
+#
+# Activate now (current shell):
+#   source .foundry/aliases.sh
+#
+# Activate every shell on entry to a foundry project — one-time addition
+# to ~/.zshrc or ~/.bashrc:
+#   [[ -f .foundry/aliases.sh ]] && source .foundry/aliases.sh
+#
+# Or wire it to cd hooks so it follows you between projects:
+#   _foundry_chpwd() { [[ -f ./.foundry/aliases.sh ]] && source ./.foundry/aliases.sh; }
+#   # zsh:
+#   chpwd_functions+=(_foundry_chpwd); _foundry_chpwd
+#   # bash:
+#   PROMPT_COMMAND="_foundry_chpwd${PROMPT_COMMAND:+; }$PROMPT_COMMAND"
+alias foundry='./.foundry/cli'
+alias f='./.foundry/cli'
+ALIASES
+
+  # All three artifacts are plugin/path/host-specific so they don't
+  # belong in version control.
   _ensure_gitignore_line "/foundry"
   _ensure_gitignore_line "/.foundry/cli"
+  _ensure_gitignore_line "/.foundry/aliases.sh"
+
   cli_status="
-  cli              — symlink → $SRC_CLI (.foundry/cli + ./foundry)
-                     run: ./foundry        from project root
-                     run: ./.foundry/cli   from inside .foundry/
-                     .gitignore: /foundry and /.foundry/cli added"
+  cli              — .foundry/cli → $SRC_CLI
+                     ./foundry    → .foundry/cli   (relative, chains)
+                     run: ./foundry list           — from project root
+                     run: ./.foundry/cli list      — anywhere
+  aliases.sh       — per-project shell aliases for \`foundry\` and \`f\`
+                     activate now: source .foundry/aliases.sh
+                     persistent:   add to ~/.zshrc:
+                       [[ -f .foundry/aliases.sh ]] && source .foundry/aliases.sh
+  .gitignore       — /foundry, /.foundry/cli, /.foundry/aliases.sh added"
 fi
 
 cat <<EOF
