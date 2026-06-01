@@ -884,11 +884,17 @@ ui_picker() {
     fi
     case "$key" in
       $'\e')
-        local seq
-        IFS= read -rsn1 -t 0.1 seq 2>/dev/null
+        # Arrow key (ESC [ A/B) or bare ESC. macOS bash 3.2 doesn't accept
+        # fractional `-t 0.1` so we use stty min/time (100ms timeout per
+        # read) to peek the rest of the sequence without blocking forever.
+        stty -icanon min 0 time 1
+        local seq="" dir=""
+        IFS= read -rsn1 seq
         if [[ "$seq" == '[' ]]; then
-          local dir
           IFS= read -rsn1 dir
+        fi
+        stty -icanon min 1 time 0
+        if [[ "$seq" == '[' ]]; then
           case "$dir" in
             A) (( cursor > 0 )) && cursor=$((cursor - 1)) ;;
             B) (( cursor < n_sel - 1 )) && cursor=$((cursor + 1)) ;;
