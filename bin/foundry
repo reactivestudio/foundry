@@ -1,0 +1,305 @@
+#!/usr/bin/env bash
+# foundry — CLI front-end for the change-lifecycle backend.
+#
+# Two modes:
+#   interactive   — default in a TTY; uses gum for icons/colors/prompts
+#   --plain       — deterministic output for Claude Code or pipelines
+#                   (also auto-enabled when stdout isn't a TTY)
+#
+# All state mutations go through scripts/change.sh.
+
+set -euo pipefail
+export LC_ALL="${LC_ALL:-en_US.UTF-8}"
+
+# ── locate ourselves ──────────────────────────────────────────────────────
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$BIN_DIR/.." && pwd)}"
+SCRIPTS="$PLUGIN_ROOT/scripts"
+CHANGE_SH="$SCRIPTS/change.sh"
+SETUP_SH="$SCRIPTS/setup.sh"
+TRACKING_SH="$SCRIPTS/tracking.sh"
+
+# ── parse --plain anywhere in the args ────────────────────────────────────
+ARGS=()
+for arg in "$@"; do
+  if [[ "$arg" == "--plain" ]]; then
+    export FOUNDRY_PLAIN=1
+  else
+    ARGS+=("$arg")
+  fi
+done
+set -- "${ARGS[@]+"${ARGS[@]}"}"
+
+# shellcheck source=../scripts/lib/ui.sh
+. "$SCRIPTS/lib/ui.sh"
+# shellcheck source=../scripts/lib/constants.sh
+. "$SCRIPTS/lib/constants.sh"
+
+# ── helpers ───────────────────────────────────────────────────────────────
+FOUNDRY_ROOT="${FOUNDRY_ROOT:-$PWD/.foundry}"
+CHANGES_DIR="$FOUNDRY_ROOT/changes"
+
+usage() {
+  cat <<'EOF'
+usage:
+  foundry                          interactive: pick a change and act
+  foundry list [--bucket=X]        list changes (all or filtered)
+  foundry show <slug>              show a change's tracking + history
+  foundry new ["title"]            create a change (asks for title if omitted)
+  foundry move <slug> [--to=X] [--reason=R]
+                                   move a change between buckets
+  foundry setup                    scaffold .foundry/ in the current project
+
+global flags:
+  --plain                          ASCII output, no prompts
+EOF
+  exit 64
+}
+
+require_foundry() {
+  [[ -d "$CHANGES_DIR" ]] || { ui_error "no .foundry/ — run: foundry setup"; exit 2; }
+}
+
+# Echo bucket containing slug or empty + exit 1.
+find_bucket() {
+  local slug="$1"
+  for b in "${BUCKETS[@]}"; do
+    [[ -d "$CHANGES_DIR/$b/$slug" ]] && { echo "$b"; return 0; }
+  done
+  return 1
+}
+
+# Compute "age" string from a tracking.yaml updated_at field.
+age_of() {
+  local dir="$1"
+  local ts; ts=$("$TRACKING_SH" get "$dir" updated_at 2>/dev/null) || return 0
+  [[ -z "$ts" ]] && return 0
+  local now; now=$(date -u +%s)
+  local then
+  if then=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null); then
+    :
+  elif then=$(date -u -d "$ts" +%s 2>/dev/null); then
+    :
+  else
+    echo "?"; return 0
+  fi
+  local delta=$((now - then))
+  if   (( delta < 60 ));      then echo "${delta}s"
+  elif (( delta < 3600 ));    then echo "$((delta / 60))m"
+  elif (( delta < 86400 ));   then echo "$((delta / 3600))h"
+  elif (( delta < 604800 ));  then echo "$((delta / 86400))d"
+  else                              echo "$((delta / 604800))w"
+  fi
+}
+
+# Emit a TSV row per change: bucket\tslug\ttitle\tage\tupdated_at_epoch
+# Last column is for sorting; consumers strip it.
+collect_rows() {
+  local filter="${1:-all}"
+  local buckets=("${BUCKETS[@]}")
+  [[ "$filter" != "all" ]] && buckets=("$filter")
+  shopt -s nullglob
+  for b in "${buckets[@]}"; do
+    [[ -d "$CHANGES_DIR/$b" ]] || continue
+    for entry in "$CHANGES_DIR/$b"/*/; do
+      local slug; slug=$(basename "$entry")
+      local title; title=$("$TRACKING_SH" get "$entry" title 2>/dev/null || echo "?")
+      local age;   age=$(age_of "$entry")
+      local ts;    ts=$("$TRACKING_SH" get "$entry" updated_at 2>/dev/null || echo "")
+      local epoch=0
+      if [[ -n "$ts" ]]; then
+        epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null \
+              || date -u -d "$ts" +%s 2>/dev/null || echo 0)
+      fi
+      printf '%s\t%s\t%s\t%s\t%s\n' "$b" "$slug" "$title" "$age" "$epoch"
+    done
+  done
+  shopt -u nullglob
+}
+
+# ── subcommands ───────────────────────────────────────────────────────────
+
+cmd_list() {
+  require_foundry
+  local filter="all"
+  for arg in "$@"; do
+    case "$arg" in
+      --bucket=*) filter="${arg#--bucket=}" ;;
+      *) ui_error "unknown flag: $arg"; exit 64 ;;
+    esac
+  done
+
+  local rows
+  rows=$(collect_rows "$filter" | sort -t$'\t' -k5 -nr)
+
+  if [[ -z "$rows" ]]; then
+    ui_info "no changes${filter:+ in $filter}"
+    return 0
+  fi
+
+  {
+    printf 'STATUS\tSLUG\tTITLE\tAGE\n'
+    while IFS=$'\t' read -r b slug title age _; do
+      printf '%s\t%s\t%s\t%s\n' \
+        "$(ui_status_icon "$b")" "$slug" "$title" "$age"
+    done <<< "$rows"
+  } | ui_table
+}
+
+cmd_show() {
+  require_foundry
+  local slug="${1:-}"
+  [[ -n "$slug" ]] || { ui_error "show: missing slug"; exit 64; }
+  local b; b=$(find_bucket "$slug") || { ui_error "not found: $slug"; exit 1; }
+  local dir="$CHANGES_DIR/$b/$slug"
+
+  ui_header "$(ui_icon "$b") $slug"
+  cat "$dir/tracking.yaml"
+  echo
+  ui_info "recent history:"
+  "$TRACKING_SH" history-tail "$dir" 10
+}
+
+cmd_new() {
+  local title="${1:-}"
+  if [[ -z "$title" ]]; then
+    if [[ "$UI_MODE" == "interactive" ]]; then
+      title=$(ui_input "Change title (free text)")
+      [[ -z "$title" ]] && { ui_error "title required"; exit 1; }
+    else
+      ui_error "new: title required as argument in --plain mode"
+      exit 64
+    fi
+  fi
+
+  # Slug generation: ASCII-fold the title, kebab-case it. Caller can
+  # override by passing FOUNDRY_SLUG=... env (used by Claude Code when
+  # it wants to LLM-pick a semantic slug).
+  local slug="${FOUNDRY_SLUG:-}"
+  if [[ -z "$slug" ]]; then
+    slug=$(printf '%s' "$title" \
+      | iconv -f utf-8 -t ascii//translit 2>/dev/null \
+      | tr '[:upper:]' '[:lower:]' \
+      | tr -c 'a-z0-9' '-' \
+      | sed -E 's/-+/-/g; s/^-+|-+$//g' \
+      | cut -c1-40)
+    [[ -z "$slug" ]] && slug="change-$(date +%s)"
+  fi
+
+  require_foundry
+  "$CHANGE_SH" new "$slug" "$title"
+  ui_success "created: $slug"
+}
+
+cmd_move() {
+  require_foundry
+  local slug="${1:-}"
+  [[ -n "$slug" ]] || { ui_error "move: missing slug"; exit 64; }
+  shift
+
+  local to="" reason=""
+  for arg in "$@"; do
+    case "$arg" in
+      --to=*)     to="${arg#--to=}" ;;
+      --reason=*) reason="${arg#--reason=}" ;;
+      *) ui_error "unknown flag: $arg"; exit 64 ;;
+    esac
+  done
+
+  local from; from=$(find_bucket "$slug") || { ui_error "not found: $slug"; exit 1; }
+
+  if [[ -z "$to" ]]; then
+    if [[ "$UI_MODE" == "interactive" ]]; then
+      # offer all buckets except current
+      local opts=()
+      for b in "${BUCKETS[@]}"; do
+        [[ "$b" == "$from" ]] && continue
+        opts+=("$(ui_icon "$b") $b")
+      done
+      local pick; pick=$(ui_choose "Move $slug from $(ui_icon "$from") $from to:" "${opts[@]}") || exit 1
+      to="${pick#* }"
+    else
+      ui_error "move: --to=<bucket> required in --plain mode"
+      exit 64
+    fi
+  fi
+
+  if [[ "$to" == "declined" && -z "$reason" ]]; then
+    if [[ "$UI_MODE" == "interactive" ]]; then
+      reason=$(ui_input "Reason for declining")
+      [[ -z "$reason" ]] && { ui_error "decline reason required"; exit 1; }
+    else
+      ui_error "move to declined: --reason=... required in --plain mode"
+      exit 64
+    fi
+  fi
+
+  "$CHANGE_SH" move "$slug" "$to" ${reason:+"$reason"}
+}
+
+cmd_setup() {
+  bash "$SETUP_SH"
+}
+
+# Interactive zero-arg: pick a change → drill → choose action.
+cmd_interactive() {
+  require_foundry
+  if [[ "$UI_MODE" != "interactive" ]]; then
+    ui_error "no args: pass a subcommand (list/show/new/move/setup) in --plain mode"
+    exit 64
+  fi
+
+  local rows; rows=$(collect_rows all | sort -t$'\t' -k5 -nr)
+  [[ -z "$rows" ]] && { ui_info "no changes — try: foundry new"; return 0; }
+
+  # build choice strings as "<icon> <slug> — <title>"
+  local opts=()
+  while IFS=$'\t' read -r b slug title _ _; do
+    opts+=("$(ui_icon "$b") $slug — $title")
+  done <<< "$rows"
+  local pick; pick=$(gum choose --header "Pick a change:" "${opts[@]}") || exit 0
+
+  local slug="${pick#* }"; slug="${slug%% —*}"
+  cmd_show "$slug"
+  echo
+
+  # action menu based on current bucket
+  local b; b=$(find_bucket "$slug")
+  local actions=()
+  case "$b" in
+    backlog)     actions=("Start" "Decline" "Cancel") ;;
+    in-progress) actions=("Finish" "Pause back to backlog" "Decline" "Cancel") ;;
+    done)        actions=("Cancel") ;;
+    declined)    actions=("Revive" "Cancel") ;;
+  esac
+  local action; action=$(gum choose --header "Action:" "${actions[@]}") || exit 0
+
+  case "$action" in
+    Start)                cmd_move "$slug" --to=in-progress ;;
+    Finish)               cmd_move "$slug" --to=done ;;
+    "Pause back to backlog") cmd_move "$slug" --to=backlog ;;
+    Revive)               cmd_move "$slug" --to=backlog ;;
+    Decline)              cmd_move "$slug" --to=declined ;;
+    Cancel|*)             ui_info "cancelled" ;;
+  esac
+}
+
+# ── dispatch ──────────────────────────────────────────────────────────────
+main() {
+  if [[ $# -eq 0 ]]; then
+    cmd_interactive
+    return
+  fi
+  local sub="$1"; shift
+  case "$sub" in
+    list)            cmd_list "$@" ;;
+    show)            cmd_show "$@" ;;
+    new)             cmd_new "$@" ;;
+    move)            cmd_move "$@" ;;
+    setup)           cmd_setup "$@" ;;
+    -h|--help|help)  usage ;;
+    *)               ui_error "unknown subcommand: $sub"; usage ;;
+  esac
+}
+
+main "$@"

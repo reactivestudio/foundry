@@ -59,15 +59,17 @@ cmd_validate_bucket() {
     return 2
   fi
 
-  case "$from→$to" in
-    backlog→in-progress|backlog→declined) : ;;
-    in-progress→done|in-progress→declined|in-progress→backlog) : ;;
-    declined→backlog) : ;;
-    done→*)
+  # Separator ':' between from/to — bash-safe. Avoid '→' (locale-dependent
+  # multibyte parsing) and '->' (parser sees '>' as redirect operator).
+  case "$from:$to" in
+    backlog:in-progress|backlog:declined) : ;;
+    in-progress:done|in-progress:declined|in-progress:backlog) : ;;
+    declined:backlog) : ;;
+    done:*)
       echo "terminal: cannot leave 'done'" >&2
       return 1 ;;
     *)
-      echo "disallowed transition: $from → $to" >&2
+      echo "disallowed transition: $from -> $to" >&2
       return 1 ;;
   esac
 
