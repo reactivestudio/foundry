@@ -783,7 +783,7 @@ _build_more_row() {
 # (skip icon column) so the summary aligns with the bucket column.
 _build_summary_row() {
   local total="$1" all_rows="$2"
-  local s="$total $(ui_small_caps changes)  "
+  local s="$total changes  "
   local b
   for b in "${BUCKETS[@]}"; do
     local cnt; cnt=$(printf '%s\n' "$all_rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
