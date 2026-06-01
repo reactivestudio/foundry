@@ -584,7 +584,7 @@ ui_drill() {
   local ic_finish="$(ui_paint fd_done '✓')"        # check → finish
   local ic_pause="$(ui_paint fd_backlog '⏸')"     # pause bars → pause
   local ic_revive="$(ui_paint fd_backlog '↺')"    # counter-rotate → revive
-  local ic_decl="$(ui_paint fd_declined '⊗')"     # circled-times → decline
+  local ic_decl="$(ui_paint fd_declined '✗')"     # ballot x → decline
   local ic_back="$(ui_paint fd_chrome '←')"        # left arrow → back
 
   local actions=()
