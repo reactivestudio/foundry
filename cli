@@ -1020,13 +1020,22 @@ ui_picker() {
     phase=0
     while [[ -f "$anim_col_file" ]]; do
       col=$(<"$anim_col_file" 2>/dev/null) || break
-      [[ -z "$col" ]] && col=14
+      # If the read landed mid-update (file truncated to 0 bytes before
+      # the new column was written) OR yielded a non-integer, skip this
+      # tick rather than painting at a stale fallback column.  The old
+      # `[[ -z "$col" ]] && col=14` line was the cause of "▌ stuck at
+      # column 14 covering the first typed char" — when the race fired
+      # the caret got nailed to position 14 regardless of filter length.
+      if [[ -z "$col" || ! "$col" =~ ^[0-9]+$ ]]; then
+        sleep 0.5
+        continue
+      fi
       # Ten-phase symmetric breath on the purple ramp:
       #   135 → 141 → 147 → 183 → 189 → 189 → 183 → 147 → 141 → 135
       # Same hue, gently desaturating to pale lilac then climbing back.
       # The trough is held for one extra tick (phases 4 & 5 both = 189)
       # so the dim moment lingers — reads as a real "in / out" breath.
-      # At 250 ms / tick the full cycle is ~2.5 s, comfortable to look at.
+      # At 500 ms / tick the full cycle is ~5 s, slow and breath-like.
       # $caret_row is captured from the parent scope at subshell fork time.
       case "$phase" in
         0) printf '\033[%s;%sH\033[38;5;135m▌\033[0m' "$caret_row" "$col" ;;
@@ -1041,7 +1050,7 @@ ui_picker() {
         9) printf '\033[%s;%sH\033[38;5;135m▌\033[0m' "$caret_row" "$col" ;;
       esac
       phase=$(( (phase + 1) % 10 ))
-      sleep 0.25
+      sleep 0.5
     done
   ) </dev/null >/dev/tty 2>/dev/null &
   local anim_pid=$!
@@ -1167,8 +1176,15 @@ ui_picker() {
       printf '%s' "$frame"
 
       # Tell the animator the new caret column, then resume the pulse.
+      # Atomic write via tmp + mv — a bare `> "$anim_col_file"` truncates
+      # the file to 0 bytes BEFORE the new content is written, opening a
+      # tiny race window where the animator's read sees an empty string.
+      # The previous fallback to col=14 hid the race as "caret stuck at
+      # column 14".  mv is atomic on the same filesystem so the animator
+      # only ever sees a fully-written old or fully-written new value.
       local cur_col=$((PROMPT_COLS + 1 + ${#filter}))
-      printf '%d' "$cur_col" > "$anim_col_file"
+      printf '%d' "$cur_col" > "${anim_col_file}.tmp"
+      mv -f "${anim_col_file}.tmp" "$anim_col_file"
       kill -CONT "$anim_pid" 2>/dev/null || true
 
       needs_full_redraw=0
