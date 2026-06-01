@@ -36,10 +36,20 @@ ui_color_code() {
     muted|dim) echo 244 ;;# mid-gray — labels, metadata
     subtle)  echo 240 ;;  # dark-gray — separators, dim text
     accent)  echo 212 ;;  # pink — header titles
-    ok)      echo 40 ;;   # green — success, done bucket
-    warn)    echo 214 ;;  # amber — in-progress
-    danger)  echo 124 ;;  # red — error, declined
-    *)       echo 7 ;;    # default
+    ok)      echo 40 ;;   # green — success
+    warn)    echo 214 ;;  # amber
+    danger)  echo 124 ;;  # red
+    # ── foundry brand palette (user-approved) ──
+    fd_icon)        echo 153 ;;  # baby blue — status circles + titles
+    fd_title)       echo 153 ;;  # alias for clarity
+    fd_created)     echo 84  ;;  # bright mint
+    fd_updated)     echo 141 ;;  # electric lavender
+    fd_chrome)      echo 117 ;;  # sky blue — action buttons + "+N more" + chrome
+    fd_backlog)     echo 105 ;;  # soft indigo
+    fd_inprogress)  echo 215 ;;  # warm orange
+    fd_done)        echo 121 ;;  # soft mint
+    fd_declined)    echo 218 ;;  # pale pink
+    *)       echo 7 ;;
   esac
 }
 
@@ -102,6 +112,9 @@ ui_date_relative() {
 # Compact absolute: "Mon Jun 1, 11:40"
 ui_date_short() { ui_date_format "$1" "+%a %b %-d, %H:%M"; }
 
+# Full format for the list view: "Mon, May 27 23:30"
+ui_date_full() { ui_date_format "$1" "+%a, %b %-d %H:%M"; }
+
 # Section divider — "─── title ──────────────────────" or just dashes.
 ui_divider() {
   local title="${1:-}"
@@ -143,24 +156,26 @@ ui_strip_ansi() {
 
 ui_bucket_color() {
   case "$1" in
-    backlog)     echo muted ;;
-    in-progress) echo warn ;;
-    done)        echo ok ;;
-    declined)    echo danger ;;
+    backlog)     echo fd_backlog ;;
+    in-progress) echo fd_inprogress ;;
+    done)        echo fd_done ;;
+    declined)    echo fd_declined ;;
     *)           echo dim ;;
   esac
 }
 
-# Echo "<icon> <bucket>" colored.
+# Echo "<icon> <bucket>" — icon in baby blue, label in per-bucket color.
 ui_status() {
   local b="$1"
-  ui_paint "$(ui_bucket_color "$b")" "$(ui_icon "$b") $b"
+  printf '%s %s' \
+    "$(ui_paint fd_icon "$(ui_icon "$b")")" \
+    "$(ui_paint "$(ui_bucket_color "$b")" "$b")"
 }
 
-# Just the icon, colored.
+# Just the icon, in the shared baby-blue.
 ui_status_icon() {
   local b="$1"
-  ui_paint "$(ui_bucket_color "$b")" "$(ui_icon "$b")"
+  ui_paint fd_icon "$(ui_icon "$b")"
 }
 
 # ── header (used at top of every command output) ───────────────────────────

@@ -324,13 +324,21 @@ cmd_show() {
 
   # ── header: icon + slug, then title as h1, then metadata ──
   echo
-  printf '  %s  %s\n' "$(ui_status_icon "$b")" "$(ui_bright "$slug")"
-  printf '  %s\n' "$title"
+  printf '  %s  %s\n' "$(ui_status_icon "$b")" "$(ui_paint fd_title "$slug")"
+  printf '  %s\n' "$(ui_paint fd_title "$title")"
   echo
-  ui_kv 10 "status"  "$status"
-  ui_kv 10 "updated" "$(ui_date_relative "$updated") · $(ui_date_short "$updated")"
-  ui_kv 10 "created" "$(ui_date_short "$created")"
-  [[ -n "$reason" ]] && ui_kv 10 "reason" "$reason"
+  printf '  %s  %s\n' \
+    "$(printf '%-10s' "$(ui_dim "status")")" \
+    "$(ui_paint "$(ui_bucket_color "$b")" "$status")"
+  printf '  %s  %s\n' \
+    "$(printf '%-10s' "$(ui_dim "updated")")" \
+    "$(ui_paint fd_updated "$(ui_date_relative "$updated") · $(ui_date_full "$updated")")"
+  printf '  %s  %s\n' \
+    "$(printf '%-10s' "$(ui_dim "created")")" \
+    "$(ui_paint fd_created "$(ui_date_full "$created")")"
+  [[ -n "$reason" ]] && printf '  %s  %s\n' \
+    "$(printf '%-10s' "$(ui_dim "reason")")" \
+    "$(ui_paint "$(ui_bucket_color "$b")" "$reason")"
   echo
 
   # ── proposal preview: first N content lines, dim, blanks collapsed ──
@@ -514,8 +522,8 @@ build_full_row() {
   local b="$1" title="$2" upd_epoch="$3" crt_epoch="$4"
 
   local cols=${COLUMNS:-$(tput cols 2>/dev/null || echo 100)}
-  (( cols > 130 )) && cols=130
-  local bucket_w=12 created_w=10 updated_w=11
+  (( cols > 140 )) && cols=140
+  local bucket_w=12 created_w=18 updated_w=11
   local title_w=$(( cols - bucket_w - created_w - updated_w - 10 ))
   (( title_w < 20 )) && title_w=20
 
@@ -523,7 +531,7 @@ build_full_row() {
   if [[ "$crt_epoch" != "0" ]]; then
     local iso; iso=$(date -u -r "$crt_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
                 || date -u -d "@$crt_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
-    created_str=$(ui_date_format "$iso" "+%b %-d")
+    created_str=$(ui_date_full "$iso")
   else
     created_str="?"
   fi
@@ -540,9 +548,9 @@ build_full_row() {
   printf '%s  %s  %s  %s  %s' \
     "$(ui_status_icon "$b")" \
     "$(ui_paint "$(ui_bucket_color "$b")" "$(printf '%-*s' "$bucket_w" "$b")")" \
-    "$(ui_bright "$(printf '%-*s' "$title_w" "$t_t")")" \
-    "$(ui_dim "$(printf '%-*s' "$created_w" "$created_str")")" \
-    "$(ui_dim "$(printf '%-*s' "$updated_w" "$updated_str")")"
+    "$(ui_paint fd_title "$(printf '%-*s' "$title_w" "$t_t")")" \
+    "$(ui_paint fd_created "$(printf '%-*s' "$created_w" "$created_str")")" \
+    "$(ui_paint fd_updated "$(printf '%-*s' "$updated_w" "$updated_str")")"
 }
 
 # Linear lookup: find the slug for a selected picker line.
@@ -636,9 +644,9 @@ horizontal_action_bar() {
     local i
     for i in 0 1 2; do
       if (( i == idx )); then
-        printf '%s    ' "$(ui_paint accent "▸ ${labels[$i]}")" >&2
+        printf '%s    ' "$(ui_bright "▸ ${labels[$i]}")" >&2
       else
-        printf '%s    ' "$(ui_dim "  ${labels[$i]}")" >&2
+        printf '%s    ' "$(ui_paint fd_chrome "  ${labels[$i]}")" >&2
       fi
     done
 
@@ -738,25 +746,25 @@ ui_bucket_view() {
       slugs+=("$slug")
     done <<< "$page_rows"
 
-    (( page > 1 ))     && { entries+=("◀ Previous page");      slugs+=(""); }
-    (( page < pages )) && { entries+=("▶ Next page");          slugs+=(""); }
-                          { entries+=("← Back to all changes"); slugs+=(""); }
+    (( page > 1 ))     && { entries+=("$(ui_paint fd_chrome "◀ Previous page")");      slugs+=(""); }
+    (( page < pages )) && { entries+=("$(ui_paint fd_chrome "▶ Next page")");          slugs+=(""); }
+                          { entries+=("$(ui_paint fd_chrome "← Back to all changes")"); slugs+=(""); }
 
     local pick
     pick=$(printf '%s\n' "${entries[@]}" \
       | gum filter --header "Filter $bucket (type to search · ↵ to open)" --indicator='▸') \
       || return
 
-    case "$pick" in
+    local pick_clean; pick_clean=$(_norm_picker_line "$pick")
+    case "$pick_clean" in
       "◀ Previous page") page=$((page - 1)) ;;
       "▶ Next page")     page=$((page + 1)) ;;
       "← Back"*)         return ;;
       *)
-        local picknorm; picknorm=$(_norm_picker_line "$pick")
         local i slug="" enorm
         for i in "${!entries[@]}"; do
           enorm=$(_norm_picker_line "${entries[$i]}")
-          [[ "$enorm" == "$picknorm" ]] && { slug="${slugs[$i]}"; break; }
+          [[ "$enorm" == "$pick_clean" ]] && { slug="${slugs[$i]}"; break; }
         done
         [[ -n "$slug" ]] && ui_drill "$slug"
         ;;
@@ -764,8 +772,9 @@ ui_bucket_view() {
   done
 }
 
-# Sentinel labels for the action buttons (kept as the prefix the dispatch
-# case-statement matches; values include the icon for visual display).
+# Sentinel labels (plain — used in case patterns AFTER _norm_picker_line
+# strips ANSI). Display values are produced via ui_paint fd_chrome when
+# building picker entries.
 ACT_ADD='+  Add new change'
 ACT_RELOAD='⟳  Reload'
 ACT_EXIT='⏻  Exit'
@@ -793,7 +802,7 @@ build_main_entries() {
       PICKER_SLUGS+=("$slug")
     done <<< "$show"
     if (( n > limit )); then
-      PICKER_ENTRIES+=("⋯  +$((n - limit)) more in $b")
+      PICKER_ENTRIES+=("$(ui_paint fd_chrome "⋯  +$((n - limit)) more in $b")")
       PICKER_SLUGS+=("")
     fi
   done
@@ -801,11 +810,11 @@ build_main_entries() {
   # Visual separator + action buttons at the bottom of the picker.
   PICKER_ENTRIES+=("                                                          ")
   PICKER_SLUGS+=("")
-  PICKER_ENTRIES+=("$ACT_ADD")
+  PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_ADD")")
   PICKER_SLUGS+=("")
-  PICKER_ENTRIES+=("$ACT_RELOAD")
+  PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_RELOAD")")
   PICKER_SLUGS+=("")
-  PICKER_ENTRIES+=("$ACT_EXIT")
+  PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_EXIT")")
   PICKER_SLUGS+=("")
 }
 
@@ -853,15 +862,16 @@ cmd_interactive() {
     local pick
     if pick=$(printf '%s\n' "${PICKER_ENTRIES[@]}" \
         | gum filter --header "Type to filter · ↵ open · esc for action bar" --indicator='▸'); then
-      case "$pick" in
+      local pick_clean; pick_clean=$(_norm_picker_line "$pick")
+      case "$pick_clean" in
         "$ACT_ADD")    ui_add_new ;;
         "$ACT_RELOAD") ;;  # loops back
         "$ACT_EXIT")   if gum confirm "Exit foundry?"; then clear; exit 0; fi ;;
         "⋯  +"*" more in "*)
-          local bucket; bucket=$(printf '%s' "$pick" | sed -E 's/^.*more in ([a-z-]+).*$/\1/')
+          local bucket; bucket=$(printf '%s' "$pick_clean" | sed -E 's/^.*more in ([a-z-]+).*$/\1/')
           ui_bucket_view "$bucket"
           ;;
-        '   '*|'')  ;;  # separator row — no-op
+        ''|' '*) ;;  # separator row — no-op
         *)
           local slug; slug=$(lookup_slug_for_entry "$pick")
           [[ -n "$slug" ]] && ui_drill "$slug"
