@@ -124,16 +124,15 @@ ui_divider() {
 }
 
 # ── status icons + per-bucket color ────────────────────────────────────────
-# Emoji circles — every terminal renders these at the exact same width
-# (2 cells, East Asian Wide). Colors are baked into the glyph; ANSI
-# coloring still applies via ui_status_icon but has no effect on emoji.
+# Small consistent-width glyphs — all 1 cell in monospace, accept the
+# smaller visual size in exchange for guaranteed alignment.
 ui_icon() {
   case "$1" in
-    backlog)     printf '⚪' ;;  # U+26AA MEDIUM WHITE CIRCLE
-    in-progress) printf '🟡' ;;  # U+1F7E1 LARGE YELLOW CIRCLE
-    done)        printf '🟢' ;;  # U+1F7E2 LARGE GREEN CIRCLE
-    declined)    printf '🔴' ;;  # U+1F534 LARGE RED CIRCLE
-    *)           printf '⚫' ;;
+    backlog)     printf '○' ;;  # U+25CB WHITE CIRCLE
+    in-progress) printf '⊙' ;;  # U+2299 CIRCLED DOT OPERATOR
+    done)        printf '●' ;;  # U+25CF BLACK CIRCLE
+    declined)    printf '⊗' ;;  # U+2297 CIRCLED TIMES
+    *)           printf '?' ;;
   esac
 }
 
