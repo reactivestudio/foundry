@@ -781,15 +781,21 @@ _build_more_row() {
 
 # Build summary pseudo-row. 3 leading spaces match column-header indent
 # (skip icon column) so the summary aligns with the bucket column.
+# Colors:
+#   "N changes"       → ui_dim (matches column header chrome)
+#   "·" separator     → ui_dim
+#   "<icon> <count>"  → per-bucket color (one painted segment so ANSI
+#                       reset doesn't bleed back to dim)
 _build_summary_row() {
   local total="$1" all_rows="$2"
-  local s="$total changes  "
+  local s
+  s="$(ui_dim "$total changes")"
   local b
   for b in "${BUCKETS[@]}"; do
     local cnt; cnt=$(printf '%s\n' "$all_rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
-    s+="·  $(ui_status_icon "$b") $cnt  "
+    s+="  $(ui_dim '·')  $(ui_paint "$(ui_bucket_color "$b")" "$(ui_icon "$b") $cnt")"
   done
-  printf '   %s' "$(ui_paint fd_chrome "$s")"
+  printf '   %s' "$s"
 }
 
 # ── ui_picker — custom interactive picker ─────────────────────────────────
@@ -858,16 +864,23 @@ ui_picker() {
     local current=-1
     (( n_sel > 0 )) && current="${sel_idx[$cursor]}"
 
-    # Render.
+    # Render. 3 leading spaces before ⌕ so the 'S' of "Search" lands at
+    # column 5 — flush under the 'S' of "STATUS" column header.
     clear
-    printf '\n  %s%s%s\n\n' \
+    printf '\n   %s%s%s\n\n' \
       "$(ui_paint fd_chrome "$prompt_label")" \
       "$(ui_bright "$filter")" \
       "$(ui_paint fd_chrome '▌')"
     local j
     for (( j = 0; j < ${#vis_entries[@]}; j++ )); do
       if (( j == current )); then
-        printf ' %s %s\n' "$(ui_bright '▸')" "${vis_entries[$j]}"
+        # Action items highlight whole entry (icon + label) in bright when
+        # cursor lands on them — strip the original chrome ANSI and repaint.
+        local rendered="${vis_entries[$j]}"
+        if [[ "${vis_types[$j]}" == "action" ]]; then
+          rendered=$(ui_bright "$(printf '%s' "${vis_entries[$j]}" | ui_strip_ansi)")
+        fi
+        printf ' %s %s\n' "$(ui_bright '▸')" "$rendered"
       else
         printf '   %s\n' "${vis_entries[$j]}"
       fi
@@ -962,7 +975,9 @@ build_main_entries() {
       PICKER_ENTRIES+=("$(_build_more_row "$b" "$((n - limit))")")
       PICKER_SLUGS+=("__more__$b")
       PICKER_TYPES+=("action")
-      PICKER_FILTERABLE+=("0")
+      # Filterable=1 so "+N more" hides when the user is searching by text
+      # (its label "+N more items..." rarely matches a query).
+      PICKER_FILTERABLE+=("1")
     fi
   done
 
