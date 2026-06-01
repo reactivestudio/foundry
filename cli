@@ -754,9 +754,15 @@ ui_bucket_view() {
   done
 }
 
+# Sentinel labels for the action buttons (kept as the prefix the dispatch
+# case-statement matches; values include the icon for visual display).
+ACT_ADD='+  Add new change'
+ACT_RELOAD='⟳  Reload'
+ACT_EXIT='⏻  Exit'
+
 # Build picker entries — populates two parallel globals:
 #   PICKER_ENTRIES  — display lines (what gum filter sees & echoes back)
-#   PICKER_SLUGS    — slug per row, "" for "+N more" specials
+#   PICKER_SLUGS    — slug per row, "" for "+N more" / separators / actions
 build_main_entries() {
   PICKER_ENTRIES=()
   PICKER_SLUGS=()
@@ -781,6 +787,16 @@ build_main_entries() {
       PICKER_SLUGS+=("")
     fi
   done
+
+  # Visual separator + action buttons at the bottom of the picker.
+  PICKER_ENTRIES+=("                                                          ")
+  PICKER_SLUGS+=("")
+  PICKER_ENTRIES+=("$ACT_ADD")
+  PICKER_SLUGS+=("")
+  PICKER_ENTRIES+=("$ACT_RELOAD")
+  PICKER_SLUGS+=("")
+  PICKER_ENTRIES+=("$ACT_EXIT")
+  PICKER_SLUGS+=("")
 }
 
 # Interactive REPL — two modes, esc toggles:
@@ -826,12 +842,16 @@ cmd_interactive() {
     build_main_entries
     local pick
     if pick=$(printf '%s\n' "${PICKER_ENTRIES[@]}" \
-        | gum filter --header "Type to filter · ↵ open · esc for actions" --indicator='▸'); then
+        | gum filter --header "Type to filter · ↵ open · esc for action bar" --indicator='▸'); then
       case "$pick" in
+        "$ACT_ADD")    ui_add_new ;;
+        "$ACT_RELOAD") ;;  # loops back
+        "$ACT_EXIT")   if gum confirm "Exit foundry?"; then clear; exit 0; fi ;;
         "⋯  +"*" more in "*)
           local bucket; bucket=$(printf '%s' "$pick" | sed -E 's/^.*more in ([a-z-]+).*$/\1/')
           ui_bucket_view "$bucket"
           ;;
+        '   '*|'')  ;;  # separator row — no-op
         *)
           local slug; slug=$(lookup_slug_for_entry "$pick")
           [[ -n "$slug" ]] && ui_drill "$slug"
@@ -840,7 +860,7 @@ cmd_interactive() {
       continue
     fi
 
-    # ── action mode (entered via esc from filter) ──
+    # ── action mode (esc from filter) — horizontal bar over static list ──
     clear
     render_static_list
     echo

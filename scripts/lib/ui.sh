@@ -124,13 +124,13 @@ ui_divider() {
 }
 
 # ── status icons + per-bucket color ────────────────────────────────────────
-# Same-family glyphs render at consistent widths in monospace fonts.
+# Larger circle glyphs; small marks inside (bullet, ×) rather than full-circle.
 ui_icon() {
   case "$1" in
-    backlog)     printf '○' ;;  # U+25CB WHITE CIRCLE
-    in-progress) printf '⊙' ;;  # U+2299 CIRCLED DOT OPERATOR
-    done)        printf '●' ;;  # U+25CF BLACK CIRCLE
-    declined)    printf '⊗' ;;  # U+2297 CIRCLED TIMES
+    backlog)     printf '◯' ;;  # U+25EF LARGE CIRCLE (large outline)
+    in-progress) printf '⦿' ;;  # U+29BF CIRCLED BULLET (large circle, small dot)
+    done)        printf '⬤' ;;  # U+2B24 BLACK LARGE CIRCLE (large filled)
+    declined)    printf 'ⓧ' ;;  # U+24E7 CIRCLED LATIN SMALL LETTER X (large circle, small ×)
     *)           printf '?' ;;
   esac
 }
