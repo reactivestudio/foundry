@@ -11,6 +11,8 @@ CHANGES_DIR="$FOUNDRY_ROOT/changes"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TRACKING_SH="$SCRIPT_DIR/tracking.sh"
 SM_SH="$SCRIPT_DIR/state-machine.sh"
+# shellcheck source=lib/render.sh
+. "$SCRIPT_DIR/lib/render.sh"
 
 usage() {
   cat >&2 <<'EOF'
@@ -61,22 +63,11 @@ cmd_new() {
   fi
   local dir="$CHANGES_DIR/backlog/$slug"
   "$TRACKING_SH" init "$dir" "$slug" "$title"
-  # placeholder proposal.md — user fills in
   if [[ ! -f "$dir/proposal.md" ]]; then
-    cat > "$dir/proposal.md" <<EOF
-# $title
-
-## Problem
-<one paragraph: что не так / что нужно>
-
-## Constraints
--
-
-## Out of scope
--
-
-## Notes
-EOF
+    render_template \
+      "$CHANGES_DIR/.template/proposal.md" \
+      "$dir/proposal.md" \
+      TITLE="$title"
   fi
   echo "created: $dir"
 }

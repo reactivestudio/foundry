@@ -62,19 +62,24 @@ yaml_set() {
   fi
 }
 
+SCRIPT_DIR_TRACKING="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/render.sh
+. "$SCRIPT_DIR_TRACKING/lib/render.sh"
+
 cmd_init() {
   local dir="$1" slug="$2" title="$3"
   local tracking="$dir/tracking.yaml"
   local history="$dir/history.log"
   local ts; ts=$(now_utc)
+
+  # find .template/ by stripping last two path components from $dir
+  # (e.g. .foundry/changes/backlog/<slug> → .foundry/changes/)
+  local foundry_changes="${FOUNDRY_CHANGES_DIR:-${dir%/*/*}}"
+  local tpl="$foundry_changes/.template/tracking.yaml"
+
   mkdir -p "$dir"
-  cat > "$tracking" <<EOF
-slug: $slug
-title: $title
-status: backlog
-created_at: $ts
-updated_at: $ts
-EOF
+  render_template "$tpl" "$tracking" \
+    SLUG="$slug" TITLE="$title" TIMESTAMP="$ts"
   : > "$history"
   printf '%s\t%s\t%s\t%s\n' "$ts" "user" "created" "in backlog" >> "$history"
 }
