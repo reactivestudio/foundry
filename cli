@@ -504,12 +504,8 @@ pause_for_user() {
   read -r _ || true
 }
 
-# Sentinels for special picker rows. Plain ASCII at the start so the
-# dispatch case-statement matches reliably regardless of ANSI prefix.
-SENT_ADD='[+] Add new change'
-SENT_SORT='[#] Sort'
-SENT_RELOAD='[r] Reload'
-SENT_EXIT='[x] Exit'
+# (Action buttons live in a separate bar — see horizontal_action_bar.
+# Earlier sentinels SENT_ADD/SORT/RELOAD/EXIT were removed in 0.26.0.)
 
 # Format one change row for the picker.
 # Columns: icon, bucket-text, slug, title, created, updated
@@ -607,28 +603,99 @@ ui_add_new() {
   pause_for_user
 }
 
-# Re-pick sort/reverse for the current session.
-ui_sort_picker() {
-  local choice
-  choice=$(gum choose --header "Sort by..." \
-    "updated · newest first" \
-    "updated · oldest first" \
-    "created · newest first" \
-    "created · oldest first" \
-    "slug · A → Z" \
-    "slug · Z → A" \
-    "title · A → Z" \
-    "title · Z → A") || return
-  case "$choice" in
-    "updated · newest first") MAIN_SORT=updated; MAIN_REVERSE=0 ;;
-    "updated · oldest first") MAIN_SORT=updated; MAIN_REVERSE=1 ;;
-    "created · newest first") MAIN_SORT=created; MAIN_REVERSE=0 ;;
-    "created · oldest first") MAIN_SORT=created; MAIN_REVERSE=1 ;;
-    "slug · A → Z")           MAIN_SORT=slug;    MAIN_REVERSE=0 ;;
-    "slug · Z → A")           MAIN_SORT=slug;    MAIN_REVERSE=1 ;;
-    "title · A → Z")          MAIN_SORT=title;   MAIN_REVERSE=0 ;;
-    "title · Z → A")          MAIN_SORT=title;   MAIN_REVERSE=1 ;;
-  esac
+# (Sort picker removed in 0.26.0 per user feedback. Sort is set once
+# from .foundry/config.yaml's default_sort.)
+
+# Horizontal action bar — arrow nav, letter shortcuts, enter selects,
+# esc cancels back to filter mode.
+# Echoes: "0"=Add, "1"=Reload, "2"=Exit, "cancel"=esc.
+horizontal_action_bar() {
+  local labels=("+ Add new" "⟳ Reload" "✕ Exit")
+  local n=3 idx=0
+
+  local stty_save; stty_save=$(stty -g)
+  stty -echo -icanon
+  printf '\033[?25l' >&2  # hide cursor
+  trap 'stty "$stty_save" 2>/dev/null; printf "\033[?25h" >&2' EXIT
+
+  local choice=""
+  while [[ -z "$choice" ]]; do
+    printf '\r\033[K  ' >&2
+    local i
+    for i in 0 1 2; do
+      if (( i == idx )); then
+        printf '%s    ' "$(ui_paint accent "▸ ${labels[$i]}")" >&2
+      else
+        printf '%s    ' "$(ui_dim "  ${labels[$i]}")" >&2
+      fi
+    done
+
+    local key; IFS= read -rsn1 key || break
+    case "$key" in
+      $'\e')
+        local seq
+        IFS= read -rsn1 -t 1 seq 2>/dev/null
+        if [[ "$seq" == '[' ]]; then
+          local dir
+          IFS= read -rsn1 dir
+          case "$dir" in
+            C) idx=$(( (idx + 1) % n )) ;;
+            D) idx=$(( (idx - 1 + n) % n )) ;;
+          esac
+        else
+          choice="cancel"
+        fi ;;
+      '') choice="$idx" ;;
+      '+') choice=0 ;;
+      r|R) choice=1 ;;
+      x|X|q|Q) choice=2 ;;
+    esac
+  done
+
+  stty "$stty_save" 2>/dev/null
+  printf '\033[?25h\n' >&2
+  trap - EXIT
+
+  printf '%s' "$choice"
+}
+
+# Render the list statically (no interaction). Used in action mode
+# so the user keeps context while choosing an action.
+render_static_list() {
+  local rows; rows=$(collect_rows all)
+  if [[ -z "$rows" ]]; then
+    ui_header "Foundry" "empty"
+    ui_info "get started: + Add new"
+    echo
+    return
+  fi
+
+  local total; total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
+  local breakdown=""
+  local b
+  for b in "${BUCKETS[@]}"; do
+    local cnt; cnt=$(printf '%s\n' "$rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
+    breakdown+="$(ui_status_icon "$b") $cnt   "
+  done
+  ui_header "Foundry" "$total · ${breakdown% }"
+
+  local limit; limit="$(config_get list_per_bucket_limit 3)"
+  for b in "${BUCKETS[@]}"; do
+    local bucket_rows; bucket_rows=$(printf '%s\n' "$rows" \
+      | awk -F'\t' -v b="$b" '$1 == b' \
+      | apply_sort "$MAIN_SORT" "$MAIN_REVERSE")
+    [[ -z "$bucket_rows" ]] && continue
+    local n; n=$(printf '%s\n' "$bucket_rows" | wc -l | tr -d ' ')
+    local show="$bucket_rows"
+    (( n > limit )) && show=$(printf '%s\n' "$bucket_rows" | head -n "$limit")
+    while IFS=$'\t' read -r bb slug title _ upd crt; do
+      build_full_row "$bb" "$slug" "$title" "$upd" "$crt"
+      printf '\n'
+    done <<< "$show"
+    if (( n > limit )); then
+      printf '  %s\n' "$(ui_dim "⋯  +$((n - limit)) more in $b")"
+    fi
+  done
 }
 
 # Single-bucket paged view (entered from "+N more" row).
@@ -679,8 +746,8 @@ ui_bucket_view() {
   done
 }
 
-# Build the main picker entries: change rows grouped by bucket (with
-# per-bucket cap collapsing to "⋯ +N more"), then the action buttons.
+# Build picker entries: change rows grouped by bucket, per-bucket cap
+# collapsing to "⋯ +N more". Actions live in horizontal_action_bar.
 build_main_entries() {
   local limit; limit="$(config_get list_per_bucket_limit 3)"
   local rows; rows=$(collect_rows all)
@@ -702,15 +769,12 @@ build_main_entries() {
     fi
   done
 
-  out+=("$SENT_ADD")
-  out+=("$SENT_SORT: $MAIN_SORT $([[ "$MAIN_REVERSE" == 1 ]] && echo '↑' || echo '↓')")
-  out+=("$SENT_RELOAD")
-  out+=("$SENT_EXIT")
-
   printf '%s\n' "${out[@]}"
 }
 
-# Interactive REPL — main entry when called with no args in a TTY.
+# Interactive REPL — two modes, esc toggles:
+#   F = filter mode (gum filter, fuzzy-pick a change)
+#   A = action mode (static list + horizontal action bar)
 cmd_interactive() {
   require_foundry
   if [[ "$UI_MODE" != "interactive" ]]; then
@@ -723,41 +787,36 @@ cmd_interactive() {
   [[ "$(config_get default_reverse false)" == "true" ]] && MAIN_REVERSE=1
 
   trap 'clear; exit 0' INT
-  local esc_streak=0
 
   while true; do
     clear
     local rows; rows=$(collect_rows all)
+
     if [[ -z "$rows" ]]; then
       ui_header "Foundry" "empty"
-      ui_info "get started: foundry new \"your idea\""
       echo
-      if ! gum confirm "Create one now?"; then clear; exit 0; fi
-      ui_add_new
+      if gum confirm "Add your first change now?"; then
+        ui_add_new
+      else
+        clear; exit 0
+      fi
       continue
     fi
 
-    # summary breakdown
+    # ── filter mode ──
     local total; total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
     local breakdown=""
     for b in "${BUCKETS[@]}"; do
       local cnt; cnt=$(printf '%s\n' "$rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
       breakdown+="$(ui_status_icon "$b") $cnt   "
     done
-    local arrow; (( MAIN_REVERSE )) && arrow='↑' || arrow='↓'
-    ui_header "Foundry" "$total · ${breakdown% } · by status · $MAIN_SORT $arrow"
+    ui_header "Foundry" "$total · ${breakdown% }"
 
     local entries; entries=$(build_main_entries)
-
     local pick
     if pick=$(printf '%s\n' "$entries" \
-        | gum filter --header "Type to filter · ↵ to open · esc to back" --indicator='▸'); then
-      esc_streak=0
+        | gum filter --header "Type to filter · ↵ open · esc for actions" --indicator='▸'); then
       case "$pick" in
-        "$SENT_ADD")           ui_add_new ;;
-        "$SENT_SORT"*)         ui_sort_picker ;;
-        "$SENT_RELOAD")        ;;
-        "$SENT_EXIT")          if gum confirm "Exit foundry?"; then clear; exit 0; fi ;;
         "⋯  +"*" more in "*)
           local bucket; bucket=$(printf '%s' "$pick" | sed -E 's/^.*more in ([a-z-]+).*$/\1/')
           ui_bucket_view "$bucket"
@@ -767,13 +826,21 @@ cmd_interactive() {
           [[ -n "$slug" ]] && ui_drill "$slug"
           ;;
       esac
-    else
-      esc_streak=$((esc_streak + 1))
-      if (( esc_streak >= 2 )); then
-        if gum confirm "Exit foundry?"; then clear; exit 0; fi
-        esc_streak=0
-      fi
+      continue
     fi
+
+    # ── action mode (entered via esc from filter) ──
+    clear
+    render_static_list
+    echo
+    echo
+    local choice; choice=$(horizontal_action_bar)
+    case "$choice" in
+      0)      ui_add_new ;;
+      1)      ;;  # reload — loops back to filter
+      2)      if gum confirm "Exit foundry?"; then clear; exit 0; fi ;;
+      cancel) ;;  # esc → back to filter
+    esac
   done
 }
 
