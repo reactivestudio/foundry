@@ -546,11 +546,19 @@ build_full_row() {
 }
 
 # Linear lookup: find the slug for a selected picker line.
+# Normalizes both sides (strips ANSI codes + trailing whitespace)
+# because gum filter strips trailing whitespace from its echoed
+# selection, breaking exact byte-equality with our padded rows.
+_norm_picker_line() {
+  printf '%s' "$1" | sed -E $'s/\033\\[[0-9;]*[a-zA-Z]//g' | sed -E 's/[[:space:]]+$//'
+}
+
 lookup_slug_for_entry() {
-  local target="$1"
-  local i
+  local target; target=$(_norm_picker_line "$1")
+  local i entry
   for i in "${!PICKER_ENTRIES[@]}"; do
-    if [[ "${PICKER_ENTRIES[$i]}" == "$target" ]]; then
+    entry=$(_norm_picker_line "${PICKER_ENTRIES[$i]}")
+    if [[ "$entry" == "$target" ]]; then
       printf '%s' "${PICKER_SLUGS[$i]}"
       return
     fi
@@ -744,9 +752,11 @@ ui_bucket_view() {
       "▶ Next page")     page=$((page + 1)) ;;
       "← Back"*)         return ;;
       *)
-        local i slug=""
+        local picknorm; picknorm=$(_norm_picker_line "$pick")
+        local i slug="" enorm
         for i in "${!entries[@]}"; do
-          [[ "${entries[$i]}" == "$pick" ]] && { slug="${slugs[$i]}"; break; }
+          enorm=$(_norm_picker_line "${entries[$i]}")
+          [[ "$enorm" == "$picknorm" ]] && { slug="${slugs[$i]}"; break; }
         done
         [[ -n "$slug" ]] && ui_drill "$slug"
         ;;
