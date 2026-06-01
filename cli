@@ -768,13 +768,14 @@ _build_header_row() {
 }
 
 # Build a "+N more items..." row formatted like a regular change row,
-# but with the icon column blank.
+# but with the icon AND bucket columns blank. Text uses ui_dim so it
+# reads as secondary/meta versus the brighter title color of real rows.
 _build_more_row() {
   local b="$1" n="$2"
   read -r bw tw cw uw <<< "$(_picker_widths)"
   printf '   %s  %s  %s  %s' \
-    "$(ui_paint "$(ui_bucket_color "$b")" "$(printf '%-*s' "$bw" "$b")")" \
-    "$(ui_paint fd_chrome "$(printf '%-*s' "$tw" "+$n more items...")")" \
+    "$(printf '%-*s' "$bw" "")" \
+    "$(ui_dim "$(printf '%-*s' "$tw" "+$n more items...")")" \
     "$(printf '%-*s' "$cw" "")" \
     "$(printf '%-*s' "$uw" "")"
 }
@@ -822,7 +823,11 @@ ui_picker() {
   local filter="" cursor=0
   local stty_save; stty_save=$(stty -g)
   stty -echo -icanon
-  printf '\033[?25l'
+  # Don't hide the hardware cursor — we want the real terminal cursor at
+  # the input position (it blinks per terminal config). Force blinking
+  # block shape via DECSCUSR so terminals with non-blink defaults
+  # (like some macOS Terminal profiles) still animate.
+  printf '\033[1 q'
 
   PICKER_RESULT_SLUG=""
   PICKER_RESULT_ENTRY=""
@@ -866,11 +871,13 @@ ui_picker() {
 
     # Render. 3 leading spaces before ⌕ so the 'S' of "Search" lands at
     # column 5 — flush under the 'S' of "STATUS" column header.
+    # \033[s saves cursor position right after the filter text; after we
+    # finish drawing the list we \033[u restore so the terminal's
+    # hardware cursor sits at the input (blinking).
     clear
-    printf '\n   %s%s%s\n\n' \
+    printf '\n   %s%s\033[s\n\n' \
       "$(ui_paint fd_chrome "$prompt_label")" \
-      "$(ui_bright "$filter")" \
-      "$(ui_paint fd_chrome '▌')"
+      "$(ui_bright "$filter")"
     local j
     for (( j = 0; j < ${#vis_entries[@]}; j++ )); do
       if (( j == current )); then
@@ -885,6 +892,8 @@ ui_picker() {
         printf '   %s\n' "${vis_entries[$j]}"
       fi
     done
+    # Restore the cursor to the saved input position.
+    printf '\033[u'
 
     # Read 1 key.
     local key
@@ -925,7 +934,8 @@ ui_picker() {
   done
 
   stty "$stty_save" 2>/dev/null
-  printf '\033[?25h'
+  # Restore default cursor shape on exit.
+  printf '\033[0 q'
   return $rc
 }
 
