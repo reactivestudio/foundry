@@ -928,9 +928,10 @@ ui_picker() {
   local filter="" filter_lc="" cursor=0
   local stty_save; stty_save=$(stty -g)
   stty -echo -icanon
-  # Hide the hardware cursor — we draw our own ▌ block so we control its
-  # color (neon purple) and run a soft fade ourselves.  Terminals can't
-  # repaint their native caret, so faking it is the only way.
+  # Hide the hardware cursor — we draw our own ▏ thin bar so we control
+  # its color (fd_search neon purple) and blink rate.  Terminals can't
+  # repaint their native caret with a custom colour, so faking it is
+  # the only way.
   printf '\033[?25l'
 
   PICKER_RESULT_SLUG=""
@@ -971,7 +972,10 @@ ui_picker() {
 
   # Static render fragments.
   local prompt_painted; prompt_painted=$(ui_paint fd_search "$prompt_label")
-  local cursor_arrow;   cursor_arrow=$(ui_bright '▸')
+  # Selector arrow on the cursor row.  ➤ (U+27A4 BLACK RIGHTWARDS
+  # ARROWHEAD) — solid filled, heavier than the previous ▸ small
+  # triangle so the user can see "this is the selected row" at a glance.
+  local cursor_arrow;   cursor_arrow=$(ui_bright '➤')
 
   # Optional N-line header above the search prompt.  Callers set
   # PICKER_HEADER (a fully-painted, ANSI-styled string with embedded
@@ -990,12 +994,12 @@ ui_picker() {
     caret_row=$((3 + _n_header_lines))
   fi
 
-  # ── caret pulse sidecar ──────────────────────────────────────────────────
+  # ── caret blink sidecar ─────────────────────────────────────────────────
   # A background process drives the caret animation while the main loop
-  # blocks on read().  The animator cycles through a 6-phase smooth fade
-  # at row 2, painting a single ▌ glyph per tick.  This decouples cursor
-  # animation from input — read() can block forever on the main loop and
-  # the caret keeps breathing.
+  # blocks on read().  The animator alternates on/off at row $caret_row
+  # — a thin ▏ in fd_search for 1 s, then a blank space for 1 s, ≈ 0.5 Hz
+  # blink.  Decouples cursor animation from input — read() can block
+  # forever on the main loop and the caret keeps blinking.
   #
   # Coordination: before drawing a full frame the main loop SIGSTOPs the
   # animator so its writes can't interleave with the frame's bytes, then
@@ -1017,35 +1021,30 @@ ui_picker() {
       # If the read landed mid-update (file truncated to 0 bytes before
       # the new column was written) OR yielded a non-integer, skip this
       # tick rather than painting at a stale fallback column.  The old
-      # `[[ -z "$col" ]] && col=14` line was the cause of "▌ stuck at
-      # column 14 covering the first typed char" — when the race fired
-      # the caret got nailed to position 14 regardless of filter length.
+      # `[[ -z "$col" ]] && col=14` line was the cause of "caret stuck
+      # at column 14 covering the first typed char" — when the race
+      # fired the caret got nailed to position 14 regardless of filter
+      # length.
       if [[ -z "$col" || ! "$col" =~ ^[0-9]+$ ]]; then
         sleep 2
         continue
       fi
-      # Ten-phase symmetric breath on the purple ramp:
-      #   135 → 141 → 147 → 183 → 189 → 189 → 183 → 147 → 141 → 135
-      # Same hue, gently desaturating to pale lilac then climbing back.
-      # The trough is held for one extra tick (phases 4 & 5 both = 189)
-      # so the dim moment lingers — reads as a real "in / out" breath.
-      # At 2 s / tick the full cycle is ~20 s — extremely slow, more like
-      # a meditation than a blink.  4× slower than the previous 0.5 s tick.
+      # Honest on/off blink (was a 10-phase color breath which read as
+      # "static" rather than "blinking").  Four phases × 500 ms = 2 s
+      # cycle, ≈ 0.5 Hz — slower than the standard 1 Hz cursor blink
+      # most editors use, but matches the user's "медленно" ask.
+      # Glyph is ▏ (U+258F LEFT ONE EIGHTH BLOCK) — ~1 px wide, full
+      # cell height — a thin tall vertical line like a text-editor caret.
+      # Phases 0,1 keep it on (1 s bright), phases 2,3 keep it off (1 s
+      # blank).  Splitting on / off into two ticks each lets us add a
+      # softer fade in/out later if the hard blink feels too abrupt.
       # $caret_row is captured from the parent scope at subshell fork time.
       case "$phase" in
-        0) printf '\033[%s;%sH\033[38;5;135m▌\033[0m' "$caret_row" "$col" ;;
-        1) printf '\033[%s;%sH\033[38;5;141m▌\033[0m' "$caret_row" "$col" ;;
-        2) printf '\033[%s;%sH\033[38;5;147m▌\033[0m' "$caret_row" "$col" ;;
-        3) printf '\033[%s;%sH\033[38;5;183m▌\033[0m' "$caret_row" "$col" ;;
-        4) printf '\033[%s;%sH\033[38;5;189m▌\033[0m' "$caret_row" "$col" ;;
-        5) printf '\033[%s;%sH\033[38;5;189m▌\033[0m' "$caret_row" "$col" ;;
-        6) printf '\033[%s;%sH\033[38;5;183m▌\033[0m' "$caret_row" "$col" ;;
-        7) printf '\033[%s;%sH\033[38;5;147m▌\033[0m' "$caret_row" "$col" ;;
-        8) printf '\033[%s;%sH\033[38;5;141m▌\033[0m' "$caret_row" "$col" ;;
-        9) printf '\033[%s;%sH\033[38;5;135m▌\033[0m' "$caret_row" "$col" ;;
+        0|1) printf '\033[%s;%sH\033[38;5;135m▏\033[0m' "$caret_row" "$col" ;;
+        2|3) printf '\033[%s;%sH \033[0m'              "$caret_row" "$col" ;;
       esac
-      phase=$(( (phase + 1) % 10 ))
-      sleep 2
+      phase=$(( (phase + 1) % 4 ))
+      sleep 0.5
     done
   ) </dev/null >/dev/tty 2>/dev/null &
   local anim_pid=$!
@@ -1106,7 +1105,7 @@ ui_picker() {
       if [[ -n "$picker_header" ]]; then
         frame+=$'   '"${picker_header}"$'\n\n'
       fi
-      frame+=$'   '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;5;135m▌\033[0m\n\n'
+      frame+=$'   '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;5;135m▏\033[0m\n\n'
       local j idx row_render is_cursor
       for (( j = 0; j < ${#vis_idx[@]}; j++ )); do
         idx="${vis_idx[$j]}"
