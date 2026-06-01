@@ -579,35 +579,35 @@ ui_drill() {
   clear
   cmd_show "$slug"
   local b; b=$(find_bucket "$slug") || { pause_for_user; return; }
-  # Icons reflect the target state: same glyphs the user already
-  # learned in the picker, so "Start → ⊙" reads as "moves to in-progress".
-  local ic_inprog="$(ui_paint fd_inprogress "$(ui_icon in-progress)")"
-  local ic_done="$(ui_paint fd_done "$(ui_icon done)")"
-  local ic_back="$(ui_paint fd_backlog "$(ui_icon backlog)")"
-  local ic_decl="$(ui_paint fd_declined "$(ui_icon declined)")"
-  local ic_exit="$(ui_paint fd_chrome '←')"
+  # Action-verb icons, colored to match the target state's brand color.
+  local ic_start="$(ui_paint fd_inprogress '▶')"   # play → start work
+  local ic_finish="$(ui_paint fd_done '✓')"        # check → finish
+  local ic_pause="$(ui_paint fd_backlog '⏸')"     # pause bars → pause
+  local ic_revive="$(ui_paint fd_backlog '↺')"    # counter-rotate → revive
+  local ic_decl="$(ui_paint fd_declined '⊗')"     # circled-times → decline
+  local ic_back="$(ui_paint fd_chrome '←')"        # left arrow → back
 
   local actions=()
   case "$b" in
     backlog)
       actions=(
-        "$ic_inprog Start (move to in-progress)"
+        "$ic_start Start (move to in-progress)"
         "$ic_decl Decline"
-        "$ic_exit Back"
+        "$ic_back Back"
       ) ;;
     in-progress)
       actions=(
-        "$ic_done Finish (move to done)"
-        "$ic_back Pause back to backlog"
+        "$ic_finish Finish (move to done)"
+        "$ic_pause Pause back to backlog"
         "$ic_decl Decline"
-        "$ic_exit Back"
+        "$ic_back Back"
       ) ;;
     done)
-      actions=("$ic_exit Back (terminal — no transitions out)") ;;
+      actions=("$ic_back Back (terminal — no transitions out)") ;;
     declined)
       actions=(
-        "$ic_back Revive (back to backlog)"
-        "$ic_exit Back"
+        "$ic_revive Revive (back to backlog)"
+        "$ic_back Back"
       ) ;;
   esac
   local action
