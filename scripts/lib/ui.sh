@@ -49,7 +49,7 @@ ui_color_code() {
     fd_inprogress)  echo 215 ;;  # warm orange
     fd_done)        echo 121 ;;  # soft mint
     fd_declined)    echo 218 ;;  # pale pink
-    fd_search)      echo 129 ;;  # neon purple — search prompt + cursor block
+    fd_search)      echo 135 ;;  # neon purple (softer #af5fff) — search prompt + cursor
     *)       echo 7 ;;
   esac
 }
