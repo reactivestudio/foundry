@@ -49,6 +49,7 @@ ui_color_code() {
     fd_inprogress)  echo 215 ;;  # warm orange
     fd_done)        echo 121 ;;  # soft mint
     fd_declined)    echo 218 ;;  # pale pink
+    fd_search)      echo 129 ;;  # neon purple — search prompt + cursor block
     *)       echo 7 ;;
   esac
 }
@@ -66,6 +67,17 @@ ui_paint() {
 ui_dim()     { ui_paint dim     "$@"; }
 ui_bright()  { ui_paint primary "$@"; }
 ui_accent()  { ui_paint accent  "$@"; }
+
+# Wrap text with SGR 5 (blink). Modern macOS Terminal, iTerm2, Alacritty and
+# WezTerm honor it; on terminals that ignore SGR 5 the text just stays
+# static (graceful degradation).
+ui_blink() {
+  if [[ "$UI_MODE" == "interactive" ]]; then
+    printf '\033[5m%s\033[25m' "$*"
+  else
+    printf '%s' "$*"
+  fi
+}
 
 # Strip ISO-8601 noise: "2026-06-01T11:39:32Z" → "2026-06-01 11:39:32"
 ui_format_ts() {

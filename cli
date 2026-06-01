@@ -820,42 +820,69 @@ _build_summary_row() {
 ui_picker() {
   local prompt_label="${1:-⌕ Search }"
 
-  local filter="" cursor=0
+  local filter="" filter_lc="" cursor=0
   local stty_save; stty_save=$(stty -g)
   stty -echo -icanon
-  # Don't hide the hardware cursor — we want the real terminal cursor at
-  # the input position (it blinks per terminal config). Force blinking
-  # block shape via DECSCUSR so terminals with non-blink defaults
-  # (like some macOS Terminal profiles) still animate.
-  printf '\033[1 q'
+  # Hide the hardware cursor — we draw our own ▌ block so we control its
+  # color (neon purple) and blink via SGR 5.  The terminal's native cursor
+  # can't be repainted, so faking it is the only way to get a coloured
+  # blinking caret.
+  printf '\033[?25l'
 
   PICKER_RESULT_SLUG=""
   PICKER_RESULT_ENTRY=""
   local rc=0
   local n_total=${#PICKER_ENTRIES[@]}
 
+  # ── per-picker caches built ONCE ─────────────────────────────────────────
+  # The previous version ran `sed` and `tr` through subshells for every
+  # filterable row on every keystroke — visibly slow on lists of 10+
+  # entries.  We pre-derive everything that doesn't depend on the typed
+  # filter or cursor position so the per-frame loop stays in pure bash.
+  #
+  #   entries_lc[i]     — ANSI-stripped, lowercased copy of entry i (for
+  #                       substring filtering); empty when row isn't
+  #                       filterable
+  #   entries_bright[i] — entry i recoloured as bright primary (used when
+  #                       the cursor lands on an action item); empty for
+  #                       non-action rows
+  local -a entries_lc=() entries_bright=()
+  local i stripped
+  for (( i = 0; i < n_total; i++ )); do
+    stripped=""
+    if [[ "${PICKER_FILTERABLE[$i]}" == "1" || "${PICKER_TYPES[$i]}" == "action" ]]; then
+      stripped=$(printf '%s' "${PICKER_ENTRIES[$i]}" | ui_strip_ansi)
+    fi
+    if [[ "${PICKER_FILTERABLE[$i]}" == "1" ]]; then
+      entries_lc[$i]=$(printf '%s' "$stripped" | tr '[:upper:]' '[:lower:]')
+    else
+      entries_lc[$i]=""
+    fi
+    if [[ "${PICKER_TYPES[$i]}" == "action" ]]; then
+      entries_bright[$i]=$(ui_bright "$stripped")
+    else
+      entries_bright[$i]=""
+    fi
+  done
+
+  # Pre-render fragments that never change between frames.  The blinking
+  # caret is the bare ▌ glyph painted neon purple and wrapped in SGR 5/25.
+  local prompt_painted; prompt_painted=$(ui_paint fd_search "$prompt_label")
+  local cursor_block;   cursor_block=$(ui_blink "$(ui_paint fd_search '▌')")
+  local cursor_arrow;   cursor_arrow=$(ui_bright '▸')
+
   while true; do
-    # Build the visible list for this frame.
-    local -a vis_entries=() vis_slugs=() vis_types=() sel_idx=()
-    local i
+    # ── filter pass ───────────────────────────────────────────────────────
+    # vis_idx[j] = original picker index of the j-th visible row.
+    # sel_idx[k] = j-position of the k-th selectable row in vis_idx.
+    local -a vis_idx=() sel_idx=()
     for (( i = 0; i < n_total; i++ )); do
-      local type="${PICKER_TYPES[$i]:-row}"
-      local filt="${PICKER_FILTERABLE[$i]:-0}"
-      local entry="${PICKER_ENTRIES[$i]}"
-
-      if [[ "$filt" == "1" && -n "$filter" ]]; then
-        local stripped sl fl
-        stripped=$(printf '%s' "$entry" | sed -E $'s/\033\\[[0-9;]*[a-zA-Z]//g')
-        sl=$(printf '%s' "$stripped" | tr '[:upper:]' '[:lower:]')
-        fl=$(printf '%s' "$filter"   | tr '[:upper:]' '[:lower:]')
-        [[ "$sl" != *"$fl"* ]] && continue
+      if [[ "${PICKER_FILTERABLE[$i]}" == "1" && -n "$filter_lc" ]]; then
+        [[ "${entries_lc[$i]}" != *"$filter_lc"* ]] && continue
       fi
-
-      vis_entries+=("$entry")
-      vis_slugs+=("${PICKER_SLUGS[$i]}")
-      vis_types+=("$type")
-      if [[ "$type" == "row" || "$type" == "action" ]]; then
-        sel_idx+=("$((${#vis_entries[@]} - 1))")
+      vis_idx+=("$i")
+      if [[ "${PICKER_TYPES[$i]}" == "row" || "${PICKER_TYPES[$i]}" == "action" ]]; then
+        sel_idx+=("$((${#vis_idx[@]} - 1))")
       fi
     done
 
@@ -869,47 +896,43 @@ ui_picker() {
     local current=-1
     (( n_sel > 0 )) && current="${sel_idx[$cursor]}"
 
-    # Render. 3 leading spaces before ⌕ so the 'S' of "Search" lands at
-    # column 5 — flush under the 'S' of "STATUS" column header.
-    # \033[s saves cursor position right after the filter text; after we
-    # finish drawing the list we \033[u restore so the terminal's
-    # hardware cursor sits at the input (blinking).
-    clear
-    printf '\n   %s%s\033[s\n\n' \
-      "$(ui_paint fd_chrome "$prompt_label")" \
-      "$(ui_bright "$filter")"
-    local j
-    for (( j = 0; j < ${#vis_entries[@]}; j++ )); do
+    # ── render the whole frame into ONE buffer, write ONCE ────────────────
+    # Each prior printf went straight to the tty so the terminal repainted
+    # between lines — visible flicker on key repeat.  Single write = single
+    # repaint = zero flicker.  \033[H\033[2J replaces the `clear` binary
+    # call (which was a fork per frame).
+    local frame=$'\033[H\033[2J\n   '"${prompt_painted}$(ui_bright "$filter")${cursor_block}"$'\n\n'
+    local j idx
+    for (( j = 0; j < ${#vis_idx[@]}; j++ )); do
+      idx="${vis_idx[$j]}"
       if (( j == current )); then
-        # Action items highlight whole entry (icon + label) in bright when
-        # cursor lands on them — strip the original chrome ANSI and repaint.
-        local rendered="${vis_entries[$j]}"
-        if [[ "${vis_types[$j]}" == "action" ]]; then
-          rendered=$(ui_bright "$(printf '%s' "${vis_entries[$j]}" | ui_strip_ansi)")
+        if [[ "${PICKER_TYPES[$idx]}" == "action" ]]; then
+          frame+=" ${cursor_arrow} ${entries_bright[$idx]}"$'\n'
+        else
+          frame+=" ${cursor_arrow} ${PICKER_ENTRIES[$idx]}"$'\n'
         fi
-        printf ' %s %s\n' "$(ui_bright '▸')" "$rendered"
       else
-        printf '   %s\n' "${vis_entries[$j]}"
+        frame+="   ${PICKER_ENTRIES[$idx]}"$'\n'
       fi
     done
-    # Restore the cursor to the saved input position.
-    printf '\033[u'
+    printf '%s' "$frame"
 
-    # Read 1 key.
+    # ── input ─────────────────────────────────────────────────────────────
     local key
     IFS= read -rsn1 key || { rc=1; break; }
     if [[ -z "$key" ]]; then
       if (( n_sel > 0 )); then
-        PICKER_RESULT_SLUG="${vis_slugs[$current]}"
-        PICKER_RESULT_ENTRY="${vis_entries[$current]}"
+        local orig_idx="${vis_idx[$current]}"
+        PICKER_RESULT_SLUG="${PICKER_SLUGS[$orig_idx]}"
+        PICKER_RESULT_ENTRY="${PICKER_ENTRIES[$orig_idx]}"
       fi
       break
     fi
     case "$key" in
       $'\e')
-        # Arrow key (ESC [ A/B) or bare ESC. macOS bash 3.2 doesn't accept
-        # fractional `-t 0.1` so we use stty min/time (100ms timeout per
-        # read) to peek the rest of the sequence without blocking forever.
+        # Arrow key (ESC [ A/B) or bare ESC.  Bash 3.2 has no fractional
+        # `read -t`; stty min/time gives us a 100 ms peek for the rest of
+        # the escape sequence without blocking.
         stty -icanon min 0 time 1
         local seq="" dir=""
         IFS= read -rsn1 seq
@@ -918,7 +941,6 @@ ui_picker() {
         fi
         stty -icanon min 1 time 0
         if [[ "$seq" == '[' ]]; then
-          # Wrap-around: down at end → top, up at top → end.
           case "$dir" in
             A) (( n_sel > 0 )) && cursor=$(( (cursor - 1 + n_sel) % n_sel )) ;;
             B) (( n_sel > 0 )) && cursor=$(( (cursor + 1) % n_sel )) ;;
@@ -927,15 +949,21 @@ ui_picker() {
           rc=1; break
         fi ;;
       $'\x7f'|$'\b')
-        filter="${filter%?}"; cursor=0 ;;
+        filter="${filter%?}"
+        filter_lc="${filter_lc%?}"
+        cursor=0 ;;
       [[:print:]])
-        filter+="$key"; cursor=0 ;;
+        filter+="$key"
+        # tr fork happens once per keypress (human-paced), not per render
+        # frame — that's why we cache filter_lc instead of recomputing it
+        # in the filter loop.
+        filter_lc+=$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')
+        cursor=0 ;;
     esac
   done
 
   stty "$stty_save" 2>/dev/null
-  # Restore default cursor shape on exit.
-  printf '\033[0 q'
+  printf '\033[?25h'  # show the hardware cursor again
   return $rc
 }
 
