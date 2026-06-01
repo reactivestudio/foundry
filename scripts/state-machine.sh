@@ -21,7 +21,8 @@ set -euo pipefail
 FOUNDRY_ROOT="${FOUNDRY_ROOT:-$PWD/.foundry}"
 CHANGES_DIR="$FOUNDRY_ROOT/changes"
 
-VALID_BUCKETS=(backlog in-progress done declined)
+# shellcheck source=lib/constants.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/constants.sh"
 
 usage() {
   cat >&2 <<'EOF'
@@ -35,7 +36,7 @@ EOF
 
 is_valid_bucket() {
   local b="$1"
-  for v in "${VALID_BUCKETS[@]}"; do
+  for v in "${BUCKETS[@]}"; do
     [[ "$b" == "$v" ]] && return 0
   done
   return 1
@@ -106,7 +107,7 @@ cmd_check_serial() {
 }
 
 cmd_list_buckets() {
-  printf '%s\n' "${VALID_BUCKETS[@]}"
+  printf '%s\n' "${BUCKETS[@]}"
 }
 
 main() {

@@ -17,6 +17,9 @@ FOUNDRY_ROOT="${FOUNDRY_ROOT:-$PWD/.foundry}"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 SRC_TEMPLATE="$PLUGIN_ROOT/.template"
 
+# shellcheck source=lib/constants.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/constants.sh"
+
 if [[ ! -d "$SRC_TEMPLATE" ]]; then
   echo "no template source at $SRC_TEMPLATE" >&2
   echo "(set CLAUDE_PLUGIN_ROOT or run from inside the plugin)" >&2
@@ -24,7 +27,7 @@ if [[ ! -d "$SRC_TEMPLATE" ]]; then
 fi
 
 # bucket dirs with .gitkeep
-for b in backlog in-progress done declined; do
+for b in "${BUCKETS[@]}"; do
   mkdir -p "$FOUNDRY_ROOT/changes/$b"
   [[ -f "$FOUNDRY_ROOT/changes/$b/.gitkeep" ]] || : > "$FOUNDRY_ROOT/changes/$b/.gitkeep"
 done

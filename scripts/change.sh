@@ -13,6 +13,8 @@ TRACKING_SH="$SCRIPT_DIR/tracking.sh"
 SM_SH="$SCRIPT_DIR/state-machine.sh"
 # shellcheck source=lib/render.sh
 . "$SCRIPT_DIR/lib/render.sh"
+# shellcheck source=lib/constants.sh
+. "$SCRIPT_DIR/lib/constants.sh"
 
 usage() {
   cat >&2 <<'EOF'
@@ -41,7 +43,7 @@ valid_slug() {
 # Echo bucket containing slug, or empty + nonzero exit if not found.
 find_bucket() {
   local slug="$1"
-  for b in backlog in-progress done declined; do
+  for b in "${BUCKETS[@]}"; do
     if [[ -d "$CHANGES_DIR/$b/$slug" ]]; then
       echo "$b"
       return 0
@@ -112,7 +114,7 @@ cmd_move() {
 cmd_list() {
   require_foundry
   local filter="${1:-all}"
-  local buckets=(backlog in-progress done declined)
+  local buckets=("${BUCKETS[@]}")
   if [[ "$filter" != "all" ]]; then
     buckets=("$filter")
   fi
