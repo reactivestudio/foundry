@@ -986,21 +986,27 @@ ui_picker() {
     while [[ -f "$anim_col_file" ]]; do
       col=$(<"$anim_col_file" 2>/dev/null) || break
       [[ -z "$col" ]] && col=14
-      # Six-phase breath: 135 → 141 → 147 → 183 → 147 → 141 → (back to 135).
-      # All on the purple ramp — same hue, gently desaturating then back to
-      # full neon.  Eye reads it as a soft pulse, not a hard blink.  At
-      # 150 ms / tick the full cycle is ~900 ms — close to natural breath.
+      # Ten-phase symmetric breath on the purple ramp:
+      #   135 → 141 → 147 → 183 → 189 → 189 → 183 → 147 → 141 → 135
+      # Same hue, gently desaturating to pale lilac then climbing back.
+      # The trough is held for one extra tick (phases 4 & 5 both = 189)
+      # so the dim moment lingers — reads as a real "in / out" breath.
+      # At 250 ms / tick the full cycle is ~2.5 s, comfortable to look at.
       # $caret_row is captured from the parent scope at subshell fork time.
       case "$phase" in
         0) printf '\033[%s;%sH\033[38;5;135m▌\033[0m' "$caret_row" "$col" ;;
         1) printf '\033[%s;%sH\033[38;5;141m▌\033[0m' "$caret_row" "$col" ;;
         2) printf '\033[%s;%sH\033[38;5;147m▌\033[0m' "$caret_row" "$col" ;;
         3) printf '\033[%s;%sH\033[38;5;183m▌\033[0m' "$caret_row" "$col" ;;
-        4) printf '\033[%s;%sH\033[38;5;147m▌\033[0m' "$caret_row" "$col" ;;
-        5) printf '\033[%s;%sH\033[38;5;141m▌\033[0m' "$caret_row" "$col" ;;
+        4) printf '\033[%s;%sH\033[38;5;189m▌\033[0m' "$caret_row" "$col" ;;
+        5) printf '\033[%s;%sH\033[38;5;189m▌\033[0m' "$caret_row" "$col" ;;
+        6) printf '\033[%s;%sH\033[38;5;183m▌\033[0m' "$caret_row" "$col" ;;
+        7) printf '\033[%s;%sH\033[38;5;147m▌\033[0m' "$caret_row" "$col" ;;
+        8) printf '\033[%s;%sH\033[38;5;141m▌\033[0m' "$caret_row" "$col" ;;
+        9) printf '\033[%s;%sH\033[38;5;135m▌\033[0m' "$caret_row" "$col" ;;
       esac
-      phase=$(( (phase + 1) % 6 ))
-      sleep 0.15
+      phase=$(( (phase + 1) % 10 ))
+      sleep 0.25
     done
   ) </dev/null >/dev/tty 2>/dev/null &
   local anim_pid=$!
@@ -1054,35 +1060,66 @@ ui_picker() {
         frame+=$'    '"${picker_header}"$'\n\n'
       fi
       frame+=$'    '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;5;135m▌\033[0m\n\n'
-      local j idx row_render
+      local j idx row_render is_cursor
       for (( j = 0; j < ${#vis_idx[@]}; j++ )); do
         idx="${vis_idx[$j]}"
-        # Filter-match title highlight: if the user is typing and the
-        # row's lowercase title contains the filter, rebuild the row from
-        # LEFT + highlighted-title + RIGHT.  Otherwise use the pre-rendered
-        # PICKER_ENTRIES[idx].
-        if [[ -n "$filter_lc" && "${PICKER_TYPES[$idx]}" == "row" \
-              && -n "${title_lc[$idx]}" && "${title_lc[$idx]}" == *"$filter_lc"* ]]; then
-          local _t="${PICKER_TITLE[$idx]}" _tw="${PICKER_TITLE_W[$idx]}"
-          local _lc="${title_lc[$idx]}"
-          local _before_lc="${_lc%%"$filter_lc"*}"
-          local _pos=${#_before_lc} _mlen=${#filter_lc}
-          local _pre="${_t:0:_pos}"
-          local _mat="${_t:_pos:_mlen}"
-          local _suf="${_t:_pos+_mlen}"
-          local _vlen=${#_t} _pad=$((_tw - _vlen))
-          (( _pad < 0 )) && _pad=0
-          local _padding; printf -v _padding '%*s' "$_pad" ''
-          # Title-color prefix, match-color match, back to title-color suffix
-          # + trailing pad, reset.  fd_title=153, fd_match=222.
-          local _hl
-          printf -v _hl '\033[38;5;153m%s\033[38;5;222m%s\033[38;5;153m%s%s\033[0m' \
-            "$_pre" "$_mat" "$_suf" "$_padding"
-          row_render="${PICKER_LEFT[$idx]}${_hl}${PICKER_RIGHT[$idx]}"
+        is_cursor=0
+        (( j == current )) && is_cursor=1
+        # Title color:
+        #   153 = fd_title  (baby blue) when not on cursor
+        #   255 = primary   (bright)    when cursor is on this row
+        # action items get full ANSI-stripped bright via entries_bright (no
+        # column-specific recolouring) — same code path as before.
+        # Row types: when the cursor lands on the row, or when the user is
+        # typing a filter that matches the row's title, we rebuild the
+        # title cell from raw parts (PICKER_TITLE / PICKER_LEFT / PICKER_RIGHT)
+        # so we can paint title-color + optional fd_match (222) highlight.
+        if [[ "${PICKER_TYPES[$idx]}" == "row" ]]; then
+          local _tc=153 _has_match=0
+          (( is_cursor )) && _tc=255
+          if [[ -n "$filter_lc" && -n "${title_lc[$idx]}" \
+                && "${title_lc[$idx]}" == *"$filter_lc"* ]]; then
+            _has_match=1
+          fi
+          if (( _has_match || is_cursor )); then
+            local _t _tw
+            _t="${PICKER_TITLE[$idx]}"
+            _tw="${PICKER_TITLE_W[$idx]}"
+            # NB: split assignments — bash 3.2 evaluates `local a=… b=$((…a…))`
+            # right-to-left through the outer scope, which trips set -u when
+            # `a` doesn't exist there yet.
+            local _vlen _pad _padding
+            _vlen=${#_t}
+            _pad=$((_tw - _vlen))
+            (( _pad < 0 )) && _pad=0
+            printf -v _padding '%*s' "$_pad" ''
+            if (( _has_match )); then
+              local _lc _before_lc _pos _mlen _pre _mat _suf _hl
+              _lc="${title_lc[$idx]}"
+              _before_lc="${_lc%%"$filter_lc"*}"
+              _pos=${#_before_lc}
+              _mlen=${#filter_lc}
+              _pre="${_t:0:_pos}"
+              _mat="${_t:_pos:_mlen}"
+              _suf="${_t:_pos+_mlen}"
+              # title-color prefix → fd_match (222) match → title-color suffix
+              # → trailing pad, reset.  title-color picks 153 or 255.
+              printf -v _hl '\033[38;5;%sm%s\033[38;5;222m%s\033[38;5;%sm%s%s\033[0m' \
+                "$_tc" "$_pre" "$_mat" "$_tc" "$_suf" "$_padding"
+              row_render="${PICKER_LEFT[$idx]}${_hl}${PICKER_RIGHT[$idx]}"
+            else
+              # Cursor on row, no filter match — recolour title to bright.
+              local _ti
+              printf -v _ti '\033[38;5;%sm%s%s\033[0m' "$_tc" "$_t" "$_padding"
+              row_render="${PICKER_LEFT[$idx]}${_ti}${PICKER_RIGHT[$idx]}"
+            fi
+          else
+            row_render="${PICKER_ENTRIES[$idx]}"
+          fi
         else
           row_render="${PICKER_ENTRIES[$idx]}"
         fi
-        if (( j == current )); then
+        if (( is_cursor )); then
           if [[ "${PICKER_TYPES[$idx]}" == "action" ]]; then
             frame+=" ${cursor_arrow} ${entries_bright[$idx]}"$'\n'
           else

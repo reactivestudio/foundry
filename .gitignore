@@ -1,0 +1,16 @@
+# IDE / editor metadata — never tracked.
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS Finder cruft.
+.DS_Store
+
+# Project-local foundry scaffold created by `foundry setup`.
+.foundry/
+
+# Temp / build artifacts.
+*.log
+*.tmp
