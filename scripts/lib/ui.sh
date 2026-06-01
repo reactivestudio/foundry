@@ -125,8 +125,8 @@ ui_date_relative() {
 # Compact absolute: "Mon Jun 1, 11:40"
 ui_date_short() { ui_date_format "$1" "+%a %b %-d, %H:%M"; }
 
-# Full format for the list view: "Mon, May 27 23:30"
-ui_date_full() { ui_date_format "$1" "+%a, %b %-d %H:%M"; }
+# Full format for the list view: "Mon, May 27, 23:30"
+ui_date_full() { ui_date_format "$1" "+%a, %b %-d, %H:%M"; }
 
 # Replace letters with their Unicode small-caps equivalents. Used for
 # column headers and date strings to give a visually-smaller "font"

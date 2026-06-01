@@ -753,6 +753,12 @@ ui_bucket_view() {
     PICKER_FILTERABLE+=("0")
     _picker_meta_empty
 
+    # Branded header with the active bucket as trailing context — the user
+    # sees "foundry · change ledger · ⊙ in-progress (12)" so the screen
+    # tells them exactly what they're filtered into.
+    local _bucket_painted
+    _bucket_painted="$(ui_paint fd_icon "$(ui_icon "$bucket")") $(ui_paint "$(ui_bucket_color "$bucket")" "$bucket")"
+    PICKER_HEADER="$(build_picker_header "${_bucket_painted} $(ui_dim "($total)")")"
     if ui_picker "⌕ Search "; then
       case "$PICKER_RESULT_SLUG" in
         __bv_prev__) page=$((page - 1)) ;;
@@ -773,6 +779,32 @@ ui_bucket_view() {
 ACT_ADD='+  Add new change'
 ACT_RELOAD='⟳  Reload'
 ACT_EXIT='⏻  Exit'
+
+# Build the brand header line shown above the search prompt.  Layout:
+#
+#     ⬢ foundry  ·  change ledger  ·  ⟨context⟩
+#
+# Pieces:
+#   ⬢            — brand mark in neon purple (fd_search) — accent dot
+#   foundry      — app name in bright primary (ui_bright)
+#   ·            — separator in dim
+#   change ledger— static subtitle in dim
+#   ⟨context⟩    — optional caller-supplied trailing context (e.g. the
+#                  current bucket name in its bucket color, or a count)
+#
+# Returns a single ANSI-painted line — caller assigns it to PICKER_HEADER.
+build_picker_header() {
+  local trailing="${1:-}"
+  local out
+  out="$(ui_paint fd_search '⬢')  "
+  out+="$(ui_bright 'foundry')  "
+  out+="$(ui_dim '·')  "
+  out+="$(ui_dim 'change ledger')"
+  if [[ -n "$trailing" ]]; then
+    out+="  $(ui_dim '·')  ${trailing}"
+  fi
+  printf '%s' "$out"
+}
 
 # Helper: column widths used by both build_full_row and the picker
 # header / "+N more" rows so everything aligns.
@@ -920,6 +952,15 @@ ui_picker() {
   local prompt_painted; prompt_painted=$(ui_paint fd_search "$prompt_label")
   local cursor_arrow;   cursor_arrow=$(ui_bright '▸')
 
+  # Optional one-line header above the search prompt.  Callers set
+  # PICKER_HEADER (a fully-painted, ANSI-styled single line) to brand the
+  # screen.  When set, the prompt row shifts from row 2 to row 4 (header
+  # on row 2, blank row 3, prompt row 4) — the caret animator pulses on
+  # whichever row the prompt ends up on.
+  local picker_header="${PICKER_HEADER:-}"
+  local caret_row=2
+  [[ -n "$picker_header" ]] && caret_row=4
+
   # ── caret pulse sidecar ──────────────────────────────────────────────────
   # A background process drives the caret animation while the main loop
   # blocks on read().  The animator cycles through a 6-phase smooth fade
@@ -949,13 +990,14 @@ ui_picker() {
       # All on the purple ramp — same hue, gently desaturating then back to
       # full neon.  Eye reads it as a soft pulse, not a hard blink.  At
       # 150 ms / tick the full cycle is ~900 ms — close to natural breath.
+      # $caret_row is captured from the parent scope at subshell fork time.
       case "$phase" in
-        0) printf '\033[2;%sH\033[38;5;135m▌\033[0m' "$col" ;;
-        1) printf '\033[2;%sH\033[38;5;141m▌\033[0m' "$col" ;;
-        2) printf '\033[2;%sH\033[38;5;147m▌\033[0m' "$col" ;;
-        3) printf '\033[2;%sH\033[38;5;183m▌\033[0m' "$col" ;;
-        4) printf '\033[2;%sH\033[38;5;147m▌\033[0m' "$col" ;;
-        5) printf '\033[2;%sH\033[38;5;141m▌\033[0m' "$col" ;;
+        0) printf '\033[%s;%sH\033[38;5;135m▌\033[0m' "$caret_row" "$col" ;;
+        1) printf '\033[%s;%sH\033[38;5;141m▌\033[0m' "$caret_row" "$col" ;;
+        2) printf '\033[%s;%sH\033[38;5;147m▌\033[0m' "$caret_row" "$col" ;;
+        3) printf '\033[%s;%sH\033[38;5;183m▌\033[0m' "$caret_row" "$col" ;;
+        4) printf '\033[%s;%sH\033[38;5;147m▌\033[0m' "$caret_row" "$col" ;;
+        5) printf '\033[%s;%sH\033[38;5;141m▌\033[0m' "$caret_row" "$col" ;;
       esac
       phase=$(( (phase + 1) % 6 ))
       sleep 0.15
@@ -1004,8 +1046,14 @@ ui_picker() {
       # \033[H\033[2J replaces the external `clear`.  4 leading spaces
       # aligns prompt 'S' with column-header 'S'.  A bright caret glyph
       # is painted here once; the animator will overwrite the same cell
-      # on its next tick to continue the pulse.
-      local frame=$'\033[H\033[2J\n    '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;5;135m▌\033[0m\n\n'
+      # on its next tick to continue the pulse.  When PICKER_HEADER is set
+      # the header sits on row 2 with a blank row 3 buffer, pushing the
+      # prompt down to row 4 (matches caret_row above).
+      local frame=$'\033[H\033[2J\n'
+      if [[ -n "$picker_header" ]]; then
+        frame+=$'    '"${picker_header}"$'\n\n'
+      fi
+      frame+=$'    '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;5;135m▌\033[0m\n\n'
       local j idx row_render
       for (( j = 0; j < ${#vis_idx[@]}; j++ )); do
         idx="${vis_idx[$j]}"
@@ -1222,13 +1270,10 @@ build_main_entries() {
       PICKER_TITLE_W+=("0")
       PICKER_LEFT+=("")
       PICKER_RIGHT+=("")
-      # Small breathing-room pad after "+N more" so the next bucket (or
-      # the summary block) isn't crammed up against it.
-      PICKER_ENTRIES+=("")
-      PICKER_SLUGS+=("")
-      PICKER_TYPES+=("padding")
-      PICKER_FILTERABLE+=("0")
-      _picker_meta_empty
+      # (Used to insert an empty padding row here for breathing room.
+      # Removed in 0.32.5 per user feedback — they asked for half the
+      # vertical gap; in a cell-based terminal we can only go to 0 lines,
+      # which is the closest reduction available.)
     fi
   done
 
@@ -1304,6 +1349,9 @@ cmd_interactive() {
     fi
 
     build_main_entries
+    # Branded header above the search prompt — gives the screen identity
+    # ("you're in foundry") without redundant chrome.
+    PICKER_HEADER="$(build_picker_header)"
     if ui_picker "⌕ Search "; then
       local slug="$PICKER_RESULT_SLUG"
       case "$slug" in
