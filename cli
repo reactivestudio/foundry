@@ -860,9 +860,10 @@ ui_picker() {
 
     # Render.
     clear
-    printf '\n  %s%s\n\n' \
+    printf '\n  %s%s%s\n\n' \
       "$(ui_paint fd_chrome "$prompt_label")" \
-      "$(ui_bright "$filter")"
+      "$(ui_bright "$filter")" \
+      "$(ui_paint fd_chrome '▌')"
     local j
     for (( j = 0; j < ${#vis_entries[@]}; j++ )); do
       if (( j == current )); then
@@ -895,19 +896,18 @@ ui_picker() {
         fi
         stty -icanon min 1 time 0
         if [[ "$seq" == '[' ]]; then
+          # Wrap-around: down at end → top, up at top → end.
           case "$dir" in
-            A) (( cursor > 0 )) && cursor=$((cursor - 1)) ;;
-            B) (( cursor < n_sel - 1 )) && cursor=$((cursor + 1)) ;;
+            A) (( n_sel > 0 )) && cursor=$(( (cursor - 1 + n_sel) % n_sel )) ;;
+            B) (( n_sel > 0 )) && cursor=$(( (cursor + 1) % n_sel )) ;;
           esac
         else
           rc=1; break
         fi ;;
       $'\x7f'|$'\b')
         filter="${filter%?}"; cursor=0 ;;
-      *)
-        if [[ "$key" =~ ^[[:print:]]$ ]]; then
-          filter+="$key"; cursor=0
-        fi ;;
+      [[:print:]])
+        filter+="$key"; cursor=0 ;;
     esac
   done
 
