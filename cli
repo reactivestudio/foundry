@@ -753,12 +753,15 @@ ui_bucket_view() {
     PICKER_FILTERABLE+=("0")
     _picker_meta_empty
 
-    # Branded header with the active bucket as trailing context — the user
-    # sees "foundry · change ledger · ⊙ in-progress (12)" so the screen
-    # tells them exactly what they're filtered into.
-    local _bucket_painted
+    # Two-line branded header.  Line 1 is the constant brand strip.
+    # Line 2 carries this view's context — active bucket badge, range of
+    # rows on screen, and page number.
+    local _bucket_painted _range_lbl _page_lbl _hdr_line2
     _bucket_painted="$(ui_paint fd_icon "$(ui_icon "$bucket")") $(ui_paint "$(ui_bucket_color "$bucket")" "$bucket")"
-    PICKER_HEADER="$(build_picker_header "${_bucket_painted} $(ui_dim "($total)")")"
+    _range_lbl="$(ui_dim "showing ${start}-${end} of ${total}")"
+    _page_lbl="$(ui_dim "page ${page} of ${pages}")"
+    _hdr_line2="${_bucket_painted}  $(ui_dim '·')  ${_range_lbl}  $(ui_dim '·')  ${_page_lbl}"
+    PICKER_HEADER="$(build_picker_header "$_hdr_line2")"
     if ui_picker "⌕ Search "; then
       case "$PICKER_RESULT_SLUG" in
         __bv_prev__) page=$((page - 1)) ;;
@@ -780,28 +783,36 @@ ACT_ADD='+  Add new change'
 ACT_RELOAD='⟳  Reload'
 ACT_EXIT='⏻  Exit'
 
-# Build the brand header line shown above the search prompt.  Layout:
+# Build the brand header shown above the search prompt.  Two lines:
 #
-#     ⬢ foundry  ·  change ledger  ·  ⟨context⟩
+#     ⬢ foundry  ·  change ledger
+#     <caller-supplied second line>
 #
-# Pieces:
-#   ⬢            — brand mark in neon purple (fd_search) — accent dot
-#   foundry      — app name in bright primary (ui_bright)
-#   ·            — separator in dim
+# Line 1 (constant brand row):
+#   ⬢            — brand mark in neon purple (fd_search)
+#   foundry      — app name in bright primary
+#   · ·          — dim separators
 #   change ledger— static subtitle in dim
-#   ⟨context⟩    — optional caller-supplied trailing context (e.g. the
-#                  current bucket name in its bucket color, or a count)
 #
-# Returns a single ANSI-painted line — caller assigns it to PICKER_HEADER.
+# Line 2 (caller-supplied, already painted) carries the screen-specific
+# context — total + per-bucket counts + sort for the main view, active
+# bucket + page info for ui_bucket_view, etc.
+#
+# Indentation: the caller (ui_picker) prepends 4 spaces to line 1; this
+# helper bakes the 4-space indent into the start of line 2 so both lines
+# align to column 5.
+#
+# Returns a string with embedded "\n" between the two lines.  ui_picker
+# counts the newlines to figure out where to put the caret.
 build_picker_header() {
-  local trailing="${1:-}"
+  local line2="${1:-}"
   local out
   out="$(ui_paint fd_search '⬢')  "
   out+="$(ui_bright 'foundry')  "
   out+="$(ui_dim '·')  "
   out+="$(ui_dim 'change ledger')"
-  if [[ -n "$trailing" ]]; then
-    out+="  $(ui_dim '·')  ${trailing}"
+  if [[ -n "$line2" ]]; then
+    out+=$'\n    '"$line2"
   fi
   printf '%s' "$out"
 }
@@ -845,14 +856,15 @@ _build_more_row() {
     "$(printf '%-*s' "$uw" "")"
 }
 
-# Build summary pseudo-row. 3 leading spaces match column-header indent
-# (skip icon column) so the summary aligns with the bucket column.
+# Build inline stats string — used both as a header second-line and as
+# the (now-removed) bottom summary in earlier versions.  Output shape:
+#   "N changes  ·  ○ a  ⊙ b  ● c  ⊗ d"
 # Colors:
-#   "N changes"       → ui_dim (matches column header chrome)
+#   "N changes"       → ui_dim
 #   "·" separator     → ui_dim
-#   "<icon> <count>"  → per-bucket color (one painted segment so ANSI
+#   "<icon> <count>"  → per-bucket color (one painted segment so the ANSI
 #                       reset doesn't bleed back to dim)
-_build_summary_row() {
+_build_stats_inline() {
   local total="$1" all_rows="$2"
   local s
   s="$(ui_dim "$total changes")"
@@ -861,7 +873,22 @@ _build_summary_row() {
     local cnt; cnt=$(printf '%s\n' "$all_rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
     s+="  $(ui_dim '·')  $(ui_paint "$(ui_bucket_color "$b")" "$(ui_icon "$b") $cnt")"
   done
-  printf '   %s' "$s"
+  printf '%s' "$s"
+}
+
+# "Half-row" gap after +N more.  True 0.5-cell vertical spacing isn't a
+# thing in cell-based terminals — rows are atomic units — but a row whose
+# content is a faint ▁ (LOWER ONE EIGHTH BLOCK) line in subtle colour
+# hugs the bottom 1/8 of the cell and reads, perceptually, as a soft
+# shelf rather than a full empty row.  Same row count as an empty pad
+# (1) but ~70-80% lighter visual weight.  Width = bucket + title columns.
+_build_half_gap() {
+  local bw tw cw uw
+  read -r bw tw cw uw <<< "$(_picker_widths)"
+  local gap_w=$((bw + tw + 2))
+  local line; printf -v line '%*s' "$gap_w" ''
+  line="${line// /▁}"
+  printf '   %s' "$(ui_paint subtle "$line")"
 }
 
 # ── ui_picker — custom interactive picker ─────────────────────────────────
@@ -952,14 +979,22 @@ ui_picker() {
   local prompt_painted; prompt_painted=$(ui_paint fd_search "$prompt_label")
   local cursor_arrow;   cursor_arrow=$(ui_bright '▸')
 
-  # Optional one-line header above the search prompt.  Callers set
-  # PICKER_HEADER (a fully-painted, ANSI-styled single line) to brand the
-  # screen.  When set, the prompt row shifts from row 2 to row 4 (header
-  # on row 2, blank row 3, prompt row 4) — the caret animator pulses on
-  # whichever row the prompt ends up on.
+  # Optional N-line header above the search prompt.  Callers set
+  # PICKER_HEADER (a fully-painted, ANSI-styled string with embedded
+  # "\n" between lines) to brand the screen.  When set, the prompt row
+  # shifts down by (1 + n_lines): header occupies rows 2..(1+n_lines),
+  # then a blank, then the prompt on (3 + n_lines).
+  #   no header  → caret_row = 2
+  #   1-line     → caret_row = 4
+  #   2-line     → caret_row = 5
+  # Header line count is derived from \n count in PICKER_HEADER.
   local picker_header="${PICKER_HEADER:-}"
   local caret_row=2
-  [[ -n "$picker_header" ]] && caret_row=4
+  if [[ -n "$picker_header" ]]; then
+    local _nl_only="${picker_header//[^$'\n']}"
+    local _n_header_lines=$((${#_nl_only} + 1))
+    caret_row=$((3 + _n_header_lines))
+  fi
 
   # ── caret pulse sidecar ──────────────────────────────────────────────────
   # A background process drives the caret animation while the main loop
@@ -1307,26 +1342,23 @@ build_main_entries() {
       PICKER_TITLE_W+=("0")
       PICKER_LEFT+=("")
       PICKER_RIGHT+=("")
-      # (Used to insert an empty padding row here for breathing room.
-      # Removed in 0.32.5 per user feedback — they asked for half the
-      # vertical gap; in a cell-based terminal we can only go to 0 lines,
-      # which is the closest reduction available.)
+      # Half-row gap after +N more — a row of ▁ in subtle colour.  The
+      # terminal can't render literal 0.5-cell vertical spacing, but the
+      # bottom-eighth glyph hugs the cell's bottom edge so visually it
+      # reads as a thin shelf between buckets rather than a full empty
+      # row.  See _build_half_gap above for the design note.
+      PICKER_ENTRIES+=("$(_build_half_gap)")
+      PICKER_SLUGS+=("")
+      PICKER_TYPES+=("padding")
+      PICKER_FILTERABLE+=("0")
+      _picker_meta_empty
     fi
   done
 
-  # Padding → summary → padding.
-  PICKER_ENTRIES+=("")
-  PICKER_SLUGS+=("")
-  PICKER_TYPES+=("padding")
-  PICKER_FILTERABLE+=("0")
-  _picker_meta_empty
-
-  PICKER_ENTRIES+=("$(_build_summary_row "$(printf '%s\n' "$rows" | wc -l | tr -d ' ')" "$rows")")
-  PICKER_SLUGS+=("")
-  PICKER_TYPES+=("summary")
-  PICKER_FILTERABLE+=("0")
-  _picker_meta_empty
-
+  # Bottom summary block (padding → summary → padding) removed in 0.32.7:
+  # the stats moved to the header's second line so duplicating them at
+  # the bottom is just noise.  One padding row remains before the action
+  # block so the data list doesn't collide with Add/Reload/Exit.
   PICKER_ENTRIES+=("")
   PICKER_SLUGS+=("")
   PICKER_TYPES+=("padding")
@@ -1386,9 +1418,17 @@ cmd_interactive() {
     fi
 
     build_main_entries
-    # Branded header above the search prompt — gives the screen identity
-    # ("you're in foundry") without redundant chrome.
-    PICKER_HEADER="$(build_picker_header)"
+    # Two-line branded header.  Line 1 is the constant brand strip.
+    # Line 2 carries the dashboard — total count + per-bucket badges + the
+    # current sort, all on one row.  Replaces the bottom summary block.
+    local _total _stats _sort_arrow _sort_lbl _hdr_line2
+    _total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
+    _stats="$(_build_stats_inline "$_total" "$rows")"
+    _sort_arrow='↓'
+    (( MAIN_REVERSE )) && _sort_arrow='↑'
+    _sort_lbl="$(ui_dim "sort: ${MAIN_SORT} ${_sort_arrow}")"
+    _hdr_line2="${_stats}  $(ui_dim '·')  ${_sort_lbl}"
+    PICKER_HEADER="$(build_picker_header "$_hdr_line2")"
     if ui_picker "⌕ Search "; then
       local slug="$PICKER_RESULT_SLUG"
       case "$slug" in
