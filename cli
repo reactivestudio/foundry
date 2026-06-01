@@ -105,8 +105,8 @@ age_of() {
   fi
 }
 
-# Emit a TSV row per change: bucket\tslug\ttitle\tage\tupdated_at_epoch
-# Last column is for sorting; consumers strip it.
+# Emit a TSV row per change:
+#   bucket  slug  title  age_str  updated_epoch  created_epoch
 collect_rows() {
   local filter="${1:-all}"
   local buckets=("${BUCKETS[@]}")
@@ -118,13 +118,14 @@ collect_rows() {
       local slug; slug=$(basename "$entry")
       local title; title=$("$TRACKING_SH" get "$entry" title 2>/dev/null || echo "?")
       local age;   age=$(age_of "$entry")
-      local ts;    ts=$("$TRACKING_SH" get "$entry" updated_at 2>/dev/null || echo "")
-      local epoch=0
-      if [[ -n "$ts" ]]; then
-        epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null \
-              || date -u -d "$ts" +%s 2>/dev/null || echo 0)
-      fi
-      printf '%s\t%s\t%s\t%s\t%s\n' "$b" "$slug" "$title" "$age" "$epoch"
+      local ut;    ut=$("$TRACKING_SH" get "$entry" updated_at 2>/dev/null || echo "")
+      local ct;    ct=$("$TRACKING_SH" get "$entry" created_at 2>/dev/null || echo "")
+      local upd_epoch=0 crt_epoch=0
+      [[ -n "$ut" ]] && upd_epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ut" +%s 2>/dev/null \
+                                  || date -u -d "$ut" +%s 2>/dev/null || echo 0)
+      [[ -n "$ct" ]] && crt_epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ct" +%s 2>/dev/null \
+                                  || date -u -d "$ct" +%s 2>/dev/null || echo 0)
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$b" "$slug" "$title" "$age" "$upd_epoch" "$crt_epoch"
     done
   done
   shopt -u nullglob
@@ -159,10 +160,11 @@ apply_sort() {
   local sort="$1" reverse="$2"
   local order_flag="-r"; [[ "$reverse" == "1" ]] && order_flag=""
   case "$sort" in
-    updated|created) sort -t$'\t' -k5 -n $order_flag ;;
-    slug)            sort -t$'\t' -k2 $order_flag ;;
-    title)           sort -t$'\t' -k3 -f $order_flag ;;
-    *)               cat ;;
+    updated) sort -t$'\t' -k5 -n $order_flag ;;
+    created) sort -t$'\t' -k6 -n $order_flag ;;
+    slug)    sort -t$'\t' -k2 $order_flag ;;
+    title)   sort -t$'\t' -k3 -f $order_flag ;;
+    *)       cat ;;
   esac
 }
 
@@ -196,8 +198,8 @@ render_bucket_section() {
   fi
 
   read -r slug_w title_w upd_w <<< "$(col_widths)"
-  while IFS=$'\t' read -r bb slug title _ epoch; do
-    render_row "$bb" "$slug" "$title" "$epoch" "$slug_w" "$title_w" "$upd_w"
+  while IFS=$'\t' read -r bb slug title _ upd _crt; do
+    render_row "$bb" "$slug" "$title" "$upd" "$slug_w" "$title_w" "$upd_w"
   done <<< "$show"
 
   if (( n > limit )); then
@@ -253,8 +255,8 @@ cmd_list() {
     fi
     ui_header "Foundry" "$(ui_status "$filter") · $n · sort: $sort $arrow"
     read -r slug_w title_w upd_w <<< "$(col_widths)"
-    while IFS=$'\t' read -r bb slug title _ epoch; do
-      render_row "$bb" "$slug" "$title" "$epoch" "$slug_w" "$title_w" "$upd_w"
+    while IFS=$'\t' read -r bb slug title _ upd _crt; do
+      render_row "$bb" "$slug" "$title" "$upd" "$slug_w" "$title_w" "$upd_w"
     done < <(printf '%s\n' "$bucket_rows" | apply_sort "$sort" "$reverse")
     echo
     return 0
@@ -496,49 +498,70 @@ cmd_setup() {
   bash "$SETUP_SH" "$@"
 }
 
-# Build the picker row format used by `gum filter`.
-build_picker_line() {
-  local b="$1" slug="$2" title="$3" epoch="$4"
-  local rel="?"
-  if [[ "$epoch" != "0" ]]; then
-    local iso
-    iso=$(date -u -r "$epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
-       || date -u -d "@$epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "")
-    [[ -n "$iso" ]] && rel=$(ui_date_relative "$iso")
-  fi
-  printf '%s  %-28s  %-40s  %s\n' \
-    "$(ui_icon "$b")" \
-    "$(ui_truncate 28 "$slug")" \
-    "$(ui_truncate 40 "$title")" \
-    "$rel"
-}
-
 # Press-any-key gate; used between an action's output and the next redraw.
 pause_for_user() {
   printf '\n  %s ' "$(ui_dim 'press ↵ to continue')"
   read -r _ || true
 }
 
-# Pick a change → show → action menu.
-ui_pick_and_act() {
-  local rows; rows=$(collect_rows all | sort -t$'\t' -k5 -nr)
-  [[ -z "$rows" ]] && return
+# Sentinels for special picker rows. Plain ASCII at the start so the
+# dispatch case-statement matches reliably regardless of ANSI prefix.
+SENT_ADD='[+] Add new change'
+SENT_SORT='[#] Sort'
+SENT_RELOAD='[r] Reload'
+SENT_EXIT='[x] Exit'
 
-  local lines=()
-  while IFS=$'\t' read -r b slug title _ epoch; do
-    lines+=("$(build_picker_line "$b" "$slug" "$title" "$epoch")")
-  done <<< "$rows"
+# Format one change row for the picker.
+# Columns: icon, bucket-text, slug, title, created, updated
+build_full_row() {
+  local b="$1" slug="$2" title="$3" upd_epoch="$4" crt_epoch="$5"
 
-  local pick
-  pick=$(printf '%s\n' "${lines[@]}" \
-    | gum filter --header "Pick a change (type to filter)" --indicator='▸') || return
+  local cols=${COLUMNS:-$(tput cols 2>/dev/null || echo 100)}
+  (( cols > 130 )) && cols=130
+  local bucket_w=12 slug_w=24 created_w=10 updated_w=11
+  local title_w=$(( cols - bucket_w - slug_w - created_w - updated_w - 12 ))
+  (( title_w < 16 )) && title_w=16
 
-  local slug; slug=$(printf '%s' "$pick" | awk '{print $2}')
-  [[ -z "$slug" ]] && return
+  local created_str updated_str
+  if [[ "$crt_epoch" != "0" ]]; then
+    local iso; iso=$(date -u -r "$crt_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+                || date -u -d "@$crt_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
+    created_str=$(ui_date_format "$iso" "+%b %-d")
+  else
+    created_str="?"
+  fi
+  if [[ "$upd_epoch" != "0" ]]; then
+    local iso; iso=$(date -u -r "$upd_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+                || date -u -d "@$upd_epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
+    updated_str=$(ui_date_relative "$iso")
+  else
+    updated_str="?"
+  fi
 
+  local s_t; s_t=$(ui_truncate "$slug_w" "$slug")
+  local t_t; t_t=$(ui_truncate "$title_w" "$title")
+
+  printf '%s  %s  %s  %s  %s  %s' \
+    "$(ui_status_icon "$b")" \
+    "$(ui_paint "$(ui_bucket_color "$b")" "$(printf '%-*s' "$bucket_w" "$b")")" \
+    "$(ui_bright "$(printf '%-*s' "$slug_w" "$s_t")")" \
+    "$(printf '%-*s' "$title_w" "$t_t")" \
+    "$(ui_dim "$(printf '%-*s' "$created_w" "$created_str")")" \
+    "$(ui_dim "$(printf '%-*s' "$updated_w" "$updated_str")")"
+}
+
+# Slug column starts after icon + 2sp + bucket_w(12) + 2sp.
+# Use ui_strip_ansi to remove colors before splitting by whitespace.
+parse_slug_from_row() {
+  local line="$1"
+  printf '%s' "$line" | ui_strip_ansi | awk '{print $3}'
+}
+
+# Drill into one change: show + action menu.
+ui_drill() {
+  local slug="$1"
   clear
   cmd_show "$slug"
-
   local b; b=$(find_bucket "$slug") || { pause_for_user; return; }
   local actions=()
   case "$b" in
@@ -549,7 +572,6 @@ ui_pick_and_act() {
   esac
   local action
   action=$(gum choose --header "What next?" "${actions[@]}") || return
-
   case "$action" in
     *"Start"*)
       cmd_move "$slug" --to=in-progress
@@ -570,11 +592,11 @@ ui_pick_and_act() {
         cmd_move "$slug" --to=declined --reason="$reason"
         pause_for_user
       fi ;;
-    *) ;;  # Back / cancel — silent
+    *) ;;
   esac
 }
 
-# Prompt for a title, then create.
+# Prompt for a title → create → return (caller redraws).
 ui_add_new() {
   clear
   ui_header "Foundry" "new change"
@@ -585,7 +607,7 @@ ui_add_new() {
   pause_for_user
 }
 
-# Reconfigure the sort/reverse pair for the current session.
+# Re-pick sort/reverse for the current session.
 ui_sort_picker() {
   local choice
   choice=$(gum choose --header "Sort by..." \
@@ -609,6 +631,85 @@ ui_sort_picker() {
   esac
 }
 
+# Single-bucket paged view (entered from "+N more" row).
+ui_bucket_view() {
+  local bucket="$1"
+  local page=1 per_page; per_page="$(config_get bucket_page_size 20)"
+
+  while true; do
+    local rows; rows=$(collect_rows all | awk -F'\t' -v b="$bucket" '$1 == b' \
+                      | apply_sort "$MAIN_SORT" "$MAIN_REVERSE")
+    local total=0
+    [[ -n "$rows" ]] && total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
+    (( total == 0 )) && return
+    local pages=$(( (total + per_page - 1) / per_page ))
+    (( pages < 1 )) && pages=1
+    local start=$(( (page - 1) * per_page + 1 ))
+    local end=$(( page * per_page ))
+    (( end > total )) && end=$total
+    local page_rows; page_rows=$(printf '%s\n' "$rows" | sed -n "${start},${end}p")
+
+    clear
+    ui_header "Foundry · $(ui_status "$bucket")" "page $page / $pages · $total total"
+    echo
+
+    local entries=()
+    while IFS=$'\t' read -r b slug title _ upd crt; do
+      entries+=("$(build_full_row "$b" "$slug" "$title" "$upd" "$crt")")
+    done <<< "$page_rows"
+
+    (( page > 1 ))     && entries+=("◀ Previous page")
+    (( page < pages )) && entries+=("▶ Next page")
+    entries+=("← Back to all changes")
+
+    local pick
+    pick=$(printf '%s\n' "${entries[@]}" \
+      | gum filter --header "Filter $bucket (type to search · ↵ to open)" --indicator='▸') \
+      || return
+
+    case "$pick" in
+      "◀ Previous page") page=$((page - 1)) ;;
+      "▶ Next page")     page=$((page + 1)) ;;
+      "← Back"*)         return ;;
+      *)
+        local slug; slug=$(parse_slug_from_row "$pick")
+        [[ -n "$slug" ]] && ui_drill "$slug"
+        ;;
+    esac
+  done
+}
+
+# Build the main picker entries: change rows grouped by bucket (with
+# per-bucket cap collapsing to "⋯ +N more"), then the action buttons.
+build_main_entries() {
+  local limit; limit="$(config_get list_per_bucket_limit 3)"
+  local rows; rows=$(collect_rows all)
+
+  local out=()
+  for b in "${BUCKETS[@]}"; do
+    local bucket_rows; bucket_rows=$(printf '%s\n' "$rows" \
+      | awk -F'\t' -v b="$b" '$1 == b' \
+      | apply_sort "$MAIN_SORT" "$MAIN_REVERSE")
+    [[ -z "$bucket_rows" ]] && continue
+    local n; n=$(printf '%s\n' "$bucket_rows" | wc -l | tr -d ' ')
+    local show="$bucket_rows"
+    (( n > limit )) && show=$(printf '%s\n' "$bucket_rows" | head -n "$limit")
+    while IFS=$'\t' read -r bb slug title _ upd crt; do
+      out+=("$(build_full_row "$bb" "$slug" "$title" "$upd" "$crt")")
+    done <<< "$show"
+    if (( n > limit )); then
+      out+=("⋯  +$((n - limit)) more in $b")
+    fi
+  done
+
+  out+=("$SENT_ADD")
+  out+=("$SENT_SORT: $MAIN_SORT $([[ "$MAIN_REVERSE" == 1 ]] && echo '↑' || echo '↓')")
+  out+=("$SENT_RELOAD")
+  out+=("$SENT_EXIT")
+
+  printf '%s\n' "${out[@]}"
+}
+
 # Interactive REPL — main entry when called with no args in a TTY.
 cmd_interactive() {
   require_foundry
@@ -626,23 +727,45 @@ cmd_interactive() {
 
   while true; do
     clear
-    cmd_list --sort="$MAIN_SORT" $([[ "$MAIN_REVERSE" == 1 ]] && echo --reverse)
+    local rows; rows=$(collect_rows all)
+    if [[ -z "$rows" ]]; then
+      ui_header "Foundry" "empty"
+      ui_info "get started: foundry new \"your idea\""
+      echo
+      if ! gum confirm "Create one now?"; then clear; exit 0; fi
+      ui_add_new
+      continue
+    fi
 
-    local action
-    if action=$(gum choose --header "" --cursor='▸ ' --cursor-prefix='' \
-                  "▸ Pick a change" \
-                  "+ Add new change" \
-                  "⇅ Sort: $MAIN_SORT $([[ "$MAIN_REVERSE" == 1 ]] && echo '↑' || echo '↓')" \
-                  "⟳ Reload" \
-                  "✗ Exit"); then
+    # summary breakdown
+    local total; total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
+    local breakdown=""
+    for b in "${BUCKETS[@]}"; do
+      local cnt; cnt=$(printf '%s\n' "$rows" | awk -F'\t' -v b="$b" '$1 == b' | wc -l | tr -d ' ')
+      breakdown+="$(ui_status_icon "$b") $cnt   "
+    done
+    local arrow; (( MAIN_REVERSE )) && arrow='↑' || arrow='↓'
+    ui_header "Foundry" "$total · ${breakdown% } · by status · $MAIN_SORT $arrow"
+
+    local entries; entries=$(build_main_entries)
+
+    local pick
+    if pick=$(printf '%s\n' "$entries" \
+        | gum filter --header "Type to filter · ↵ to open · esc to back" --indicator='▸'); then
       esc_streak=0
-      case "$action" in
-        *"Pick"*)     ui_pick_and_act ;;
-        *"Add new"*)  ui_add_new ;;
-        *"Sort"*)     ui_sort_picker ;;
-        *"Reload"*)   ;;
-        *"Exit"*)
-          if gum confirm "Exit foundry?"; then clear; exit 0; fi ;;
+      case "$pick" in
+        "$SENT_ADD")           ui_add_new ;;
+        "$SENT_SORT"*)         ui_sort_picker ;;
+        "$SENT_RELOAD")        ;;
+        "$SENT_EXIT")          if gum confirm "Exit foundry?"; then clear; exit 0; fi ;;
+        "⋯  +"*" more in "*)
+          local bucket; bucket=$(printf '%s' "$pick" | sed -E 's/^.*more in ([a-z-]+).*$/\1/')
+          ui_bucket_view "$bucket"
+          ;;
+        *)
+          local slug; slug=$(parse_slug_from_row "$pick")
+          [[ -n "$slug" ]] && ui_drill "$slug"
+          ;;
       esac
     else
       esc_streak=$((esc_streak + 1))
@@ -650,7 +773,6 @@ cmd_interactive() {
         if gum confirm "Exit foundry?"; then clear; exit 0; fi
         esc_streak=0
       fi
-      # first esc: silently re-render
     fi
   done
 }

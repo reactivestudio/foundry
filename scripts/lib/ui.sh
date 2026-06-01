@@ -124,14 +124,20 @@ ui_divider() {
 }
 
 # ── status icons + per-bucket color ────────────────────────────────────────
+# Large-circle variants render bigger in most monospace fonts.
 ui_icon() {
   case "$1" in
-    backlog)     printf '○' ;;
-    in-progress) printf '⊙' ;;
-    done)        printf '●' ;;
-    declined)    printf '⊗' ;;
+    backlog)     printf '◯' ;;  # U+25EF LARGE CIRCLE
+    in-progress) printf '⦿' ;;  # U+29BF CIRCLED BULLET
+    done)        printf '⬤' ;;  # U+2B24 BLACK LARGE CIRCLE
+    declined)    printf '⨂' ;;  # U+2A02 N-ARY CIRCLED TIMES
     *)           printf '?' ;;
   esac
+}
+
+# Strip ANSI color codes — used to parse a colored picker row.
+ui_strip_ansi() {
+  sed -E $'s/\033\\[[0-9;]*[a-zA-Z]//g'
 }
 
 ui_bucket_color() {
