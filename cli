@@ -151,8 +151,8 @@ render_row() {
   printf '  %s  %s  %s  %s\n' \
     "$(ui_status_icon "$b")" \
     "$(ui_bright "$(printf '%-*s' "$slug_w" "$s_t")")" \
-    "$(printf '%-*s' "$title_w" "$t_t")" \
-    "$(ui_dim "$(printf '%-*s' "$upd_w" "$rel")")"
+    "$(ui_paint fd_title "$(printf '%-*s' "$title_w" "$t_t")")" \
+    "$(ui_paint fd_updated "$(printf '%-*s' "$upd_w" "$rel")")"
 }
 
 # Apply --sort within a set of rows.
@@ -752,7 +752,7 @@ ui_bucket_view() {
 
     local pick
     pick=$(printf '%s\n' "${entries[@]}" \
-      | gum filter --header "Filter $bucket (type to search · ↵ to open)" --indicator='▸') \
+      | gum filter --no-strip-ansi --header "Filter $bucket (type to search · ↵ to open)" --indicator='▸') \
       || return
 
     local pick_clean; pick_clean=$(_norm_picker_line "$pick")
@@ -861,7 +861,7 @@ cmd_interactive() {
     build_main_entries
     local pick
     if pick=$(printf '%s\n' "${PICKER_ENTRIES[@]}" \
-        | gum filter --header "Type to filter · ↵ open · esc for action bar" --indicator='▸'); then
+        | gum filter --no-strip-ansi --header "Type to filter · ↵ open · esc for action bar" --indicator='▸'); then
       local pick_clean; pick_clean=$(_norm_picker_line "$pick")
       case "$pick_clean" in
         "$ACT_ADD")    ui_add_new ;;
