@@ -42,16 +42,18 @@ ui_color_code() {
     # ── foundry brand palette (user-approved) ──
     fd_icon)        echo 153 ;;  # baby blue — status circles + titles
     fd_title)       echo 153 ;;  # alias for clarity
-    fd_created)     echo '#458B73' ;;  # muted sea-green — created date column
+    fd_created)     echo '#73EC8B' ;;  # mint green — created date column
     fd_updated)     echo 141 ;;  # electric lavender
     fd_chrome)      echo 117 ;;  # sky blue — action buttons + "+N more" + chrome
     fd_backlog)     echo 105 ;;  # soft indigo
     fd_inprogress)  echo 215 ;;  # warm orange
     fd_done)        echo 121 ;;  # soft mint
     fd_declined)    echo 218 ;;  # pale pink
-    fd_search)      echo '#4D2FB2' ;;  # deep neon indigo — search icon + "Search" + caret
+    fd_search)      echo '#FF9760' ;;  # warm orange — search icon + "Search" label
+    fd_caret)       echo '#5B23FF' ;;  # vivid royal purple — search caret (matches brand)
     fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
-    fd_brand)       echo '#443199' ;;  # deep royal purple — star + "Foundry" name
+    fd_brand)       echo '#5B23FF' ;;  # vivid royal purple — star + "Foundry" name
+    fd_project)     echo '#0028FF' ;;  # deep electric blue — project name in header
     fd_more)        echo 103 ;;  # gray with subtle blue lift #8787af — "+N more" rows
     *)       echo 7 ;;
   esac

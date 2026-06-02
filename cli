@@ -697,6 +697,14 @@ ui_bucket_view() {
     PICKER_FILTERABLE+=("0")
     _picker_meta_empty
 
+    # Blank padding row beneath the column header to match the main
+    # view — same "breathing room" requirement from the user.
+    PICKER_ENTRIES+=("")
+    PICKER_SLUGS+=("")
+    PICKER_TYPES+=("padding")
+    PICKER_FILTERABLE+=("0")
+    _picker_meta_empty
+
     # Bucket rows.  Same parts plumbing as build_main_entries so that
     # filter-match title highlighting works here too.
     while IFS=$'\t' read -r bb slug title _ upd crt; do
@@ -759,7 +767,7 @@ ui_bucket_view() {
     local _project _bucket_badge _hdr_line2
     _project=$(basename "$PWD")
     _bucket_badge="$(ui_paint fd_icon "$(ui_icon "$bucket")") $(ui_paint "$(ui_bucket_color "$bucket")" "$bucket")"
-    _hdr_line2="$(ui_dim 'project:')  $(ui_bright "$_project")"
+    _hdr_line2="$(ui_dim 'project:')  $(ui_paint fd_project "$_project")"
     PICKER_HEADER="$(build_picker_header "$_bucket_badge" "$_hdr_line2")"
     if ui_picker "⌕  Search "; then
       case "$PICKER_RESULT_SLUG" in
@@ -803,19 +811,21 @@ build_picker_header() {
   local subtitle="${1:-}"   # already-painted text supplied by the caller
   local line2="${2:-}"      # already-painted text supplied by the caller
   local out
-  # Bold dropped in 0.32.16 — combined with dark truecolor (fd_brand
-  # #443199, luminance ~24 %) iTerm2's default "use bright colors for
-  # bold text" was washing the colour out toward white.  Without bold
-  # the cells render in the exact hex; star/wordmark look thinner but
-  # the colour is honest.
+  # No SGR bold here — combined with the dark-but-vivid truecolor brand
+  # (#5B23FF), iTerm2's default "use bright colors for bold text" was
+  # washing the colour toward white.  Without bold the cells render in
+  # the exact hex; star/wordmark look thinner but the colour is honest.
   out="$(ui_paint fd_brand '★')  "
   out+="$(ui_paint fd_brand 'Foundry')"
   if [[ -n "$subtitle" ]]; then
     out+="  $(ui_dim '·')  ${subtitle}"
   fi
   if [[ -n "$line2" ]]; then
-    # 3-space indent so line 2 starts at column 4, flush under the ★.
-    out+=$'\n   '"$line2"
+    # 6-space indent so line 2 starts at column 7, flush under the 'F'
+    # of Foundry.  Frame prefixes line 1 with 3 spaces (★ at col 4,
+    # F at col 7); line 2 has no frame prefix so we need the indent
+    # baked in here.
+    out+=$'\n      '"$line2"
   fi
   printf '%s' "$out"
 }
@@ -1014,12 +1024,18 @@ ui_picker() {
   local anim_col_file; anim_col_file=$(mktemp -t fdcaret 2>/dev/null || mktemp)
   printf '%d' 14 > "$anim_col_file"
 
+  # Capture caret_row in a child-safe variable.  The subshell forks
+  # with `set +eu` so an unbound `caret_row` shouldn't abort, but
+  # explicit shadow keeps the printf format from receiving an empty
+  # string if anything weird happens with scope across the `&`.
+  local _ar="$caret_row"
   (
     # The subshell inherits set -euo pipefail from the parent; disable so
     # transient failures (kill races on parent shutdown, tmp-file read
     # blips) can't tear down the animator prematurely.
-    set +eu
+    set +euo pipefail
     trap 'exit 0' TERM INT
+    _row="${_ar:-2}"
     phase=0
     while [[ -f "$anim_col_file" ]]; do
       col=$(<"$anim_col_file" 2>/dev/null) || break
@@ -1031,21 +1047,20 @@ ui_picker() {
       # fired the caret got nailed to position 14 regardless of filter
       # length.
       if [[ -z "$col" || ! "$col" =~ ^[0-9]+$ ]]; then
-        sleep 2
+        sleep 1
         continue
       fi
-      # Slow on/off blink.  4-tick cycle (bright/bright/blank/blank) at
-      # 1 s each = 4 s total — 2 s bright, 2 s blank.  Each printf goes
-      # directly to /dev/tty per call (bypasses libc's line-buffered
-      # subshell stdout, which was stranding bytes between sleeps).
-      # Bold dropped — same washout problem the brand line had; the
-      # honest hex (#4D2FB2 via 38;2;77;47;178) renders correctly only
-      # without SGR 1.  $caret_row captured from parent at fork time.
+      # Slow 2-phase blink — 1 s bright, 1 s blank = 2 s total = 0.5 Hz.
+      # Each printf goes directly to /dev/tty per call (bypasses libc's
+      # line-buffered subshell stdout, which was stranding bytes between
+      # sleeps).  Colour is fd_caret (#5B23FF) = vivid royal purple, the
+      # exact match for the brand strip — caret reads as "Foundry's"
+      # rather than a generic system cursor.
       case "$phase" in
-        0|1) printf '\033[%s;%sH\033[38;2;77;47;178m▏\033[0m' "$caret_row" "$col" >/dev/tty ;;
-        2|3) printf '\033[%s;%sH \033[0m'                     "$caret_row" "$col" >/dev/tty ;;
+        0) printf '\033[%s;%sH\033[38;2;91;35;255m▏\033[0m' "$_row" "$col" >/dev/tty ;;
+        1) printf '\033[%s;%sH \033[0m'                     "$_row" "$col" >/dev/tty ;;
       esac
-      phase=$(( (phase + 1) % 4 ))
+      phase=$(( (phase + 1) % 2 ))
       sleep 1
     done
   ) </dev/null >/dev/null 2>/dev/null &
@@ -1107,7 +1122,7 @@ ui_picker() {
       if [[ -n "$picker_header" ]]; then
         frame+=$'   '"${picker_header}"$'\n\n'
       fi
-      frame+=$'   '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;2;77;47;178m▏\033[0m\n\n'
+      frame+=$'   '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;2;91;35;255m▏\033[0m\n\n'
       local j idx row_render is_cursor
       for (( j = 0; j < ${#vis_idx[@]}; j++ )); do
         idx="${vis_idx[$j]}"
@@ -1323,6 +1338,15 @@ build_main_entries() {
   PICKER_FILTERABLE+=("0")
   _picker_meta_empty
 
+  # Blank padding row beneath the column header — the user wanted the
+  # STATUS / TITLE / CREATED / UPDATED strip to breathe before the data
+  # rows start.  Type=padding so the cursor skips it.
+  PICKER_ENTRIES+=("")
+  PICKER_SLUGS+=("")
+  PICKER_TYPES+=("padding")
+  PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
+
   local limit; limit="$(config_get list_per_bucket_limit 3)"
   for b in "${BUCKETS[@]}"; do
     local bucket_rows; bucket_rows=$(printf '%s\n' "$rows" \
@@ -1453,16 +1477,18 @@ cmd_interactive() {
 
     build_main_entries
     # Two-line branded header.
-    #   Line 1: ★ Foundry · code-change lifecycle ledger
+    #   Line 1: ★ Foundry · <descriptive tagline>
     #   Line 2: project: <project-name>
-    # The subtitle describes what foundry IS as a tool — a ledger for
-    # the lifecycle of every code change in the project.  Line 2 keeps
-    # the project anchor in regular text + colour (the ╰─ glyph the
-    # earlier revisions had was explicitly dropped).
+    # The subtitle is a one-line description of what foundry IS as a
+    # tool — "structured ledger for proposing, tracking and shipping
+    # every code change" — enough context to orient a fresh viewer
+    # without scanning the column data.  Line 2 anchors the screen to
+    # the current project (electric-blue fd_project so the project
+    # name pops against the dim 'project:' label).
     local _project _hdr_line2
     _project=$(basename "$PWD")
-    _hdr_line2="$(ui_dim 'project:')  $(ui_bright "$_project")"
-    PICKER_HEADER="$(build_picker_header "$(ui_dim 'code-change lifecycle ledger')" "$_hdr_line2")"
+    _hdr_line2="$(ui_dim 'project:')  $(ui_paint fd_project "$_project")"
+    PICKER_HEADER="$(build_picker_header "$(ui_dim 'structured ledger for proposing, tracking and shipping every code change')" "$_hdr_line2")"
     if ui_picker "⌕  Search "; then
       local slug="$PICKER_RESULT_SLUG"
       case "$slug" in
