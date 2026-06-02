@@ -803,12 +803,13 @@ build_picker_header() {
   local subtitle="${1:-}"   # already-painted text supplied by the caller
   local line2="${2:-}"      # already-painted text supplied by the caller
   local out
-  # Star is bold so its strokes thicken — that's the closest we can get
-  # to "2-3× bigger" within a fixed cell grid (real scaling would need
-  # DEC double-width, which would also scale Foundry — discuss before
-  # opting in).
-  out="$(ui_paint_bold fd_brand '★')  "
-  out+="$(ui_paint_bold fd_brand 'Foundry')"
+  # Bold dropped in 0.32.16 — combined with dark truecolor (fd_brand
+  # #443199, luminance ~24 %) iTerm2's default "use bright colors for
+  # bold text" was washing the colour out toward white.  Without bold
+  # the cells render in the exact hex; star/wordmark look thinner but
+  # the colour is honest.
+  out="$(ui_paint fd_brand '★')  "
+  out+="$(ui_paint fd_brand 'Foundry')"
   if [[ -n "$subtitle" ]]; then
     out+="  $(ui_dim '·')  ${subtitle}"
   fi
@@ -972,10 +973,10 @@ ui_picker() {
     fi
   done
 
-  # Static render fragments.  Prompt is bold so the ⌕ glyph and the
-  # "Search" word both thicken — the closest we get to "bigger" without
-  # leaving the 1-cell grid.  Colour comes from fd_search (#4D2FB2).
-  local prompt_painted; prompt_painted=$(ui_paint_bold fd_search "$prompt_label")
+  # Static render fragments.  Bold dropped in 0.32.16 — same washout
+  # problem as on the brand strip.  Colour from fd_search (#4D2FB2)
+  # renders honestly without bold.
+  local prompt_painted; prompt_painted=$(ui_paint fd_search "$prompt_label")
   # Selector arrow on the cursor row.  ➤ (U+27A4 BLACK RIGHTWARDS
   # ARROWHEAD) — solid filled, heavier than the previous ▸ small
   # triangle so the user can see "this is the selected row" at a glance.
@@ -1033,27 +1034,19 @@ ui_picker() {
         sleep 2
         continue
       fi
-      # Very slow on/off blink — user feedback said the previous 2 s
-      # cycle "wasn't blinking", which was either too subtle to catch
-      # or got stuck in libc stdio buffering.  Two fixes:
-      #
-      #   1. Each printf is redirected directly to /dev/tty (`>/dev/tty`
-      #      per call) — this bypasses the subshell's line-buffered
-      #      stdout FILE*, so the bytes hit the terminal driver
-      #      immediately even without a trailing newline.
-      #   2. Tick rate dropped to 2 s, with 2 ticks each for bright /
-      #      blank → 4 s on, 4 s off, 8 s total cycle (~0.125 Hz).
-      #
-      # Colour is hardcoded truecolor #4D2FB2 (fd_search) — keeps the
-      # hot path free of forks into ui_paint.  Glyph is bold ▏ (SGR 1
-      # + U+258F LEFT ONE EIGHTH BLOCK) — ~1 px wide, full cell tall.
-      # $caret_row is captured from the parent scope at subshell fork.
+      # Slow on/off blink.  4-tick cycle (bright/bright/blank/blank) at
+      # 1 s each = 4 s total — 2 s bright, 2 s blank.  Each printf goes
+      # directly to /dev/tty per call (bypasses libc's line-buffered
+      # subshell stdout, which was stranding bytes between sleeps).
+      # Bold dropped — same washout problem the brand line had; the
+      # honest hex (#4D2FB2 via 38;2;77;47;178) renders correctly only
+      # without SGR 1.  $caret_row captured from parent at fork time.
       case "$phase" in
-        0|1) printf '\033[%s;%sH\033[1;38;2;77;47;178m▏\033[0m' "$caret_row" "$col" >/dev/tty ;;
-        2|3) printf '\033[%s;%sH \033[0m'                       "$caret_row" "$col" >/dev/tty ;;
+        0|1) printf '\033[%s;%sH\033[38;2;77;47;178m▏\033[0m' "$caret_row" "$col" >/dev/tty ;;
+        2|3) printf '\033[%s;%sH \033[0m'                     "$caret_row" "$col" >/dev/tty ;;
       esac
       phase=$(( (phase + 1) % 4 ))
-      sleep 2
+      sleep 1
     done
   ) </dev/null >/dev/null 2>/dev/null &
   local anim_pid=$!
@@ -1114,7 +1107,7 @@ ui_picker() {
       if [[ -n "$picker_header" ]]; then
         frame+=$'   '"${picker_header}"$'\n\n'
       fi
-      frame+=$'   '"${prompt_painted}$(ui_bright "$filter")"$'\033[1;38;2;77;47;178m▏\033[0m\n\n'
+      frame+=$'   '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;2;77;47;178m▏\033[0m\n\n'
       local j idx row_render is_cursor
       for (( j = 0; j < ${#vis_idx[@]}; j++ )); do
         idx="${vis_idx[$j]}"
