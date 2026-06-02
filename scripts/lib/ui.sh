@@ -42,21 +42,20 @@ ui_color_code() {
     # ── foundry brand palette (user-approved) ──
     fd_icon)        echo 153 ;;  # baby blue — status circles + titles
     fd_title)       echo 153 ;;  # alias for clarity
-    fd_created)     echo '#73EC8B' ;;  # mint green — created date column
+    fd_created)     echo 121 ;;  # softer mint #87FFAF — created date column
     fd_updated)     echo 141 ;;  # electric lavender
     fd_chrome)      echo 117 ;;  # sky blue — action buttons + "+N more" + chrome
     fd_backlog)     echo 105 ;;  # soft indigo
     fd_inprogress)  echo 215 ;;  # warm orange
     fd_done)        echo 121 ;;  # soft mint
     fd_declined)    echo 218 ;;  # pale pink
-    # 256-palette codes (not hex) for brand slots — macOS Terminal.app's
+    # 256-palette codes (not hex) for brand + dates — macOS Terminal.app's
     # truecolor pipeline silently desaturates ~half of `\e[38;2;…m`
     # sequences (a known long-standing rendering bug); its built-in 256
     # palette renders reliably.  Each chosen code below is the nearest
-    # palette colour to the truecolor value it replaces, so the visual
-    # identity holds: vivid violet brand, electric-blue project, coral
-    # search.  fd_created stays truecolor — that one's mint #73EC8B
-    # already rendered correctly on the dates column.
+    # palette colour to the original target, so the visual identity
+    # holds: vivid violet brand, electric-blue project, coral search,
+    # softer mint dates.
     fd_search)      echo 208 ;;  # vivid coral-orange #ff8700 — search icon + label
     fd_caret)       echo 99 ;;   # vivid blue-violet #875fff — matches fd_brand
     fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
