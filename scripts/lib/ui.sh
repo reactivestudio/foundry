@@ -42,26 +42,43 @@ ui_color_code() {
     # ── foundry brand palette (user-approved) ──
     fd_icon)        echo 153 ;;  # baby blue — status circles + titles
     fd_title)       echo 153 ;;  # alias for clarity
-    fd_created)     echo 108 ;;  # sage muted #87af87
+    fd_created)     echo '#458B73' ;;  # muted sea-green — created date column
     fd_updated)     echo 141 ;;  # electric lavender
     fd_chrome)      echo 117 ;;  # sky blue — action buttons + "+N more" + chrome
     fd_backlog)     echo 105 ;;  # soft indigo
     fd_inprogress)  echo 215 ;;  # warm orange
     fd_done)        echo 121 ;;  # soft mint
     fd_declined)    echo 218 ;;  # pale pink
-    fd_search)      echo 135 ;;  # neon purple (softer #af5fff) — search prompt + cursor
+    fd_search)      echo '#4D2FB2' ;;  # deep neon indigo — search icon + "Search" + caret
     fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
-    fd_brand)       echo 213 ;;  # muted neon magenta #ff87ff — star + "Foundry" name
+    fd_brand)       echo '#443199' ;;  # deep royal purple — star + "Foundry" name
     fd_more)        echo 103 ;;  # gray with subtle blue lift #8787af — "+N more" rows
     *)       echo 7 ;;
   esac
+}
+
+# Expand a colour code into the SGR fragment that selects it.  Codes
+# beginning with '#' are 6-digit hex truecolor (24-bit) and expand to
+# "38;2;R;G;B"; plain numerics expand to "38;5;N" (256-colour palette).
+# Used by ui_paint / ui_paint_bold so callers can request exact hex
+# values for a few brand-critical slots without giving up the palette
+# names everywhere else.
+_ui_fg_seq() {
+  local c="$1"
+  if [[ "$c" == \#* ]]; then
+    local hex="${c#\#}"
+    printf '38;2;%d;%d;%d' \
+      "$((16#${hex:0:2}))" "$((16#${hex:2:2}))" "$((16#${hex:4:2}))"
+  else
+    printf '38;5;%s' "$c"
+  fi
 }
 
 # ui_paint <color-name> <text...>
 ui_paint() {
   local color; color=$(ui_color_code "$1"); shift
   if [[ "$UI_MODE" == "interactive" ]]; then
-    printf '\033[38;5;%sm%s\033[0m' "$color" "$*"
+    printf '\033[%sm%s\033[0m' "$(_ui_fg_seq "$color")" "$*"
   else
     printf '%s' "$*"
   fi
@@ -71,12 +88,12 @@ ui_dim()     { ui_paint dim     "$@"; }
 ui_bright()  { ui_paint primary "$@"; }
 ui_accent()  { ui_paint accent  "$@"; }
 
-# Same as ui_paint but applies SGR 1 (bold) in addition to the colour.
-# Plain mode passes through as-is.
+# Same as ui_paint but prepends SGR 1 (bold) before the colour.  Plain
+# mode passes through as-is.
 ui_paint_bold() {
   local color; color=$(ui_color_code "$1"); shift
   if [[ "$UI_MODE" == "interactive" ]]; then
-    printf '\033[1;38;5;%sm%s\033[0m' "$color" "$*"
+    printf '\033[1;%sm%s\033[0m' "$(_ui_fg_seq "$color")" "$*"
   else
     printf '%s' "$*"
   fi
