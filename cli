@@ -753,15 +753,17 @@ ui_bucket_view() {
     PICKER_FILTERABLE+=("0")
     _picker_meta_empty
 
-    # Two-line branded header — matching the main view layout so the
-    # eye doesn't have to relearn the strip on bucket drill-down.
-    # Line 2 carries this view's context: active bucket badge, visible
-    # range, and page number, prefixed with the └─ subtitle marker.
-    local _bucket_painted _hdr_line2
-    _bucket_painted="$(ui_paint fd_icon "$(ui_icon "$bucket")") $(ui_paint "$(ui_bucket_color "$bucket")" "$bucket")"
-    _hdr_line2="$(ui_dim '└─')  ${_bucket_painted}"
-    _hdr_line2+="  $(ui_dim "·  showing ${start}-${end} of ${total}  ·  page ${page} of ${pages}")"
-    PICKER_HEADER="$(build_picker_header "$_hdr_line2")"
+    # Two-line branded header matching the main view layout so the eye
+    # doesn't have to relearn the strip on drill-down.
+    #   Line 1: ★ Foundry · ⊙ in-progress
+    #   Line 2: ╰─ ᴘʀᴏᴊᴇᴄᴛ: <project-name>
+    # Range and page info moved out of the header into the bucket-view
+    # summary row below so this strip stays terse.
+    local _project _bucket_badge _hdr_line2
+    _project=$(basename "$PWD")
+    _bucket_badge="$(ui_paint fd_icon "$(ui_icon "$bucket")") $(ui_paint "$(ui_bucket_color "$bucket")" "$bucket")"
+    _hdr_line2="$(ui_dim '╰─')  $(ui_dim "$(ui_small_caps 'project'):")  $(ui_paint fd_chrome "$_project")"
+    PICKER_HEADER="$(build_picker_header "$_bucket_badge" "$_hdr_line2")"
     if ui_picker "⌕  Search "; then
       case "$PICKER_RESULT_SLUG" in
         __bv_prev__) page=$((page - 1)) ;;
@@ -785,36 +787,36 @@ ACT_EXIT='⏻  Exit'
 
 # Build the brand header shown above the search prompt.  Two lines:
 #
-#     ⬢ foundry  ·  change ledger
-#     <caller-supplied second line>
+#     ★ Foundry  ·  <subtitle>
+#        ╰─  ᴘʀᴏᴊᴇᴄᴛ: <name>
 #
-# Line 1 (constant brand row):
-#   ⬢            — brand mark in neon purple (fd_search)
-#   foundry      — app name in bright primary
-#   · ·          — dim separators
-#   change ledger— static subtitle in dim
+# Line 1:
+#   ★            — brand mark in fd_brand (muted neon magenta #ff87ff)
+#   Foundry      — app name, bold, in fd_brand — distinct from every
+#                  other palette colour, intentionally hard to miss
+#   ·            — dim separator
+#   <subtitle>   — caller-supplied per-screen description (dim)
 #
-# Line 2 (caller-supplied, already painted) carries the screen-specific
-# context — total + per-bucket counts + sort for the main view, active
-# bucket + page info for ui_bucket_view, etc.
-#
-# Indentation: the caller (ui_picker) prepends 4 spaces to line 1; this
-# helper bakes the 4-space indent into the start of line 2 so both lines
-# align to column 5.
+# Line 2 (caller-supplied, already painted):
+#   ╰─           — rounded subtitle corner (was └─); the leading 6-space
+#                  indent here vs the 3-space indent on line 1 puts the
+#                  vertical bar of ╰ flush under the F of "Foundry"
+#                  (both at column 7)
+#   <line2>      — typically "ᴘʀᴏᴊᴇᴄᴛ: <name>" composed by the caller
 #
 # Returns a string with embedded "\n" between the two lines.  ui_picker
 # counts the newlines to figure out where to put the caret.
 build_picker_header() {
-  local line2="${1:-}"
+  local subtitle="${1:-}"   # already-painted text supplied by the caller
+  local line2="${2:-}"      # already-painted text supplied by the caller
   local out
-  out="$(ui_paint fd_search '⬢')  "
-  out+="$(ui_bright 'foundry')  "
-  out+="$(ui_dim '·')  "
-  out+="$(ui_dim 'change ledger')"
+  out="$(ui_paint fd_brand '★')  "
+  out+="$(ui_paint_bold fd_brand 'Foundry')"
+  if [[ -n "$subtitle" ]]; then
+    out+="  $(ui_dim '·')  ${subtitle}"
+  fi
   if [[ -n "$line2" ]]; then
-    # 3-space indent matches the picker frame's 3-space prefix so the
-    # subtitle aligns column-wise with line 1 (⬢ at col 4, └─ at col 4).
-    out+=$'\n   '"$line2"
+    out+=$'\n      '"$line2"
   fi
   printf '%s' "$out"
 }
@@ -851,9 +853,11 @@ _build_header_row() {
 _build_more_row() {
   local b="$1" n="$2"
   read -r bw tw cw uw <<< "$(_picker_widths)"
+  # "+N more" text uses fd_more — a gray with a subtle blue lift (#8787af)
+  # so it sits a touch above the dim chrome without screaming for attention.
   printf '   %s  %s  %s  %s' \
     "$(printf '%-*s' "$bw" "")" \
-    "$(ui_dim "$(printf '%-*s' "$tw" "+$n more items...")")" \
+    "$(ui_paint fd_more "$(printf '%-*s' "$tw" "+$n more items...")")" \
     "$(printf '%-*s' "$cw" "")" \
     "$(printf '%-*s' "$uw" "")"
 }
@@ -1450,36 +1454,18 @@ cmd_interactive() {
     fi
 
     build_main_entries
-    # Two-line branded header.  Line 1 is the constant brand strip.
-    # Line 2 carries info that does NOT live anywhere else in the
-    # layout — the bottom summary already shows per-bucket counts, so
-    # repeating them here would be noise.  Instead we surface:
-    #
-    #   └─ <project>  ·  last activity <relative>  ·  sort: <s> <arrow>
-    #
-    # The └─ glyph reads as a "subtitle / continuation" marker
-    # (familiar from tree views) and gives the brand strip a structural
-    # anchor.  Project name = basename(pwd) painted in fd_chrome (sky
-    # blue) so the user spots their location at a glance.  Last
-    # activity = max(updated_epoch) → relative phrasing — tells the
-    # user how fresh the data is without making them scan every row.
-    local _project _last_upd _last_iso _last_rel _sort_arrow _hdr_line2
+    # Two-line branded header.
+    #   Line 1: ★ Foundry · all changes
+    #   Line 2: ╰─ ᴘʀᴏᴊᴇᴄᴛ: <project-name>
+    # The subtitle "all changes" tells you what THIS screen shows;
+    # combined with the Foundry brand it also implies what foundry IS
+    # (a place where all your changes live).  Line 2 is intentionally
+    # minimal — just the project anchor — so the eye lands on the
+    # data list immediately below.
+    local _project _hdr_line2
     _project=$(basename "$PWD")
-    _last_upd=$(printf '%s\n' "$rows" \
-      | awk -F'\t' 'BEGIN{m=0} { if ($5+0 > m+0) m=$5 } END{print m+0}')
-    if [[ "$_last_upd" != "0" ]]; then
-      _last_iso=$(date -u -r "$_last_upd" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
-                || date -u -d "@$_last_upd" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
-                || true)
-      _last_rel="$(ui_date_relative "${_last_iso:-}")"
-    else
-      _last_rel='never'
-    fi
-    _sort_arrow='↓'
-    (( MAIN_REVERSE )) && _sort_arrow='↑'
-    _hdr_line2="$(ui_dim '└─')  $(ui_paint fd_chrome "$_project")"
-    _hdr_line2+="  $(ui_dim "·  last activity ${_last_rel}  ·  sort: ${MAIN_SORT} ${_sort_arrow}")"
-    PICKER_HEADER="$(build_picker_header "$_hdr_line2")"
+    _hdr_line2="$(ui_dim '╰─')  $(ui_dim "$(ui_small_caps 'project'):")  $(ui_paint fd_chrome "$_project")"
+    PICKER_HEADER="$(build_picker_header "$(ui_dim 'all changes')" "$_hdr_line2")"
     if ui_picker "⌕  Search "; then
       local slug="$PICKER_RESULT_SLUG"
       case "$slug" in

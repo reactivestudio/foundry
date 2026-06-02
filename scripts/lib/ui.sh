@@ -51,6 +51,8 @@ ui_color_code() {
     fd_declined)    echo 218 ;;  # pale pink
     fd_search)      echo 135 ;;  # neon purple (softer #af5fff) — search prompt + cursor
     fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
+    fd_brand)       echo 213 ;;  # muted neon magenta #ff87ff — star + "Foundry" name
+    fd_more)        echo 103 ;;  # gray with subtle blue lift #8787af — "+N more" rows
     *)       echo 7 ;;
   esac
 }
@@ -68,6 +70,17 @@ ui_paint() {
 ui_dim()     { ui_paint dim     "$@"; }
 ui_bright()  { ui_paint primary "$@"; }
 ui_accent()  { ui_paint accent  "$@"; }
+
+# Same as ui_paint but applies SGR 1 (bold) in addition to the colour.
+# Plain mode passes through as-is.
+ui_paint_bold() {
+  local color; color=$(ui_color_code "$1"); shift
+  if [[ "$UI_MODE" == "interactive" ]]; then
+    printf '\033[1;38;5;%sm%s\033[0m' "$color" "$*"
+  else
+    printf '%s' "$*"
+  fi
+}
 
 # Wrap text with SGR 5 (blink). Modern macOS Terminal, iTerm2, Alacritty and
 # WezTerm honor it; on terminals that ignore SGR 5 the text just stays
