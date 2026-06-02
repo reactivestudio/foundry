@@ -56,7 +56,7 @@ ui_color_code() {
     # palette colour to the original target, so the visual identity
     # holds: vivid violet brand, electric-blue project, coral search,
     # softer mint dates.
-    fd_search)      echo 208 ;;  # vivid coral-orange #ff8700 — search icon + label
+    fd_search)      echo 99 ;;   # vivid blue-violet #875fff — matches fd_brand (user-aligned)
     fd_caret)       echo 99 ;;   # vivid blue-violet #875fff — matches fd_brand
     fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
     fd_brand)       echo 99 ;;   # vivid blue-violet #875fff — star + "Foundry"

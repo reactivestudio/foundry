@@ -815,8 +815,14 @@ build_picker_header() {
   # (#5B23FF), iTerm2's default "use bright colors for bold text" was
   # washing the colour toward white.  Without bold the cells render in
   # the exact hex; star/wordmark look thinner but the colour is honest.
-  out="$(ui_paint fd_brand '★')  "
-  out+="$(ui_paint fd_brand 'Foundry')"
+  # Bold on ★ and Foundry — re-enabled in 0.32.22.  We removed it in
+  # 0.32.16 because iTerm2's "use bright colors for bold text" was
+  # washing the dark truecolor brand toward white.  The 0.32.19 revert
+  # to 256-palette code 99 plus the user running Terminal.app (whose
+  # bold rendering keeps the colour stable on palette indices) means
+  # bold survives here without the wash.
+  out="$(ui_paint_bold fd_brand '★')  "
+  out+="$(ui_paint_bold fd_brand 'Foundry')"
   if [[ -n "$subtitle" ]]; then
     out+="  $(ui_dim '·')  ${subtitle}"
   fi
