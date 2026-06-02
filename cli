@@ -1057,7 +1057,7 @@ ui_picker() {
       # exact match for the brand strip — caret reads as "Foundry's"
       # rather than a generic system cursor.
       case "$phase" in
-        0) printf '\033[%s;%sH\033[38;2;139;92;246m▏\033[0m' "$_row" "$col" >/dev/tty ;;
+        0) printf '\033[%s;%sH\033[38;5;99m▏\033[0m' "$_row" "$col" >/dev/tty ;;
         1) printf '\033[%s;%sH \033[0m'                     "$_row" "$col" >/dev/tty ;;
       esac
       phase=$(( (phase + 1) % 2 ))
@@ -1122,7 +1122,7 @@ ui_picker() {
       if [[ -n "$picker_header" ]]; then
         frame+=$'   '"${picker_header}"$'\n\n'
       fi
-      frame+=$'   '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;2;139;92;246m▏\033[0m\n\n'
+      frame+=$'   '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;5;99m▏\033[0m\n\n'
       local j idx row_render is_cursor
       for (( j = 0; j < ${#vis_idx[@]}; j++ )); do
         idx="${vis_idx[$j]}"

@@ -49,11 +49,19 @@ ui_color_code() {
     fd_inprogress)  echo 215 ;;  # warm orange
     fd_done)        echo 121 ;;  # soft mint
     fd_declined)    echo 218 ;;  # pale pink
-    fd_search)      echo '#FB923C' ;;  # saturated coral — survives Terminal.app wash
-    fd_caret)       echo '#8B5CF6' ;;  # vivid violet — matches fd_brand
+    # 256-palette codes (not hex) for brand slots — macOS Terminal.app's
+    # truecolor pipeline silently desaturates ~half of `\e[38;2;…m`
+    # sequences (a known long-standing rendering bug); its built-in 256
+    # palette renders reliably.  Each chosen code below is the nearest
+    # palette colour to the truecolor value it replaces, so the visual
+    # identity holds: vivid violet brand, electric-blue project, coral
+    # search.  fd_created stays truecolor — that one's mint #73EC8B
+    # already rendered correctly on the dates column.
+    fd_search)      echo 208 ;;  # vivid coral-orange #ff8700 — search icon + label
+    fd_caret)       echo 99 ;;   # vivid blue-violet #875fff — matches fd_brand
     fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
-    fd_brand)       echo '#8B5CF6' ;;  # vivid violet — star + "Foundry" (luminance ~56%)
-    fd_project)     echo '#3B82F6' ;;  # electric blue — project name (luminance ~52%)
+    fd_brand)       echo 99 ;;   # vivid blue-violet #875fff — star + "Foundry"
+    fd_project)     echo 33 ;;   # electric blue #0087ff — project name in header
     fd_more)        echo 103 ;;  # gray with subtle blue lift #8787af — "+N more" rows
     *)       echo 7 ;;
   esac
