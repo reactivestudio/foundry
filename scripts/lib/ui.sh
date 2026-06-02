@@ -49,11 +49,11 @@ ui_color_code() {
     fd_inprogress)  echo 215 ;;  # warm orange
     fd_done)        echo 121 ;;  # soft mint
     fd_declined)    echo 218 ;;  # pale pink
-    fd_search)      echo '#FF9760' ;;  # warm orange — search icon + "Search" label
-    fd_caret)       echo '#5B23FF' ;;  # vivid royal purple — search caret (matches brand)
+    fd_search)      echo '#FB923C' ;;  # saturated coral — survives Terminal.app wash
+    fd_caret)       echo '#8B5CF6' ;;  # vivid violet — matches fd_brand
     fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
-    fd_brand)       echo '#5B23FF' ;;  # vivid royal purple — star + "Foundry" name
-    fd_project)     echo '#0028FF' ;;  # deep electric blue — project name in header
+    fd_brand)       echo '#8B5CF6' ;;  # vivid violet — star + "Foundry" (luminance ~56%)
+    fd_project)     echo '#3B82F6' ;;  # electric blue — project name (luminance ~52%)
     fd_more)        echo 103 ;;  # gray with subtle blue lift #8787af — "+N more" rows
     *)       echo 7 ;;
   esac
