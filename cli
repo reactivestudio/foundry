@@ -811,16 +811,12 @@ build_picker_header() {
   local subtitle="${1:-}"   # already-painted text supplied by the caller
   local line2="${2:-}"      # already-painted text supplied by the caller
   local out
-  # No SGR bold here — combined with the dark-but-vivid truecolor brand
-  # (#5B23FF), iTerm2's default "use bright colors for bold text" was
-  # washing the colour toward white.  Without bold the cells render in
-  # the exact hex; star/wordmark look thinner but the colour is honest.
-  # Bold on ★ and Foundry — re-enabled in 0.32.22.  We removed it in
-  # 0.32.16 because iTerm2's "use bright colors for bold text" was
-  # washing the dark truecolor brand toward white.  The 0.32.19 revert
-  # to 256-palette code 99 plus the user running Terminal.app (whose
-  # bold rendering keeps the colour stable on palette indices) means
-  # bold survives here without the wash.
+  # ★ and "Foundry" rendered bold via ui_paint_bold.  As of 0.32.23 the
+  # bold SGR is emitted in its own CSI (see ui.sh) — Terminal.app was
+  # silently dropping the bold attribute when bundled with the
+  # extended-foreground SGR in a single CSI in 0.32.22.  The colour
+  # comes from fd_brand → #FF9A86 (light coral) — bright enough that
+  # the truecolor pipeline renders it honestly, no desaturation.
   out="$(ui_paint_bold fd_brand '★')  "
   out+="$(ui_paint_bold fd_brand 'Foundry')"
   if [[ -n "$subtitle" ]]; then
@@ -990,10 +986,18 @@ ui_picker() {
     fi
   done
 
-  # Static render fragments.  Bold dropped in 0.32.16 — same washout
-  # problem as on the brand strip.  Colour from fd_search (#4D2FB2)
-  # renders honestly without bold.
+  # Static render fragments.  ⌕ + "Search" share the brand colour
+  # (fd_search → #FF9A86 light coral); the caret a few columns to the
+  # right is painted in the matching fd_caret slot.
   local prompt_painted; prompt_painted=$(ui_paint fd_search "$prompt_label")
+
+  # Caret SGR fragment — pre-derived once so both the static frame and
+  # the background animator emit identical bytes for the ▏ glyph.  Used
+  # to be hard-coded `\033[38;5;99m` (256-palette violet); now resolves
+  # through fd_caret so the palette change in ui.sh propagates here
+  # without two edits.
+  local _caret_code; _caret_code=$(ui_color_code fd_caret)
+  local _caret_seq; _caret_seq=$(_ui_fg_seq "$_caret_code")
   # Selector arrow on the cursor row.  ➤ (U+27A4 BLACK RIGHTWARDS
   # ARROWHEAD) — solid filled, heavier than the previous ▸ small
   # triangle so the user can see "this is the selected row" at a glance.
@@ -1036,6 +1040,7 @@ ui_picker() {
   # explicit shadow keeps the printf format from receiving an empty
   # string if anything weird happens with scope across the `&`.
   local _ar="$caret_row"
+  local _cs="$_caret_seq"
   (
     # The subshell inherits set -euo pipefail from the parent; disable so
     # transient failures (kill races on parent shutdown, tmp-file read
@@ -1043,6 +1048,7 @@ ui_picker() {
     set +euo pipefail
     trap 'exit 0' TERM INT
     _row="${_ar:-2}"
+    _seq="${_cs:-38;5;99}"
     phase=0
     while [[ -f "$anim_col_file" ]]; do
       col=$(<"$anim_col_file" 2>/dev/null) || break
@@ -1060,12 +1066,12 @@ ui_picker() {
       # Slow 2-phase blink — 1 s bright, 1 s blank = 2 s total = 0.5 Hz.
       # Each printf goes directly to /dev/tty per call (bypasses libc's
       # line-buffered subshell stdout, which was stranding bytes between
-      # sleeps).  Colour is fd_caret (#5B23FF) = vivid royal purple, the
-      # exact match for the brand strip — caret reads as "Foundry's"
-      # rather than a generic system cursor.
+      # sleeps).  Colour comes from fd_caret (currently #FF9A86 light
+      # coral) — matches the brand strip so the caret reads as
+      # "Foundry's" cursor rather than a generic system one.
       case "$phase" in
-        0) printf '\033[%s;%sH\033[38;5;99m▏\033[0m' "$_row" "$col" >/dev/tty ;;
-        1) printf '\033[%s;%sH \033[0m'                     "$_row" "$col" >/dev/tty ;;
+        0) printf '\033[%s;%sH\033[%sm▏\033[0m' "$_row" "$col" "$_seq" >/dev/tty ;;
+        1) printf '\033[%s;%sH \033[0m'         "$_row" "$col"         >/dev/tty ;;
       esac
       phase=$(( (phase + 1) % 2 ))
       sleep 1
@@ -1073,16 +1079,20 @@ ui_picker() {
   ) </dev/null >/dev/null 2>/dev/null &
   local anim_pid=$!
 
-  # Prompt cell layout (0.32.9 — ⌕ shifted 1 column left):
-  #   col 1-3 : leading indent (3 spaces, was 4)
-  #   col 4   : ⌕            (search icon — was col 5)
-  #   col 5-6 : 2 gap spaces (was 1)
-  #   col 7-12: "Search"    (unchanged anchor — aligns with STATUS / foundry)
-  #   col 13  : trailing space
-  #   col 14  : caret
-  # Net: same caret column (14), same PROMPT_COLS, only the icon moved.
-  # caret_col = PROMPT_COLS + 1 + ${#filter}
-  local PROMPT_COLS=13
+  # Prompt cell layout (0.32.23 — extra gap before the caret):
+  #   col 1-3 : leading indent (3 spaces)
+  #   col 4   : ⌕            (search icon)
+  #   col 5-6 : 2 gap spaces
+  #   col 7-12: "Search"    (anchor — aligns with STATUS / foundry)
+  #   col 13  : trailing space   ← from prompt_label "⌕ Search "
+  #   col 14  : breathing space  ← new in 0.32.23 (the explicit ' ' below)
+  #   col 15  : caret  (when filter is empty)
+  # When the user types, the caret slides right by ${#filter} chars,
+  # always with one breathing space between the typed text and ▏ — no
+  # more "Search [foo]▏" gluing.  PROMPT_COLS = 14 so that
+  #   caret_col = PROMPT_COLS + 1 + ${#filter} = 15 (empty),
+  # which matches the static frame's column index.
+  local PROMPT_COLS=14
 
   local needs_full_redraw=1
   local n_sel=0 current=-1
@@ -1129,7 +1139,12 @@ ui_picker() {
       if [[ -n "$picker_header" ]]; then
         frame+=$'   '"${picker_header}"$'\n\n'
       fi
-      frame+=$'   '"${prompt_painted}$(ui_bright "$filter")"$'\033[38;5;99m▏\033[0m\n\n'
+      # NB: explicit ' ' before the caret SGR.  Without it the caret ▏
+      # glues onto either the trailing space of "Search " (when filter
+      # is empty) or the last typed character (when not).  The extra
+      # space lives outside `ui_bright "$filter"` so the caret column
+      # math (PROMPT_COLS = 14) stays in step.
+      frame+=$'   '"${prompt_painted}$(ui_bright "$filter") "$'\033['"${_caret_seq}m"$'▏\033[0m\n\n'
       local j idx row_render is_cursor
       for (( j = 0; j < ${#vis_idx[@]}; j++ )); do
         idx="${vis_idx[$j]}"

@@ -49,19 +49,18 @@ ui_color_code() {
     fd_inprogress)  echo 215 ;;  # warm orange
     fd_done)        echo 121 ;;  # soft mint
     fd_declined)    echo 218 ;;  # pale pink
-    # 256-palette codes (not hex) for brand + dates — macOS Terminal.app's
-    # truecolor pipeline silently desaturates ~half of `\e[38;2;…m`
-    # sequences (a known long-standing rendering bug); its built-in 256
-    # palette renders reliably.  Each chosen code below is the nearest
-    # palette colour to the original target, so the visual identity
-    # holds: vivid violet brand, electric-blue project, coral search,
-    # softer mint dates.
-    fd_search)      echo 99 ;;   # vivid blue-violet #875fff — matches fd_brand (user-aligned)
-    fd_caret)       echo 99 ;;   # vivid blue-violet #875fff — matches fd_brand
-    fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
-    fd_brand)       echo 99 ;;   # vivid blue-violet #875fff — star + "Foundry"
-    fd_project)     echo 33 ;;   # electric blue #0087ff — project name in header
-    fd_more)        echo 103 ;;  # gray with subtle blue lift #8787af — "+N more" rows
+    # Brand strip in truecolor — these are *light* coral/peach tones
+    # (#FF9A86, #FFB399).  Terminal.app's known truecolor desaturation
+    # bug bites dark/mid-luminance hues hardest; pale, bright tones in
+    # the upper-right of the RGB cube reliably render the requested
+    # value.  fd_created stays on 256 because the user previously picked
+    # the "softer mint" palette colour explicitly.
+    fd_search)      echo '#FF9A86' ;;  # light coral — matches fd_brand (user-aligned)
+    fd_caret)       echo '#FF9A86' ;;  # light coral — matches fd_brand
+    fd_match)       echo 222 ;;        # pale gold #ffd787 — search-match highlight in titles
+    fd_brand)       echo '#FF9A86' ;;  # light coral — star + "Foundry"
+    fd_project)     echo '#FFB399' ;;  # lighter peach — project name in header
+    fd_more)        echo 103 ;;        # gray with subtle blue lift #8787af — "+N more" rows
     *)       echo 7 ;;
   esac
 }
@@ -97,12 +96,18 @@ ui_dim()     { ui_paint dim     "$@"; }
 ui_bright()  { ui_paint primary "$@"; }
 ui_accent()  { ui_paint accent  "$@"; }
 
-# Same as ui_paint but prepends SGR 1 (bold) before the colour.  Plain
-# mode passes through as-is.
+# Same as ui_paint but applies SGR 1 (bold).  Plain mode passes through
+# as-is.  We emit SGR 1 in its OWN CSI sequence (rather than the
+# combined `\033[1;38;2;R;G;Bm` form) — macOS Terminal.app's SGR
+# parser handles bold + extended-foreground more reliably when they
+# arrive as two separate CSIs.  Combined form was leaving "Foundry"
+# rendered at regular weight in 0.32.22 even though the bytes were
+# technically valid.  This split form costs one extra `\033[` per
+# painted run, no visible artefact.
 ui_paint_bold() {
   local color; color=$(ui_color_code "$1"); shift
   if [[ "$UI_MODE" == "interactive" ]]; then
-    printf '\033[1;%sm%s\033[0m' "$(_ui_fg_seq "$color")" "$*"
+    printf '\033[1m\033[%sm%s\033[0m' "$(_ui_fg_seq "$color")" "$*"
   else
     printf '%s' "$*"
   fi
