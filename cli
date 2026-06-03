@@ -1904,7 +1904,7 @@ build_detail_entries() {
   if [[ -f "$dir/proposal.md" ]]; then
     _picker_push_padding  # extra spacer (user asked +1 before heading)
     _picker_push_padding
-    _picker_push_info "   $(ui_paint fd_title "⛰  $(ui_small_caps PROPOSAL)")"
+    _picker_push_info "$(ui_paint fd_title "⛰  $(ui_small_caps PROPOSAL)")"
     _picker_push_padding
 
     local _ln _rendered _plain
@@ -1935,7 +1935,7 @@ build_detail_entries() {
   # (3-cell indent + 3-cell picker prefix).
   if [[ -f "$dir/history.log" ]]; then
     _picker_push_padding
-    _picker_push_info "   $(ui_paint fd_title "⛙  $(ui_small_caps HISTORY)")"
+    _picker_push_info "$(ui_paint fd_title "⛙  $(ui_small_caps HISTORY)")"
     _picker_push_padding
 
     _picker_push_info "$(printf '   %s  %s  %s  %s' \
@@ -2032,7 +2032,7 @@ ui_view_proposal() {
     PICKER_RIGHT=()
 
     _picker_push_padding
-    _picker_push_info "   $(ui_paint fd_title "⛰  $(ui_small_caps PROPOSAL)")"
+    _picker_push_info "$(ui_paint fd_title "⛰  $(ui_small_caps PROPOSAL)")"
     _picker_push_padding
 
     local _ln _rendered
