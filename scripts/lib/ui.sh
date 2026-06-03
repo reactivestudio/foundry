@@ -63,7 +63,7 @@ ui_color_code() {
     fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
     fd_brand)       echo 57 ;;   # electric blue-violet #5f00ff — star + "Foundry" + ➤
     fd_project)     echo 57 ;;   # electric blue-violet #5f00ff — bracketed project name
-    fd_more)        echo 103 ;;  # gray with subtle blue lift #8787af — "+N more" rows
+    fd_more)        echo 110 ;;  # muted baby blue #87afd7 — same family as fd_title (153), ~15% darker
     *)       echo 7 ;;
   esac
 }
