@@ -2046,13 +2046,19 @@ ui_view_proposal() {
     _picker_push_info "$(ui_paint fd_title "⛰  $(ui_small_caps PROPOSAL)")"
     _picker_push_padding
 
-    local _ln _rendered
+    local _ln _rendered _plain
     while IFS= read -r _ln || [[ -n "$_ln" ]]; do
       _rendered="$(_render_md_line "$_ln")"
+      _plain="$(_render_md_line_plain "$_ln")"
       if [[ -z "$_rendered" ]]; then
         _picker_push_info ''
       else
-        _picker_push_filtered_info "   $_rendered"
+        # Pass the plain title so the ⌕ search match lights up gold
+        # (fd_match 222) on this screen too — view-proposal had the
+        # plain-title arg missing through 0.33.15, so its highlight
+        # path never fired.  Detail screen always passed it; this
+        # closes the parity.
+        _picker_push_filtered_info "   $_rendered" "$_plain"
       fi
     done < "$dir/proposal.md"
 
