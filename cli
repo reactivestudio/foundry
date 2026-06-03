@@ -530,7 +530,8 @@ pause_for_user() {
 # Columns: icon, bucket-text, title, created, updated
 # build_row_parts — populate per-row globals consumed by build_full_row and
 # by ui_picker (for filter-match title highlighting). Side-effects:
-#   ROW_LEFT       — painted "<icon>  <padded bucket>  "
+#   ROW_LEFT       — painted "<icon>  <padded bucket>  " (icon in fd_icon)
+#   ROW_LEFT_HOVER — same, but icon painted in fd_brand (cursor-on-row)
 #   ROW_TITLE      — raw, ANSI-free, truncated title text (unpadded)
 #   ROW_TITLE_W    — visual width to pad title to (column alignment)
 #   ROW_RIGHT      — painted "  <padded created>  <padded updated>"
@@ -565,9 +566,19 @@ build_row_parts() {
 
   ROW_TITLE=$(ui_truncate "$title_w" "$title")
   ROW_TITLE_W=$title_w
+  local _padded_b; _padded_b=$(printf '%-*s' "$bucket_w" "$b")
+  local _icon_glyph; _icon_glyph=$(ui_icon "$b")
   ROW_LEFT=$(printf '%s  %s  ' \
-    "$(ui_status_icon "$b")" \
-    "$(ui_paint "$(ui_bucket_color "$b")" "$(printf '%-*s' "$bucket_w" "$b")")")
+    "$(ui_paint fd_icon "$_icon_glyph")" \
+    "$(ui_paint "$(ui_bucket_color "$b")" "$_padded_b")")
+  # ROW_LEFT_HOVER: same structure, but the status icon paints in
+  # fd_brand instead of fd_icon — used when the cursor lands on this
+  # row, so icon + title (re-painted in fd_brand by ui_picker) read
+  # as a single selector-coloured pair.  Bucket label keeps its per-
+  # bucket colour so the bucket identity stays legible.
+  ROW_LEFT_HOVER=$(printf '%s  %s  ' \
+    "$(ui_paint fd_brand "$_icon_glyph")" \
+    "$(ui_paint "$(ui_bucket_color "$b")" "$_padded_b")")
   ROW_RIGHT=$(printf '  %s  %s' \
     "$(ui_paint fd_created "$(printf '%-*s' "$created_w" "$created_str")")" \
     "$(ui_paint fd_updated "$(printf '%-*s' "$updated_w" "$updated_str")")")
