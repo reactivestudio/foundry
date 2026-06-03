@@ -694,8 +694,15 @@ ui_drill() {
             pause_for_user
           fi
           ;;
-        __act_back__|'')
+        __act_back__)
           return
+          ;;
+        '')
+          # Empty slug — cursor was on a content row (proposal line
+          # or history entry).  Those rows are selectable so the
+          # filter can land cursor on them, but Enter is a no-op:
+          # loop back, rebuild + re-render, picker re-opens with the
+          # same state.  (Slight flicker; functionally a no-op.)
           ;;
         *) ;;
       esac
@@ -1060,6 +1067,12 @@ ui_picker() {
   # the cursor would land on the prev-page button and Enter would
   # accidentally page backwards.
   local _first_render=1
+  # Filter-changed flag — set when the user types into or backspaces
+  # the search box.  Triggers the same "jump cursor to first 'row'
+  # selectable" logic as _first_render, so typing in search snaps the
+  # cursor onto the first matching content row (proposal line /
+  # history entry in the detail view).  Cleared after the rebuild.
+  local _filter_changed=0
   local stty_save; stty_save=$(stty -g)
   stty -echo -icanon
   # Hide the hardware cursor — we draw our own ▏ thin bar so we control
@@ -1259,12 +1272,19 @@ ui_picker() {
       if (( n_sel == 0 )); then
         cursor=0
       else
-        if (( _first_render )); then
-          # Prefer the first 'row' selectable over the first 'action'
-          # — keeps the cursor away from pagination entries that may
-          # sit above the data rows (see _first_render declaration).
-          # Falls through to cursor=0 if no rows exist (e.g. an empty
-          # bucket showing only action items).
+        if (( _first_render )) || (( _filter_changed )); then
+          # Two conditions, same jump:
+          #   _first_render   — initial cursor placement: skip action
+          #                     items, land on first data row.
+          #   _filter_changed — user typed into / backspaced the search
+          #                     prompt; jump to the first content row
+          #                     that survived the filter so the user
+          #                     immediately sees the match they're
+          #                     looking for highlighted.
+          # Falls through to cursor=0 if no row-type selectables exist
+          # in the filtered set (e.g. all proposal lines hidden by an
+          # unmatched query — cursor lands on the first action, which
+          # for the detail view is "← Back").
           local _k _vi _ei
           for (( _k = 0; _k < n_sel; _k++ )); do
             _vi="${sel_idx[$_k]}"
@@ -1279,6 +1299,7 @@ ui_picker() {
         (( cursor < 0 )) && cursor=0
       fi
       _first_render=0
+      _filter_changed=0
       current=-1
       (( n_sel > 0 )) && current="${sel_idx[$cursor]}"
 
@@ -1465,12 +1486,14 @@ ui_picker() {
       $'\x7f'|$'\b')
         filter="${filter%?}"
         filter_lc="${filter_lc%?}"
-        cursor=0 ;;
+        cursor=0
+        _filter_changed=1 ;;
       [[:print:]])
         filter+="$key"
         # tr fork happens once per keypress (human-paced), not per frame.
         filter_lc+=$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')
-        cursor=0 ;;
+        cursor=0
+        _filter_changed=1 ;;
     esac
     needs_full_redraw=1
   done
@@ -1542,6 +1565,32 @@ _picker_push_action() {
   PICKER_TYPES+=("action")
   PICKER_FILTERABLE+=("0")
   _picker_meta_empty
+}
+
+# Selectable content row — proposal/history line the user can filter
+# and land cursor on.  $1 carries the rendered (ANSI-styled) bytes the
+# picker shows in the neutral case; $2 carries the plain-text title
+# the picker substring-slices for filter-match highlight rebuild and
+# for type-to-filter matching.  Slug is empty so Enter on a content
+# row is a no-op — ui_drill's case dispatcher handles "" as continue
+# (don't exit the detail screen, just re-render).
+#
+# PICKER_LEFT holds a 3-cell leading indent so the match-highlight
+# rebuild lands content at the same column as PICKER_ENTRIES rendered
+# in the neutral case (the picker adds its own 3-cell prefix in
+# front of PICKER_LEFT).  PICKER_TITLE_W = visual cells in the plain
+# title (good enough for ASCII; non-ASCII content rounds to byte
+# count which over-pads slightly but doesn't break layout).
+_picker_push_content() {
+  PICKER_ENTRIES+=("$1")
+  PICKER_SLUGS+=("")
+  PICKER_TYPES+=("row")
+  PICKER_FILTERABLE+=("1")
+  PICKER_BUCKET+=("")
+  PICKER_TITLE+=("$2")
+  PICKER_TITLE_W+=("${#2}")
+  PICKER_LEFT+=("")
+  PICKER_RIGHT+=("")
 }
 
 build_main_entries() {
@@ -1716,51 +1765,102 @@ build_main_entries() {
 #   ▶  Start / ⏸ Pause / ✓ Finish / ↩ Revive / ×  Decline   (bucket-conditional)
 #   ←  Back
 #
-# Lightweight inline markdown renderer for the proposal preview rows.
-# Caller passes one source line; we return that line wrapped in ANSI to
-# read as colour-coded markdown rather than flat dim text:
-#   "# h1"        → bold + bright primary  (top-level heading)
-#   "## h2"       → bold + fd_title        (section heading)
-#   "### h3"+     → fd_title                (sub-section)
-#   "- " / "* "   → dim bullet + fd_title body
-#   "1. " etc     → dim number + fd_title body
-#   "> "          → dim (quote)
-#   "```"         → fd_chrome (code fence)
-#   plain text    → dim
-# Glyph stays as-is — no markdown-to-ANSI substitution (no real bold
-# inside ` ` `, no link expansion).  Goal is to make the preview
-# *scannable*, not to ship a full markdown engine — glow handles the
-# real rendering in "view full".
+# Inline markdown substitutions applied to body text — strips the
+# markers and embeds ANSI for what they mean:
+#   **bold**       → SGR 1 (bold) span, markers removed
+#   *italic*       → SGR 3 (italic) span, markers removed
+#   `code`         → fd_chrome colour, backticks removed
+#   [text](url)    → SGR 4 (underline) span on the text, URL dropped
+# Order matters: bold (**) before italic (*) so the single-asterisk
+# pass doesn't chew the bold markers.  Output bytes already carry
+# ANSI — caller MUST NOT pass them through ui_paint or ui_dim again
+# at the same scope; instead, use ui_paint's printf form once around
+# the full assembled line so the base colour wraps the inline spans.
+_render_md_inline() {
+  local text="$1"
+  # **bold**
+  text=$(printf '%s' "$text" | sed -E $'s/\\*\\*([^*]+)\\*\\*/\\\033[1m\\1\\\033[22m/g')
+  # `code`
+  text=$(printf '%s' "$text" | sed -E $'s/`([^`]+)`/\\\033[38;5;117m\\1\\\033[39m/g')
+  # [text](url)
+  text=$(printf '%s' "$text" | sed -E $'s/\\[([^]]+)\\]\\([^)]+\\)/\\\033[4m\\1\\\033[24m/g')
+  # *italic*
+  text=$(printf '%s' "$text" | sed -E $'s/\\*([^*]+)\\*/\\\033[3m\\1\\\033[23m/g')
+  printf '%s' "$text"
+}
+
+# Render one source line of markdown to display-ready ANSI.  Unlike
+# 0.33.9, this STRIPS the syntax markers so the result reads as a
+# rendered document, not raw source:
+#   "# H1"     → bold + primary, no leading "#"
+#   "## H2"    → bold + fd_title, no leading "##"
+#   "### h3"   → fd_title, no leading "###"
+#   "#### h4+" → fd_chrome, no leading "####"
+#   "- item"   → "• " (dim bullet) + fd_title body, inline md applied
+#   "1. item"  → "1. " (dim) + fd_title body, inline md applied
+#   "> quote"  → "▎ " (fd_chrome) + dim body, inline md applied
+#   "```..."   → recessed separator (no fence text shown)
+#   ""         → empty (paragraph break)
+#   plain text → dim with inline md applied
+# Inline _render_md_inline handles bold/italic/code/link rewriting
+# within body text regardless of block type.
 _render_md_line() {
   local line="$1"
   case "$line" in
     '# '*)
-      printf '%s' "$(ui_paint_bold primary "$line")" ;;
+      printf '%s' "$(ui_paint_bold primary "${line#'# '}")" ;;
     '## '*)
-      printf '%s' "$(ui_paint_bold fd_title "$line")" ;;
-    '### '*|'#### '*|'##### '*|'###### '*)
-      printf '%s' "$(ui_paint fd_title "$line")" ;;
+      printf '%s' "$(ui_paint_bold fd_title "${line#'## '}")" ;;
+    '### '*)
+      printf '%s' "$(ui_paint fd_title "${line#'### '}")" ;;
+    '#### '*|'##### '*|'###### '*)
+      local _h="$line"
+      # Strip the leading #s and the single space after them.
+      _h="${_h#'######'}"; _h="${_h#'#####'}"; _h="${_h#'####'}"
+      _h="${_h# }"
+      printf '%s' "$(ui_paint fd_chrome "$_h")" ;;
     '- '*|'* '*|'+ '*)
-      printf '%s%s' \
-        "$(ui_dim "${line:0:2}")" \
-        "$(ui_paint fd_title "${line:2}")" ;;
+      printf '%s\033[38;5;153m%s\033[0m' \
+        "$(ui_dim '• ')" \
+        "$(_render_md_inline "${line:2}")" ;;
     [0-9].' '*|[0-9][0-9].' '*)
-      # ordered list — `N. ` or `NN. ` prefix
+      # ordered list — render the number prefix as-is in dim, body in
+      # fd_title with inline md applied.
       local _prefix _rest
       if [[ "$line" =~ ^([0-9]+\.\ )(.*)$ ]]; then
         _prefix="${BASH_REMATCH[1]}"
         _rest="${BASH_REMATCH[2]}"
-        printf '%s%s' "$(ui_dim "$_prefix")" "$(ui_paint fd_title "$_rest")"
+        printf '%s\033[38;5;153m%s\033[0m' \
+          "$(ui_dim "$_prefix")" \
+          "$(_render_md_inline "$_rest")"
       else
-        printf '%s' "$(ui_dim "$line")"
+        printf '\033[38;5;244m%s\033[0m' "$(_render_md_inline "$line")"
       fi ;;
     '> '*)
-      printf '%s' "$(ui_dim "$line")" ;;
+      printf '%s\033[38;5;244m%s\033[0m' \
+        "$(ui_paint fd_chrome '▎ ')" \
+        "$(_render_md_inline "${line#'> '}")" ;;
     '```'*)
-      printf '%s' "$(ui_paint fd_chrome "$line")" ;;
+      # Code fence — hide marker, show a quiet horizontal rule so the
+      # block is visually framed.
+      printf '%s' "$(ui_dim '────────')" ;;
+    '')
+      # Preserve blank lines as empty entries — paragraph break.
+      printf '' ;;
     *)
-      printf '%s' "$(ui_dim "$line")" ;;
+      printf '\033[38;5;244m%s\033[0m' "$(_render_md_inline "$line")" ;;
   esac
+}
+
+# Plain-text (no ANSI) version of one rendered markdown line.  The
+# picker substring-slices on PICKER_TITLE for filter-match highlight
+# rebuild; that path cannot tolerate ANSI in the title (slicing is
+# byte-indexed, ANSI escapes would chop mid-sequence).  By stripping
+# the ANSI from _render_md_line's output we get the *visible* text
+# the user actually reads — that's also what they're typing into
+# search to match against.
+_render_md_line_plain() {
+  _render_md_line "$1" | sed -E $'s/\033\\[[0-9;]*[a-zA-Z]//g'
 }
 
 # Section headings use ui_small_caps + fd_title — the same small-caps
@@ -1787,162 +1887,16 @@ build_detail_entries() {
   PICKER_LEFT_HOVER=()
   PICKER_RIGHT=()
 
-  # ── title row: icon + bucket + change title ──
-  # No leading spaces in the entry — the picker adds 3 cells of prefix
-  # before every row, so this lands the icon at col 4 (same column as
-  # data-row icons on the main screen) and the bucket label at col 7.
+  # ── ACTION BAR (top) ──
+  # Per user: action bar at the top, with the go-back selector as a
+  # prominent first action.  Cursor lands on the first row-type
+  # selectable (the picker's _first_render logic skips past actions
+  # to land on the first PROPOSAL content row), so Back is visually
+  # there but doesn't capture Enter on opening.  Icons in
+  # target-state colour, labels in fd_chrome to match the main
+  # screen's "+ Add new change / ⟳ Reload / ⏻ Exit" strip.
   _picker_push_padding
-  _picker_push_info "$(printf '%s  %s  %s' \
-    "$(ui_paint fd_icon "$(ui_icon "$b")")" \
-    "$(ui_paint "$(ui_bucket_color "$b")" "$(printf '%-12s' "$b")")" \
-    "$(ui_paint_bold fd_title "$title")")"
-  _picker_push_padding
-
-  # ── metadata rows ──
-  # Labels: small caps + dim, padded to 10 visual cells so the values
-  # column lines up.  Values: bucket colour for status, fd_updated for
-  # updated (electric lavender), fd_created for created (soft mint).
-  _picker_push_info "$(printf '   %s  %s' \
-    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps STATUS)" 10)")" \
-    "$(ui_paint "$(ui_bucket_color "$b")" "$status")")"
-  _picker_push_info "$(printf '   %s  %s' \
-    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps UPDATED)" 10)")" \
-    "$(ui_paint fd_updated "$(ui_date_relative "$updated") · $(ui_date_full "$updated")")")"
-  _picker_push_info "$(printf '   %s  %s' \
-    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps CREATED)" 10)")" \
-    "$(ui_paint fd_created "$(ui_date_full "$created")")")"
-  if [[ -n "$reason" ]]; then
-    _picker_push_info "$(printf '   %s  %s' \
-      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps REASON)" 10)")" \
-      "$(ui_paint "$(ui_bucket_color "$b")" "$reason")")"
-  fi
-
-  # ── PROPOSAL ──
-  if [[ -f "$dir/proposal.md" ]]; then
-    _picker_push_padding
-    _picker_push_info "   $(ui_paint fd_title "$(ui_small_caps PROPOSAL)")"
-    _picker_push_padding
-
-    local proposal_lines=()
-    # First 5 non-blank lines — blanks suppressed for compactness, same
-    # rule as the plain-mode cmd_show preview.  bash 3.2 has no
-    # mapfile/readarray, hence the while-read + process-sub pattern.
-    local _ln
-    while IFS= read -r _ln; do
-      proposal_lines+=("$_ln")
-    done < <(grep -E '[^[:space:]]' "$dir/proposal.md" | head -n 5)
-    local total_lines; total_lines=$(grep -cE '[^[:space:]]' "$dir/proposal.md" 2>/dev/null || echo 0)
-    # Each line passes through _render_md_line so headings, lists,
-    # quotes and code fences get colour-coded instead of all reading
-    # as flat dim text.  Indent stays 5 spaces to align under the
-    # heading.
-    local pl
-    for pl in "${proposal_lines[@]}"; do
-      _picker_push_info "     $(_render_md_line "$pl")"
-    done
-
-    # Truncation ellipsis — single dim "…" row when the preview cut
-    # the proposal short, so the user sees there's more before they
-    # even read the "view full (N more lines)" action label.
-    if (( total_lines > ${#proposal_lines[@]} )); then
-      _picker_push_info "     $(ui_dim '…')"
-    fi
-
-    # "view full" — always shown when the file exists, so user has a
-    # one-keystroke path to the full source whether or not the preview
-    # was truncated.  Label carries the truncated-by-N hint when
-    # applicable.
-    _picker_push_padding
-    local view_label='view full'
-    if (( total_lines > ${#proposal_lines[@]} )); then
-      view_label="view full  ($((total_lines - ${#proposal_lines[@]})) more lines)"
-    fi
-    _picker_push_action "$(ui_paint fd_chrome "▸  $view_label")" "__view_proposal__"
-  fi
-
-  # ── HISTORY ──
-  if [[ -f "$dir/history.log" ]]; then
-    _picker_push_padding
-    _picker_push_info "   $(ui_paint fd_title "$(ui_small_caps HISTORY)")"
-    _picker_push_padding
-
-    # Column header row — same small-caps + dim treatment as the main
-    # screen's STATUS / TITLE / CREATED / UPDATED strip, padded to the
-    # same column widths the data rows below use.  Sits a sub-indent
-    # (5 leading) under the HISTORY section heading.
-    _picker_push_info "$(printf '     %s  %s  %s  %s' \
-      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps WHEN)" 12)")" \
-      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps ACTOR)" 14)")" \
-      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps EVENT)" 8)")" \
-      "$(ui_dim "$(ui_small_caps CHANGE)")")"
-    _picker_push_padding
-
-    local history_lines=()
-    # Newest first via `tac` (GNU) or `tail -r` (BSD), capped at 3.
-    # bash-3.2-compatible array build (no mapfile).
-    local _hln
-    while IFS= read -r _hln; do
-      history_lines+=("$_hln")
-    done < <({ tac "$dir/history.log" 2>/dev/null || tail -r "$dir/history.log"; } | head -n 3)
-    local total_history
-    total_history=$(grep -c '.' "$dir/history.log" 2>/dev/null || echo 0)
-
-    local hl ts actor event details
-    for hl in "${history_lines[@]}"; do
-      IFS=$'\t' read -r ts actor event details <<< "$hl"
-      local rel; rel=$(ui_date_relative "$ts")
-      # Actor colours mapped onto the main palette so the history block
-      # reads as the same colour grammar as the rest of the screen:
-      #   user           → fd_done    (121 mint, "I shipped this")
-      #   state-machine  → fd_chrome  (117 sky, automation chrome)
-      #   else           → muted      (244 gray)
-      local actor_color=muted
-      [[ "$actor" == "user" ]]          && actor_color=fd_done
-      [[ "$actor" == "state-machine" ]] && actor_color=fd_chrome
-      local pretty="$details" reason_line=""
-      pretty="${pretty//->/ → }"
-      if [[ "$pretty" =~ ^(.+)\ \((.+)\)$ ]]; then
-        pretty="${BASH_REMATCH[1]}"
-        reason_line="${BASH_REMATCH[2]}"
-      fi
-      # Column-to-palette mapping:
-      #   when    → fd_updated (lavender) — it's a date column
-      #   actor   → actor_color (per-actor, see above)
-      #   event   → fd_title   (153 baby blue) — primary verb
-      #   change  → fd_created (121 soft mint) — the substance
-      _picker_push_info "$(printf '     %s  %s  %s  %s' \
-        "$(ui_paint fd_updated "$(printf '%-12s' "$rel")")" \
-        "$(ui_paint "$actor_color" "$(printf '%-14s' "$actor")")" \
-        "$(ui_paint fd_title "$(printf '%-8s' "$event")")" \
-        "$(ui_paint fd_created "$pretty")")"
-      if [[ -n "$reason_line" ]]; then
-        # Wrapped decline reason on its own indented line — aligns under
-        # the change column (5 indent + 12 when + 2 + 14 actor + 2 + 8 event + 2 = 45).
-        _picker_push_info "$(printf '     %45s%s' '' "$(ui_dim "\"$reason_line\"")")"
-      fi
-    done
-
-    if (( total_history > ${#history_lines[@]} )); then
-      local more=$(( total_history - ${#history_lines[@]} ))
-      _picker_push_action "     $(ui_paint fd_more "+$more more...")" "__view_history__"
-    fi
-  fi
-
-  # ── action bar ──
-  # Icons painted in the target-state's brand colour (▶ green = start,
-  # ⏸ indigo = pause, ✓ mint = finish, ↩ indigo = revive, × pink =
-  # decline, ← chrome = back).  Labels painted fd_chrome so the strip
-  # reads as one cohesive band — matches the main screen's bottom
-  # action bar (+/Sync/Reload/Exit) where everything is fd_chrome.
-  #
-  # IMPORTANT: NO leading spaces on the action entries.  The picker
-  # prepends a 3-cell prefix ("   " for non-cursor, " ➤ " for cursor)
-  # before every row — adding more leading spaces here pushes the
-  # icon away from column 4 where the main screen's "+ Add new
-  # change" / "⟳ Reload" anchor.  Same convention applies to the
-  # __view_proposal__ / __view_history__ entries above.
-  _picker_push_padding
-
+  _picker_push_action "$(ui_paint fd_chrome '←  Back')" "__act_back__"
   case "$b" in
     backlog)
       _picker_push_action "$(ui_paint fd_inprogress '▶')  $(ui_paint fd_chrome 'Start (move to in-progress)')" "__act_start__"
@@ -1954,14 +1908,131 @@ build_detail_entries() {
       _picker_push_action "$(ui_paint fd_declined '×')  $(ui_paint fd_chrome 'Decline')" "__act_decline__"
       ;;
     done)
-      : # terminal state — only the Back action below
+      : # terminal state — only Back
       ;;
     declined)
       _picker_push_action "$(ui_paint fd_backlog '↩')  $(ui_paint fd_chrome 'Revive (back to backlog)')" "__act_revive__"
       ;;
   esac
 
-  _picker_push_action "$(ui_paint fd_chrome '←  Back')" "__act_back__"
+  # ── META (no separate title row; title + slug live in the block) ──
+  # Plain-text lowercase labels (no small caps, per user feedback in
+  # 0.33.11 — small-cap glyphs read as inconsistent letter sizes).
+  # 8-cell label column so "updated" fits without truncation; values
+  # painted per role: title bold fd_title, slug fd_chrome (code-like),
+  # status carries the bucket icon + bucket-coloured name, dates use
+  # fd_updated/fd_created, decline-reason in the bucket colour.
+  _picker_push_padding
+  _picker_push_info "$(printf '   %s  %s' \
+    "$(ui_dim "$(printf '%-8s' 'title')")" \
+    "$(ui_paint_bold fd_title "$title")")"
+  _picker_push_info "$(printf '   %s  %s' \
+    "$(ui_dim "$(printf '%-8s' 'slug')")" \
+    "$(ui_paint fd_chrome "$slug")")"
+  _picker_push_info "$(printf '   %s  %s  %s' \
+    "$(ui_dim "$(printf '%-8s' 'status')")" \
+    "$(ui_paint fd_icon "$(ui_icon "$b")")" \
+    "$(ui_paint "$(ui_bucket_color "$b")" "$status")")"
+  _picker_push_info "$(printf '   %s  %s' \
+    "$(ui_dim "$(printf '%-8s' 'updated')")" \
+    "$(ui_paint fd_updated "$(ui_date_relative "$updated") · $(ui_date_full "$updated")")")"
+  _picker_push_info "$(printf '   %s  %s' \
+    "$(ui_dim "$(printf '%-8s' 'created')")" \
+    "$(ui_paint fd_created "$(ui_date_full "$created")")")"
+  if [[ -n "$reason" ]]; then
+    _picker_push_info "$(printf '   %s  %s' \
+      "$(ui_dim "$(printf '%-8s' 'reason')")" \
+      "$(ui_paint "$(ui_bucket_color "$b")" "$reason")")"
+  fi
+
+  # ── PROPOSAL ──
+  # Full document rendered inline.  Each source line passes through
+  # _render_md_line which strips markdown markers (# / - / ** / `` /
+  # [text](url)) and emits ANSI-styled text — the goal is "rendered
+  # markdown the user reads", not "syntax-highlighted source".
+  # Lines pushed as content rows (type=row, filterable=1) so the
+  # ⌕ search prompt filters proposal content and jumps the cursor to
+  # the first matching line (picker mod, see ui_picker).  No
+  # sub-indent — content sits at the same column (col 7) as the
+  # PROPOSAL heading because the user explicitly asked for the right-
+  # shift to come off.
+  if [[ -f "$dir/proposal.md" ]]; then
+    _picker_push_padding
+    _picker_push_info "   $(ui_paint fd_title 'PROPOSAL')"
+    _picker_push_padding
+
+    local _ln _rendered _plain
+    while IFS= read -r _ln || [[ -n "$_ln" ]]; do
+      _rendered="$(_render_md_line "$_ln")"
+      _plain="$(_render_md_line_plain "$_ln")"
+      if [[ -z "$_plain" ]]; then
+        # Blank line → paragraph break, non-filterable info row.
+        _picker_push_info ''
+      else
+        _picker_push_content "$_rendered" "$_plain"
+      fi
+    done < "$dir/proposal.md"
+
+    # "View..." action — eye glyph (Nerd Font nf-fa-eye, U+F06E) + the
+    # word "View..." in fd_chrome, no leading arrow, no "(N more
+    # lines)" hint.  Opens proposal.md in the external pager (glow if
+    # available, else cat | less with a friendly prompt).
+    _picker_push_padding
+    _picker_push_action "$(ui_paint fd_chrome '  View...')" "__view_proposal__"
+  fi
+
+  # ── HISTORY ──
+  # Same flat-indent rule: column header and data rows align with the
+  # HISTORY heading (col 7), no extra sub-indent.  Data rows are
+  # content rows (filterable + cursor lands on first match via the
+  # picker's filter-jump path).
+  if [[ -f "$dir/history.log" ]]; then
+    _picker_push_padding
+    _picker_push_info "   $(ui_paint fd_title 'HISTORY')"
+    _picker_push_padding
+
+    # Column header — plain uppercase (no small caps).  Same padded
+    # widths the data rows below use so the columns line up.
+    _picker_push_info "$(printf '   %s  %s  %s  %s' \
+      "$(ui_dim "$(printf '%-12s' 'WHEN')")" \
+      "$(ui_dim "$(printf '%-14s' 'ACTOR')")" \
+      "$(ui_dim "$(printf '%-8s'  'EVENT')")" \
+      "$(ui_dim 'CHANGE')")"
+
+    local history_lines=()
+    local _hln
+    while IFS= read -r _hln; do
+      history_lines+=("$_hln")
+    done < <({ tac "$dir/history.log" 2>/dev/null || tail -r "$dir/history.log"; })
+
+    local hl ts actor event details
+    for hl in "${history_lines[@]}"; do
+      IFS=$'\t' read -r ts actor event details <<< "$hl"
+      local rel; rel=$(ui_date_relative "$ts")
+      local actor_color=muted
+      [[ "$actor" == "user" ]]          && actor_color=fd_done
+      [[ "$actor" == "state-machine" ]] && actor_color=fd_chrome
+      local pretty="$details" reason_line=""
+      pretty="${pretty//->/ → }"
+      if [[ "$pretty" =~ ^(.+)\ \((.+)\)$ ]]; then
+        pretty="${BASH_REMATCH[1]}"
+        reason_line="${BASH_REMATCH[2]}"
+      fi
+      local _h_rendered _h_plain
+      _h_rendered=$(printf '%s  %s  %s  %s' \
+        "$(ui_paint fd_updated "$(printf '%-12s' "$rel")")" \
+        "$(ui_paint "$actor_color" "$(printf '%-14s' "$actor")")" \
+        "$(ui_paint fd_title    "$(printf '%-8s'  "$event")")" \
+        "$(ui_paint fd_created  "$pretty")")
+      _h_plain=$(printf '%-12s  %-14s  %-8s  %s' "$rel" "$actor" "$event" "$pretty")
+      _picker_push_content "$_h_rendered" "$_h_plain"
+      if [[ -n "$reason_line" ]]; then
+        # Reason wrap as a non-filterable info row — aligned under the
+        # CHANGE column (3 indent + 12 when + 2 + 14 actor + 2 + 8 event + 2 = 43).
+        _picker_push_info "$(printf '   %42s%s' '' "$(ui_dim "\"$reason_line\"")")"
+      fi
+    done
+  fi
 }
 
 # Interactive REPL — single screen via custom ui_picker:
