@@ -5,6 +5,7 @@
 #
 # Allowed transitions:
 #   backlog     → in-progress  (requires: no other in-progress)
+#   backlog     → done         (skip-in-progress for trivial changes)
 #   backlog     → declined     (requires: reason)
 #   in-progress → done
 #   in-progress → declined     (requires: reason)
@@ -62,7 +63,7 @@ cmd_validate_bucket() {
   # Separator ':' between from/to — bash-safe. Avoid '→' (locale-dependent
   # multibyte parsing) and '->' (parser sees '>' as redirect operator).
   case "$from:$to" in
-    backlog:in-progress|backlog:declined) : ;;
+    backlog:in-progress|backlog:done|backlog:declined) : ;;
     in-progress:done|in-progress:declined|in-progress:backlog) : ;;
     declined:backlog) : ;;
     done:*)

@@ -1087,7 +1087,12 @@ ui_picker() {
     else
       entries_brand[$i]=""
     fi
-    if [[ "${PICKER_TYPES[$i]}" == "row" && -n "${PICKER_TITLE[$i]:-}" ]]; then
+    # title_lc populates for any row whose caller set PICKER_TITLE —
+    # both row (data picks) and info (filterable-info content, e.g.
+    # proposal lines on the detail screen).  The render block below
+    # uses title_lc + PICKER_TITLE to splice in the filter-match
+    # highlight on either type.
+    if [[ -n "${PICKER_TITLE[$i]:-}" ]]; then
       title_lc[$i]=$(printf '%s' "${PICKER_TITLE[$i]}" | tr '[:upper:]' '[:lower:]')
     else
       title_lc[$i]=""
@@ -1364,6 +1369,28 @@ ui_picker() {
           else
             row_render="${PICKER_ENTRIES[$idx]}"
           fi
+        elif [[ "${PICKER_TYPES[$idx]}" == "info" \
+                && -n "$filter_lc" \
+                && -n "${title_lc[$idx]:-}" \
+                && "${title_lc[$idx]}" == *"$filter_lc"* ]]; then
+          # Info row with caller-supplied plain title that matched the
+          # filter — rebuild as 3-cell indent + dim prefix + gold
+          # match + dim suffix.  The caller-stored PICKER_ENTRIES gets
+          # discarded for this frame (info rows don't carry the LEFT/
+          # RIGHT split that row-type uses, so the rebuild is the full
+          # visible line, not a splice).
+          local _it _ilc _ibefore _ipos _imlen _ipre _imat _isuf _ihl
+          _it="${PICKER_TITLE[$idx]}"
+          _ilc="${title_lc[$idx]}"
+          _ibefore="${_ilc%%"$filter_lc"*}"
+          _ipos=${#_ibefore}
+          _imlen=${#filter_lc}
+          _ipre="${_it:0:_ipos}"
+          _imat="${_it:_ipos:_imlen}"
+          _isuf="${_it:_ipos+_imlen}"
+          printf -v _ihl '   \033[38;5;244m%s\033[38;5;222m%s\033[38;5;244m%s\033[0m' \
+            "$_ipre" "$_imat" "$_isuf"
+          row_render="$_ihl"
         else
           row_render="${PICKER_ENTRIES[$idx]}"
         fi
@@ -1546,15 +1573,24 @@ _picker_push_action() {
 
 # Filterable info row — same as _picker_push_info but FILTERABLE=1 so
 # the ⌕ search prompt hides non-matching rows.  Cursor still skips
-# (type stays "info"), no highlight rebuild on match.  Used for
-# proposal lines and history entries: search narrows what's visible
-# without ever letting the cursor land on MD content.
+# (type stays "info").
+#
+# Optional $2 (plain title) drives the picker's filter-match HIGHLIGHT:
+# when set, the picker rebuilds the entry on match as dim prefix + gold
+# matched substring + dim suffix.  Omit $2 if you want filter to *hide*
+# non-matches but preserve the entry's per-column ANSI on matches
+# (history rows: column colours stay on matches because we don't ask
+# for the dim rebuild).
 _picker_push_filtered_info() {
   PICKER_ENTRIES+=("$1")
   PICKER_SLUGS+=("")
   PICKER_TYPES+=("info")
   PICKER_FILTERABLE+=("1")
-  _picker_meta_empty
+  PICKER_BUCKET+=("")
+  PICKER_TITLE+=("${2:-}")
+  PICKER_TITLE_W+=("${#2}")
+  PICKER_LEFT+=("")
+  PICKER_RIGHT+=("")
 }
 
 build_main_entries() {
@@ -1777,6 +1813,14 @@ _render_md_line() {
   fi
 }
 
+# Plain-text version of one rendered markdown line — strip the ANSI
+# emitted by _render_md_line so the caller has the *visible* text to
+# pass into PICKER_TITLE (the picker substring-slices that on filter
+# match to splice in the gold-on-match highlight).
+_render_md_line_plain() {
+  _render_md_line "$1" | sed -E $'s/\033\\[[0-9;]*[a-zA-Z]//g'
+}
+
 # Section headings use ui_small_caps + fd_title — the same small-caps
 # treatment as the main screen's column headers, with fd_title (not
 # dim) because section headings on a single-record screen organise
@@ -1834,54 +1878,55 @@ build_detail_entries() {
   # ── PROPOSAL ──
   # Heading: small caps + fd_title (ᴘʀᴏᴘᴏꜱᴀʟ).  Content: every source
   # line passes through _render_md_line which STRIPS markers (#, -,
-  # **, ``, [text](url), etc.) and wraps the result in ui_dim — the
-  # user explicitly does NOT want full markdown rendering, just
-  # plain text without markup glyphs.  Pushed as filtered-info rows
-  # so ⌕ search hides non-matches but cursor never lands inside the
-  # MD (which was the 0.33.11 complaint: selector could move onto
-  # headings inside the proposal).
+  # **, ``, [text](url), etc.) and wraps the result in ui_dim.
+  # Pushed as filtered-info rows with a PLAIN TITLE so:
+  #   1. ⌕ search hides non-matches (FILTERABLE=1)
+  #   2. matches get a gold (fd_match 222) highlight on the substring
+  #      that fired the filter — same affordance the main screen has
+  #      for row titles (cf. picker's info-type match-rebuild path).
+  # Cursor never lands inside the proposal — type stays "info".
   if [[ -f "$dir/proposal.md" ]]; then
+    _picker_push_padding  # extra spacer (user asked +1 before heading)
     _picker_push_padding
     _picker_push_info "   $(ui_paint fd_title "$(ui_small_caps PROPOSAL)")"
     _picker_push_padding
 
-    local _ln _rendered
+    local _ln _rendered _plain
     while IFS= read -r _ln || [[ -n "$_ln" ]]; do
       _rendered="$(_render_md_line "$_ln")"
+      _plain="$(_render_md_line_plain "$_ln")"
       if [[ -z "$_rendered" ]]; then
         # Blank line → paragraph break, non-filterable info row.
         _picker_push_info ''
       else
-        _picker_push_filtered_info "   $_rendered"
+        # Pass plain title so search-match highlights the substring.
+        _picker_push_filtered_info "   $_rendered" "$_plain"
       fi
     done < "$dir/proposal.md"
 
     # "View..." action — opens ui_view_proposal, a dedicated picker
     # screen with the full proposal and a single ← Back action.  Eye
-    # glyph: ◉ (U+25C9 FISHEYE) — pure unicode, no Nerd Font cluster,
-    # renders in every monospaced font the user has tested with.
+    # glyph: ⏿ (U+23FF OBSERVER EYE SYMBOL) — pure unicode, picked
+    # over earlier candidates because it actually renders in the
+    # user's font (◉ U+25C9 didn't show as an eye in 0.33.12).
     _picker_push_padding
-    _picker_push_action "$(ui_paint fd_chrome '◉  View...')" "__view_proposal__"
+    _picker_push_action "$(ui_paint fd_chrome '⏿  View...')" "__view_proposal__"
+    _picker_push_padding  # extra spacer after View (user asked +1)
   fi
 
   # ── HISTORY ──
-  # Heading + column header + data rows all anchor at col 7 (3-cell
-  # indent + 3-cell picker prefix).  Column header indents 3 cells in
-  # its printf; data rows ALSO carry 3 cells in their rendered/plain
-  # versions, so the WHEN / ACTOR / EVENT / CHANGE labels sit on top
-  # of their data exactly.  (0.33.11 had data without leading
-  # indent — headers landed 3 cells right of data, which read as
-  # broken alignment.)
+  # Heading + small-caps column header + data rows all anchor at col 7
+  # (3-cell indent + 3-cell picker prefix).
   if [[ -f "$dir/history.log" ]]; then
     _picker_push_padding
     _picker_push_info "   $(ui_paint fd_title "$(ui_small_caps HISTORY)")"
     _picker_push_padding
 
     _picker_push_info "$(printf '   %s  %s  %s  %s' \
-      "$(ui_dim "$(printf '%-12s' 'WHEN')")" \
-      "$(ui_dim "$(printf '%-14s' 'ACTOR')")" \
-      "$(ui_dim "$(printf '%-8s'  'EVENT')")" \
-      "$(ui_dim 'CHANGE')")"
+      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps WHEN)" 12)")" \
+      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps ACTOR)" 14)")" \
+      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps EVENT)" 8)")" \
+      "$(ui_dim "$(ui_small_caps CHANGE)")")"
 
     local history_lines=()
     local _hln
@@ -1915,27 +1960,33 @@ build_detail_entries() {
     done
   fi
 
-  # ── ACTION BAR (bottom — restored to 0.33.10 layout per user) ──
-  # Icons in target-state colour, labels in fd_chrome.  No leading
-  # spaces in entries (picker prepends 3 cells); icons land at col 4
-  # matching the main screen's "+ Add new change / ⟳ Reload / ⏻ Exit"
-  # action strip.
+  # ── ACTION BAR (bottom) ──
+  # Per user 0.33.13:
+  # - labels simplified (no parenthetical "(move to X)" hints — the
+  #   icon + verb carries the intent on its own).
+  # - "Done" with a check icon ✓ added to backlog so the user can
+  #   ship a change without first passing through in-progress.
+  # - "Finish" renamed to "Done" on in-progress to match.
+  # Extra +1 padding before the bar so it breathes off the HISTORY
+  # block above.
+  _picker_push_padding
   _picker_push_padding
   case "$b" in
     backlog)
-      _picker_push_action "$(ui_paint fd_inprogress '▶')  $(ui_paint fd_chrome 'Start (move to in-progress)')" "__act_start__"
+      _picker_push_action "$(ui_paint fd_inprogress '▶')  $(ui_paint fd_chrome 'Start')" "__act_start__"
+      _picker_push_action "$(ui_paint fd_done '✓')  $(ui_paint fd_chrome 'Done')" "__act_finish__"
       _picker_push_action "$(ui_paint fd_declined '×')  $(ui_paint fd_chrome 'Decline')" "__act_decline__"
       ;;
     in-progress)
-      _picker_push_action "$(ui_paint fd_done '✓')  $(ui_paint fd_chrome 'Finish (move to done)')" "__act_finish__"
-      _picker_push_action "$(ui_paint fd_backlog '⏸')  $(ui_paint fd_chrome 'Pause back to backlog')" "__act_pause__"
+      _picker_push_action "$(ui_paint fd_done '✓')  $(ui_paint fd_chrome 'Done')" "__act_finish__"
+      _picker_push_action "$(ui_paint fd_backlog '⏸')  $(ui_paint fd_chrome 'Pause')" "__act_pause__"
       _picker_push_action "$(ui_paint fd_declined '×')  $(ui_paint fd_chrome 'Decline')" "__act_decline__"
       ;;
     done)
       : # terminal state — only Back below
       ;;
     declined)
-      _picker_push_action "$(ui_paint fd_backlog '↩')  $(ui_paint fd_chrome 'Revive (back to backlog)')" "__act_revive__"
+      _picker_push_action "$(ui_paint fd_backlog '↩')  $(ui_paint fd_chrome 'Revive')" "__act_revive__"
       ;;
   esac
   _picker_push_action "$(ui_paint fd_chrome '←  Back')" "__act_back__"
