@@ -831,14 +831,17 @@ ui_bucket_view() {
     PICKER_FILTERABLE+=("0")
     _picker_meta_empty
 
-    # Two-line branded header matching the main view layout.
-    #   Line 1: ★ Foundry · ⊙ in-progress
-    #   Line 2: project: <project-name>
-    local _project _bucket_badge _hdr_line2
+    # Two-line branded header — IDENTICAL to the main view.  The user
+    # explicitly wants the bucket view's header to match main 1:1
+    # (same subtitle tagline, same project line).  Bucket context is
+    # already conveyed by:
+    #   1. how the user got here (drilling in via "+N more...")
+    #   2. the uniform bucket icon/colour at the left of every row
+    # so the header doesn't owe them a bucket badge.
+    local _project _hdr_line2
     _project=$(basename "$PWD")
-    _bucket_badge="$(ui_paint fd_icon "$(ui_icon "$bucket")") $(ui_paint "$(ui_bucket_color "$bucket")" "$bucket")"
     _hdr_line2="$(ui_dim 'project:')  $(ui_paint_bold fd_project "[${_project}]")"
-    PICKER_HEADER="$(build_picker_header "$_bucket_badge" "$_hdr_line2")"
+    PICKER_HEADER="$(build_picker_header "$(ui_dim 'Code change registry — propose, track, implement, ship')" "$_hdr_line2")"
     if ui_picker "⌕  Search "; then
       case "$PICKER_RESULT_SLUG" in
         __bv_prev__) page=$((page - 1)) ;;
