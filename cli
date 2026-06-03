@@ -1074,20 +1074,23 @@ ui_picker() {
     fi
   done
 
-  # Brand-colour code for cursor hover (row-title + action-label and
-  # the row's status icon via PICKER_LEFT_HOVER).  Pre-derived so the
-  # render loop's printf format \033[38;5;%sm stays a single SGR per
-  # title cell.  If fd_brand ever moves to truecolor (#hex form) this
-  # falls back to the literal — the assignment below splits on `;`
-  # to detect a multi-component sequence and re-routes through
-  # _ui_fg_seq's full SGR-fragment path.  For now it's palette 27.
-  local _brand_code _brand_fmt
+  # Brand-colour SGR for cursor hover (row-title + action-label and
+  # the row's status icon via PICKER_LEFT_HOVER).  Pre-derived once
+  # per render-init so the per-row title printf below stays a single
+  # SGR.  CRITICAL: built via `printf -v` (not single-quote literal)
+  # so the `\033` in the format string is interpreted as the real
+  # ESC byte — otherwise printf %s in the title format below would
+  # emit it as 4 literal characters (`\`, `0`, `3`, `3`), which the
+  # user reported in 0.33.2 as "\033[38;5;27mSome change 4" showing
+  # up verbatim in the title cell.
+  local _brand_code _brand_fmt _title_dim_fmt
   _brand_code=$(ui_color_code fd_brand)
   if [[ "$_brand_code" == \#* ]]; then
-    _brand_fmt='\033['"$(_ui_fg_seq "$_brand_code")"'m'
+    printf -v _brand_fmt '\033[%sm' "$(_ui_fg_seq "$_brand_code")"
   else
-    _brand_fmt='\033[38;5;'"$_brand_code"'m'
+    printf -v _brand_fmt '\033[38;5;%sm' "$_brand_code"
   fi
+  printf -v _title_dim_fmt '\033[38;5;153m'
 
   # Static render fragments.  ⌕ + "Search" share the brand colour
   # (fd_search → 256 code 27, electric blue #005fff); the caret a few
@@ -1283,8 +1286,13 @@ ui_picker() {
         # selector arrow on its left.
         if [[ "${PICKER_TYPES[$idx]}" == "row" ]]; then
           local _has_match=0 _use_left
-          _use_left="${PICKER_LEFT[$idx]}"
-          (( is_cursor )) && _use_left="${PICKER_LEFT_HOVER[$idx]}"
+          # `:-` defaults guard against any builder path that pushes
+          # to PICKER_ENTRIES but skips the parallel hover array (e.g.
+          # build_detail_entries via the _picker_push_* helpers).
+          # Without the default, set -u would abort on an unbound
+          # array element when the cursor lands on such a row.
+          _use_left="${PICKER_LEFT[$idx]:-}"
+          (( is_cursor )) && _use_left="${PICKER_LEFT_HOVER[$idx]:-$_use_left}"
           if [[ -n "$filter_lc" && -n "${title_lc[$idx]}" \
                 && "${title_lc[$idx]}" == *"$filter_lc"* ]]; then
             _has_match=1
@@ -1296,7 +1304,7 @@ ui_picker() {
             if (( is_cursor )); then
               _title_fmt="$_brand_fmt"
             else
-              _title_fmt='\033[38;5;153m'
+              _title_fmt="$_title_dim_fmt"
             fi
             # NB: split assignments — bash 3.2 evaluates `local a=… b=$((…a…))`
             # right-to-left through the outer scope, which trips set -u when
@@ -1333,7 +1341,11 @@ ui_picker() {
         fi
         if (( is_cursor )); then
           if [[ "${PICKER_TYPES[$idx]}" == "action" ]]; then
-            frame+=" ${cursor_arrow} ${entries_brand[$idx]}"$'\n'
+            # :- default for action entries that didn't get a
+            # pre-derived entries_brand[] slot (any builder path that
+            # bypassed the standard init loop).  Falls back to the
+            # already-coloured PICKER_ENTRIES.
+            frame+=" ${cursor_arrow} ${entries_brand[$idx]:-${PICKER_ENTRIES[$idx]}}"$'\n'
           else
             frame+=" ${cursor_arrow} ${row_render}"$'\n'
           fi
