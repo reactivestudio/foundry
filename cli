@@ -767,7 +767,7 @@ ui_bucket_view() {
     local _project _bucket_badge _hdr_line2
     _project=$(basename "$PWD")
     _bucket_badge="$(ui_paint fd_icon "$(ui_icon "$bucket")") $(ui_paint "$(ui_bucket_color "$bucket")" "$bucket")"
-    _hdr_line2="$(ui_dim 'project:')  $(ui_paint fd_project "[${_project}]")"
+    _hdr_line2="$(ui_dim 'project:')  $(ui_paint_bold fd_project "[${_project}]")"
     PICKER_HEADER="$(build_picker_header "$_bucket_badge" "$_hdr_line2")"
     if ui_picker "⌕  Search "; then
       case "$PICKER_RESULT_SLUG" in
@@ -1517,7 +1517,7 @@ cmd_interactive() {
     # token, against the dim 'project:' label).
     local _project _hdr_line2
     _project=$(basename "$PWD")
-    _hdr_line2="$(ui_dim 'project:')  $(ui_paint fd_project "[${_project}]")"
+    _hdr_line2="$(ui_dim 'project:')  $(ui_paint_bold fd_project "[${_project}]")"
     PICKER_HEADER="$(build_picker_header "$(ui_dim 'Code change registry — propose, track, implement, ship')" "$_hdr_line2")"
     if ui_picker "⌕  Search "; then
       local slug="$PICKER_RESULT_SLUG"
