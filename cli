@@ -836,7 +836,7 @@ ui_bucket_view() {
 
     # Back action.  Pagination is now in-list, so the only chrome
     # action left at the bottom is the back navigation.
-    PICKER_ENTRIES+=("$(ui_paint fd_chrome "←  Back to all changes")")
+    PICKER_ENTRIES+=("$(ui_paint fd_chrome "⇠  Back to all changes")")
     PICKER_SLUGS+=("__bv_back__")
     PICKER_TYPES+=("action")
     PICKER_FILTERABLE+=("0")
@@ -1846,30 +1846,46 @@ build_detail_entries() {
   PICKER_RIGHT=()
 
   # ── META ──
-  # Plain-text lowercase labels (no small caps — the unicode small-cap
-  # glyphs read as inconsistent letter sizes).  8-cell label column so
-  # "updated" fits without truncation.  Order per 0.33.12 user spec:
-  # id, title, status, updated, created, [reason].  Status value has
-  # NO icon — the bucket-coloured word stands alone (the icon was
-  # ambiguous next to status changes since the bucket on this screen
-  # is fixed for the change's lifetime).
+  # Compact horizontal layout — small-caps column header row + a
+  # single data row underneath, mirroring the main screen's
+  # STATUS / TITLE / CREATED / UPDATED column grammar.  Vertical
+  # 5-row layout in 0.33.12 was tall for a screen with a long
+  # proposal below; horizontal squeezes 5 fields into 2 rows.
+  # Column widths picked to fit ~96 cells of terminal width:
+  #   ɪᴅ      16 (truncate with …)
+  #   ᴛɪᴛʟᴇ   24 (truncate with …)
+  #   ꜱᴛᴀᴛᴜꜱ  12
+  #   ᴜᴘᴅᴀᴛᴇᴅ 12 (relative only — "yesterday" / "2h ago")
+  #   ᴄʀᴇᴀᴛᴇᴅ 18 (full date)
+  # Full update timestamp dropped from the column — the relative
+  # part is the actionable signal ("when did this change last
+  # move?"), the absolute timestamp is still in tracking.yaml for
+  # anyone who needs it.
+  local _id_w=16 _title_w=24 _status_w=12 _updated_w=12
+  local _id_trunc;   _id_trunc=$(ui_truncate "$_id_w" "$slug")
+  local _title_trunc; _title_trunc=$(ui_truncate "$_title_w" "$title")
+  local _updated_str; _updated_str="$(ui_date_relative "$updated")"
+  local _created_str; _created_str="$(ui_date_full "$created")"
+
   _picker_push_padding
-  _picker_push_info "$(printf '   %s  %s' \
-    "$(ui_dim "$(printf '%-8s' 'id')")" \
-    "$(ui_paint fd_chrome "$slug")")"
-  _picker_push_info "$(printf '   %s  %s' \
-    "$(ui_dim "$(printf '%-8s' 'title')")" \
-    "$(ui_paint_bold fd_title "$title")")"
-  _picker_push_info "$(printf '   %s  %s' \
-    "$(ui_dim "$(printf '%-8s' 'status')")" \
-    "$(ui_paint "$(ui_bucket_color "$b")" "$status")")"
-  _picker_push_info "$(printf '   %s  %s' \
-    "$(ui_dim "$(printf '%-8s' 'updated')")" \
-    "$(ui_paint fd_updated "$(ui_date_relative "$updated") · $(ui_date_full "$updated")")")"
-  _picker_push_info "$(printf '   %s  %s' \
-    "$(ui_dim "$(printf '%-8s' 'created')")" \
-    "$(ui_paint fd_created "$(ui_date_full "$created")")")"
+  # Header row — small caps + dim, padded to column widths.
+  _picker_push_info "$(printf '   %s  %s  %s  %s  %s' \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps ID)"      "$_id_w")")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps TITLE)"   "$_title_w")")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps STATUS)"  "$_status_w")")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps UPDATED)" "$_updated_w")")" \
+    "$(ui_dim "$(ui_small_caps CREATED)")")"
+  # Data row — per-column colours.  Same padded widths so columns line
+  # up under their headers.
+  _picker_push_info "$(printf '   %s  %s  %s  %s  %s' \
+    "$(ui_paint fd_chrome  "$(printf '%-*s' "$_id_w"      "$_id_trunc")")" \
+    "$(ui_paint_bold fd_title "$(printf '%-*s' "$_title_w"  "$_title_trunc")")" \
+    "$(ui_paint "$(ui_bucket_color "$b")" "$(printf '%-*s' "$_status_w" "$status")")" \
+    "$(ui_paint fd_updated "$(printf '%-*s' "$_updated_w" "$_updated_str")")" \
+    "$(ui_paint fd_created "$_created_str")")"
   if [[ -n "$reason" ]]; then
+    # Decline reason wraps as its own labelled row underneath — too
+    # long to fit horizontally on the same line.
     _picker_push_info "$(printf '   %s  %s' \
       "$(ui_dim "$(printf '%-8s' 'reason')")" \
       "$(ui_paint "$(ui_bucket_color "$b")" "$reason")")"
@@ -1888,7 +1904,7 @@ build_detail_entries() {
   if [[ -f "$dir/proposal.md" ]]; then
     _picker_push_padding  # extra spacer (user asked +1 before heading)
     _picker_push_padding
-    _picker_push_info "   $(ui_paint fd_title "$(ui_small_caps PROPOSAL)")"
+    _picker_push_info "   $(ui_paint fd_title "⛰  $(ui_small_caps PROPOSAL)")"
     _picker_push_padding
 
     local _ln _rendered _plain
@@ -1919,7 +1935,7 @@ build_detail_entries() {
   # (3-cell indent + 3-cell picker prefix).
   if [[ -f "$dir/history.log" ]]; then
     _picker_push_padding
-    _picker_push_info "   $(ui_paint fd_title "$(ui_small_caps HISTORY)")"
+    _picker_push_info "   $(ui_paint fd_title "⛙  $(ui_small_caps HISTORY)")"
     _picker_push_padding
 
     _picker_push_info "$(printf '   %s  %s  %s  %s' \
@@ -1961,35 +1977,36 @@ build_detail_entries() {
   fi
 
   # ── ACTION BAR (bottom) ──
-  # Per user 0.33.13:
-  # - labels simplified (no parenthetical "(move to X)" hints — the
-  #   icon + verb carries the intent on its own).
-  # - "Done" with a check icon ✓ added to backlog so the user can
-  #   ship a change without first passing through in-progress.
-  # - "Finish" renamed to "Done" on in-progress to match.
-  # Extra +1 padding before the bar so it breathes off the HISTORY
-  # block above.
+  # Per user 0.33.14:
+  # - in-progress's "Done" → "Finish" (Done stays exclusive to the
+  #   backlog → done skip path; in-progress uses the active verb).
+  # - labels stay plain — no parenthetical hints.
+  # - ALL icons painted in fd_chrome to match the labels.  The
+  #   previous bucket-target colour-coding (▶ orange, ✓ mint, etc.)
+  #   was visually noisy next to the chrome labels — single-colour
+  #   strip reads more like a tool bar.
+  # +1 padding before the bar so it breathes off the HISTORY block.
   _picker_push_padding
   _picker_push_padding
   case "$b" in
     backlog)
-      _picker_push_action "$(ui_paint fd_inprogress '▶')  $(ui_paint fd_chrome 'Start')" "__act_start__"
-      _picker_push_action "$(ui_paint fd_done '✓')  $(ui_paint fd_chrome 'Done')" "__act_finish__"
-      _picker_push_action "$(ui_paint fd_declined '×')  $(ui_paint fd_chrome 'Decline')" "__act_decline__"
+      _picker_push_action "$(ui_paint fd_chrome '▶  Start')" "__act_start__"
+      _picker_push_action "$(ui_paint fd_chrome '✓  Done')" "__act_finish__"
+      _picker_push_action "$(ui_paint fd_chrome '×  Decline')" "__act_decline__"
       ;;
     in-progress)
-      _picker_push_action "$(ui_paint fd_done '✓')  $(ui_paint fd_chrome 'Done')" "__act_finish__"
-      _picker_push_action "$(ui_paint fd_backlog '⏸')  $(ui_paint fd_chrome 'Pause')" "__act_pause__"
-      _picker_push_action "$(ui_paint fd_declined '×')  $(ui_paint fd_chrome 'Decline')" "__act_decline__"
+      _picker_push_action "$(ui_paint fd_chrome '✓  Finish')" "__act_finish__"
+      _picker_push_action "$(ui_paint fd_chrome '⏸  Pause')" "__act_pause__"
+      _picker_push_action "$(ui_paint fd_chrome '×  Decline')" "__act_decline__"
       ;;
     done)
       : # terminal state — only Back below
       ;;
     declined)
-      _picker_push_action "$(ui_paint fd_backlog '↩')  $(ui_paint fd_chrome 'Revive')" "__act_revive__"
+      _picker_push_action "$(ui_paint fd_chrome '↩  Revive')" "__act_revive__"
       ;;
   esac
-  _picker_push_action "$(ui_paint fd_chrome '←  Back')" "__act_back__"
+  _picker_push_action "$(ui_paint fd_chrome '⇠  Back')" "__act_back__"
 }
 
 # Dedicated full-proposal screen invoked when the user picks
@@ -2015,7 +2032,7 @@ ui_view_proposal() {
     PICKER_RIGHT=()
 
     _picker_push_padding
-    _picker_push_info "   $(ui_paint fd_title "$(ui_small_caps PROPOSAL)")"
+    _picker_push_info "   $(ui_paint fd_title "⛰  $(ui_small_caps PROPOSAL)")"
     _picker_push_padding
 
     local _ln _rendered
@@ -2029,7 +2046,7 @@ ui_view_proposal() {
     done < "$dir/proposal.md"
 
     _picker_push_padding
-    _picker_push_action "$(ui_paint fd_chrome '←  Back')" "__view_back__"
+    _picker_push_action "$(ui_paint fd_chrome '⇠  Back')" "__view_back__"
 
     local _project _hdr_line2
     _project=$(basename "$PWD")
