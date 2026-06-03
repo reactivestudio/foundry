@@ -15,6 +15,8 @@ SM_SH="$SCRIPT_DIR/state-machine.sh"
 . "$SCRIPT_DIR/lib/render.sh"
 # shellcheck source=lib/constants.sh
 . "$SCRIPT_DIR/lib/constants.sh"
+# shellcheck source=lib/index.sh
+. "$SCRIPT_DIR/lib/index.sh"
 
 usage() {
   cat >&2 <<'EOF'
@@ -71,6 +73,13 @@ cmd_new() {
       "$dir/proposal.md" \
       TITLE="$title"
   fi
+  # Keep the backlog index in sync — pull the freshly-written
+  # timestamps back from tracking.yaml so created_at / updated_at agree
+  # with the per-slug file exactly (down to the second).
+  local _ct _ut
+  _ct=$("$TRACKING_SH" get "$dir" created_at)
+  _ut=$("$TRACKING_SH" get "$dir" updated_at)
+  index_add_entry backlog "$slug" "$title" "$_ct" "$_ut"
   echo "created: $dir"
 }
 
@@ -107,6 +116,18 @@ cmd_move() {
   if [[ "$to" == "declined" ]]; then
     "$TRACKING_SH" set "$dst" decline_reason "$reason"
   fi
+  # Re-sync the two bucket indexes — pull post-bump timestamps from
+  # tracking.yaml so the index agrees with the per-slug file.  status
+  # and decline_reason aren't carried in the index schema (status is
+  # implied by which bucket the entry lives in), so tracking.sh set
+  # itself doesn't touch the index — only this single explicit edit
+  # at the call-site does.
+  index_remove_entry "$from" "$slug"
+  local _t _ct _ut
+  _t=$("$TRACKING_SH"  get "$dst" title)
+  _ct=$("$TRACKING_SH" get "$dst" created_at)
+  _ut=$("$TRACKING_SH" get "$dst" updated_at)
+  index_add_entry "$to" "$slug" "$_t" "$_ct" "$_ut"
   "$TRACKING_SH" history "$dst" state-machine moved "$from->$to${reason:+ ($reason)}"
   echo "moved: $slug ($from -> $to)"
 }

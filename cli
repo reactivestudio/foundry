@@ -47,6 +47,8 @@ set -- "${ARGS[@]+"${ARGS[@]}"}"
 . "$SCRIPTS/lib/constants.sh"
 # shellcheck source=../scripts/lib/config.sh
 . "$SCRIPTS/lib/config.sh"
+# shellcheck source=../scripts/lib/index.sh
+. "$SCRIPTS/lib/index.sh"
 
 # ── helpers ───────────────────────────────────────────────────────────────
 FOUNDRY_ROOT="${FOUNDRY_ROOT:-$PWD/.foundry}"
@@ -61,6 +63,8 @@ usage:
   foundry new ["title"]            create a change (asks for title if omitted)
   foundry move <slug> [--to=X] [--reason=R]
                                    move a change between buckets
+  foundry sync                     rebuild per-bucket index caches (run after
+                                   manual edits inside .foundry/changes/)
   foundry setup                    scaffold .foundry/ in the current project
 
 global flags:
@@ -82,53 +86,39 @@ find_bucket() {
   return 1
 }
 
-# Compute "age" string from a tracking.yaml updated_at field.
-age_of() {
-  local dir="$1"
-  local ts; ts=$("$TRACKING_SH" get "$dir" updated_at 2>/dev/null) || return 0
-  [[ -z "$ts" ]] && return 0
-  local now; now=$(date -u +%s)
-  local then
-  if then=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null); then
-    :
-  elif then=$(date -u -d "$ts" +%s 2>/dev/null); then
-    :
-  else
-    echo "?"; return 0
-  fi
-  local delta=$((now - then))
-  if   (( delta < 60 ));      then echo "${delta}s"
-  elif (( delta < 3600 ));    then echo "$((delta / 60))m"
-  elif (( delta < 86400 ));   then echo "$((delta / 3600))h"
-  elif (( delta < 604800 ));  then echo "$((delta / 86400))d"
-  else                              echo "$((delta / 604800))w"
-  fi
-}
-
 # Emit a TSV row per change:
 #   bucket  slug  title  age_str  updated_epoch  created_epoch
+#
+# Reads from per-bucket .index.yaml (built by scripts/lib/index.sh) —
+# one awk fork per bucket instead of N×3 grep|sed forks per slug.
+# When an expected index is missing (first launch after upgrade, or
+# someone deleted the file) we rebuild it lazily before reading; the
+# explicit `foundry sync` action item rebuilds all four unconditionally.
 collect_rows() {
   local filter="${1:-all}"
   local buckets=("${BUCKETS[@]}")
   [[ "$filter" != "all" ]] && buckets=("$filter")
-  shopt -s nullglob
+  local now; now=$(date -u +%s)
+  local b slug title ct ut ce ue delta age
   for b in "${buckets[@]}"; do
     [[ -d "$CHANGES_DIR/$b" ]] || continue
-    for entry in "$CHANGES_DIR/$b"/*/; do
-      local slug; slug=$(basename "$entry")
-      local title; title=$("$TRACKING_SH" get "$entry" title 2>/dev/null || echo "?")
-      local age;   age=$(age_of "$entry")
-      local ut;    ut=$("$TRACKING_SH" get "$entry" updated_at 2>/dev/null || echo "")
-      local ct;    ct=$("$TRACKING_SH" get "$entry" created_at 2>/dev/null || echo "")
-      local upd_epoch=0 crt_epoch=0
-      [[ -n "$ut" ]] && upd_epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ut" +%s 2>/dev/null \
-                                  || date -u -d "$ut" +%s 2>/dev/null || echo 0)
-      [[ -n "$ct" ]] && crt_epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ct" +%s 2>/dev/null \
-                                  || date -u -d "$ct" +%s 2>/dev/null || echo 0)
-      printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$b" "$slug" "$title" "$age" "$upd_epoch" "$crt_epoch"
-    done
+    [[ -f "$CHANGES_DIR/$b/.index.yaml" ]] || index_rebuild_bucket "$b"
+    while IFS=$'\t' read -r slug title ct ut ce ue; do
+      [[ -z "$slug" ]] && continue
+      if [[ "$ue" != "0" && -n "$ue" ]]; then
+        delta=$(( now - ue ))
+        if   (( delta < 60 ));     then age="${delta}s"
+        elif (( delta < 3600 ));   then age="$(( delta / 60 ))m"
+        elif (( delta < 86400 ));  then age="$(( delta / 3600 ))h"
+        elif (( delta < 604800 )); then age="$(( delta / 86400 ))d"
+        else                            age="$(( delta / 604800 ))w"
+        fi
+      else
+        age="?"
+      fi
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$b" "$slug" "$title" "$age" "$ue" "$ce"
+    done < <(index_read_bucket "$b")
   done
-  shopt -u nullglob
 }
 
 # ── subcommands ───────────────────────────────────────────────────────────
@@ -506,6 +496,26 @@ cmd_setup() {
   bash "$SETUP_SH" "$@"
 }
 
+# Full rebuild of all per-bucket .index.yaml files.  Backs the Sync
+# action item in the picker and is exposed as a CLI subcommand for
+# scripting / cron-style recovery.  In interactive mode a gum spinner
+# covers the rebuild; in --plain mode we print a single success line.
+cmd_sync() {
+  require_foundry
+  if [[ "$UI_MODE" == "interactive" ]] && command -v gum >/dev/null 2>&1; then
+    gum spin --title "Syncing change indexes…" --spinner dot -- \
+      bash -c "
+        export FOUNDRY_ROOT='$FOUNDRY_ROOT'
+        . '$SCRIPTS/lib/constants.sh'
+        . '$SCRIPTS/lib/index.sh'
+        index_rebuild_all
+      "
+  else
+    index_rebuild_all
+    ui_success "indexes rebuilt"
+  fi
+}
+
 # Press-any-key gate; used between an action's output and the next redraw.
 pause_for_user() {
   printf '\n  %s ' "$(ui_dim 'press ↵ to continue')"
@@ -787,6 +797,7 @@ ui_bucket_view() {
 # strips ANSI). Display values are produced via ui_paint fd_chrome when
 # building picker entries.
 ACT_ADD='+  Add new change'
+ACT_SYNC='  Sync'    # nf-cod-sync — full rebuild of per-bucket .index.yaml files
 ACT_RELOAD='⟳  Reload'
 ACT_EXIT='⏻  Exit'
 
@@ -1459,6 +1470,12 @@ build_main_entries() {
   PICKER_FILTERABLE+=("0")
   _picker_meta_empty
 
+  PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_SYNC")")
+  PICKER_SLUGS+=("__act_sync__")
+  PICKER_TYPES+=("action")
+  PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
+
   PICKER_ENTRIES+=("$(ui_paint fd_chrome "$ACT_RELOAD")")
   PICKER_SLUGS+=("__act_reload__")
   PICKER_TYPES+=("action")
@@ -1526,6 +1543,8 @@ cmd_interactive() {
           ui_bucket_view "${slug#__more__}" ;;
         __act_add__)
           ui_add_new ;;
+        __act_sync__)
+          cmd_sync ;;   # full rebuild of per-bucket .index.yaml files
         __act_reload__)
           : ;;   # loop back, rebuild entries
         __act_exit__)
@@ -1555,6 +1574,7 @@ main() {
     new)             cmd_new "$@" ;;
     move)            cmd_move "$@" ;;
     setup)           cmd_setup "$@" ;;
+    sync)            cmd_sync "$@" ;;
     -h|--help|help)  usage ;;
     *)               ui_error "unknown subcommand: $sub"; usage ;;
   esac
