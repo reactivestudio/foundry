@@ -586,72 +586,86 @@ _norm_picker_line() {
   printf '%s' "$1" | sed -E $'s/\033\\[[0-9;]*[a-zA-Z]//g' | sed -E 's/[[:space:]]+$//'
 }
 
-# Drill into one change: show + action menu.
+# Drill into one change — picker-based detail screen.  Same branded
+# header (★ Foundry · subtitle / project: [name]) and ⌕  Search prompt
+# as the main screen, with the change's metadata, proposal preview,
+# history preview, and an action bar inline as picker entries.  Loops
+# until the user picks Back (or ESC) so an action that doesn't leave
+# the screen (view full, decline-then-cancel) keeps the same cursor
+# position re-rendered fresh.
+#
+# Plain mode (--plain or non-TTY) falls back to cmd_show + gum choose
+# via the legacy path — interactive picker requires TTY for raw input.
 ui_drill() {
   local slug="$1"
-  clear
-  cmd_show "$slug"
-  local b; b=$(find_bucket "$slug") || { pause_for_user; return; }
-  # Action-verb icons, colored to match the target state's brand color.
-  local ic_start="$(ui_paint fd_inprogress '▶')"   # play → start work
-  local ic_finish="$(ui_paint fd_done '✓')"        # check → finish
-  local ic_pause="$(ui_paint fd_backlog '⏸')"     # pause bars → pause
-  local ic_revive="$(ui_paint fd_backlog '↩')"    # return arrow → revive (back from declined)
-  local ic_decl="$(ui_paint fd_declined '×')"     # multiplication sign → decline
-  local ic_back="$(ui_paint fd_chrome '←')"        # left arrow → back
+  while true; do
+    local b
+    if ! b=$(find_bucket "$slug"); then
+      # The change got moved out from under us (e.g. concurrent edit).
+      # Bail back to the main screen rather than rendering empty.
+      return
+    fi
+    local dir="$CHANGES_DIR/$b/$slug"
 
-  local actions=()
-  case "$b" in
-    backlog)
-      actions=(
-        "$ic_start Start (move to in-progress)"
-        "$ic_decl Decline"
-        "$ic_back Back"
-      ) ;;
-    in-progress)
-      actions=(
-        "$ic_finish Finish (move to done)"
-        "$ic_pause Pause back to backlog"
-        "$ic_decl Decline"
-        "$ic_back Back"
-      ) ;;
-    done)
-      actions=("$ic_back Back (terminal — no transitions out)") ;;
-    declined)
-      actions=(
-        "$ic_revive Revive (back to backlog)"
-        "$ic_back Back"
-      ) ;;
-  esac
-  local action
-  action=$(gum choose --header "What next?" \
-    --header.foreground 153 \
-    --item.foreground 117 \
-    --cursor.foreground 255 \
-    --selected.foreground 255 \
-    "${actions[@]}") || return
-  case "$action" in
-    *"Start"*)
-      cmd_move "$slug" --to=in-progress
-      pause_for_user ;;
-    *"Finish"*)
-      cmd_move "$slug" --to=done
-      pause_for_user ;;
-    *"Pause"*)
-      cmd_move "$slug" --to=backlog
-      pause_for_user ;;
-    *"Revive"*)
-      cmd_move "$slug" --to=backlog
-      pause_for_user ;;
-    *"Decline"*)
-      local reason
-      reason=$(gum input --placeholder "Reason for declining" --header "Decline $slug")
-      if [[ -n "$reason" ]]; then
-        cmd_move "$slug" --to=declined --reason="$reason"
-        pause_for_user
-      fi ;;
-    *) ;;
-  esac
+    build_detail_entries "$slug" "$b"
+
+    # Branded header — identical bytes to cmd_interactive so the user
+    # sees the same ★ Foundry strip and project line.  Kept in sync by
+    # construction (same build_picker_header call, same subtitle text,
+    # same _hdr_line2 shape).
+    local _project _hdr_line2
+    _project=$(basename "$PWD")
+    _hdr_line2="$(ui_dim 'project:')  $(ui_paint_bold fd_project "[${_project}]")"
+    PICKER_HEADER="$(build_picker_header "$(ui_dim 'Code change registry — propose, track, implement, ship')" "$_hdr_line2")"
+
+    if ui_picker "⌕  Search "; then
+      case "$PICKER_RESULT_SLUG" in
+        __view_proposal__)
+          # Hand the terminal to $PAGER (less) for full proposal view.
+          # The picker has already restored the terminal to cooked mode
+          # on its way out, so less reads keystrokes normally.  -R keeps
+          # any ANSI in proposal.md rendering as colour, not literal.
+          ${PAGER:-less} -R "$dir/proposal.md" </dev/tty >/dev/tty 2>/dev/tty || true
+          ;;
+        __view_history__)
+          # Full history.log in pager — tab-separated rows render OK
+          # under less; user gets a chronological audit trail.
+          ${PAGER:-less} -R "$dir/history.log" </dev/tty >/dev/tty 2>/dev/tty || true
+          ;;
+        __act_start__)
+          cmd_move "$slug" --to=in-progress
+          pause_for_user
+          ;;
+        __act_finish__)
+          cmd_move "$slug" --to=done
+          pause_for_user
+          ;;
+        __act_pause__)
+          cmd_move "$slug" --to=backlog
+          pause_for_user
+          ;;
+        __act_revive__)
+          cmd_move "$slug" --to=backlog
+          pause_for_user
+          ;;
+        __act_decline__)
+          local reason
+          reason=$(gum input --placeholder "Reason for declining" --header "Decline $slug")
+          if [[ -n "$reason" ]]; then
+            cmd_move "$slug" --to=declined --reason="$reason"
+            pause_for_user
+          fi
+          ;;
+        __act_back__|'')
+          return
+          ;;
+        *) ;;
+      esac
+    else
+      # ESC from picker → back to main screen.
+      return
+    fi
+  done
 }
 
 # Prompt for a title → create → return (caller redraws).
@@ -1533,6 +1547,191 @@ build_main_entries() {
   PICKER_TYPES+=("action")
   PICKER_FILTERABLE+=("0")
   _picker_meta_empty
+}
+
+# Populate PICKER_* arrays for the change-detail screen.  Layout mirrors
+# the main screen's grammar (same indent, same colour roles, same
+# header/search) so navigating in/out reads as one continuous surface.
+#
+#   <padding>
+#   <icon>  <bucket>  <change-title-bold>
+#   <padding>
+#   ꜱᴛᴀᴛᴜꜱ     <status>
+#   ᴜᴘᴅᴀᴛᴇᴅ    <relative · full date>
+#   ᴄʀᴇᴀᴛᴇᴅ    <full date>
+#   [ʀᴇᴀꜱᴏɴ    <decline reason — declined bucket only>]
+#   <padding>
+#   ᴘʀᴏᴘᴏꜱᴀʟ        ← small caps, no dividers (user spec)
+#   <padding>
+#     line 1 of proposal.md
+#     ... (up to 5 non-blank lines)
+#   <padding>
+#   ▸  view full   ← action; opens proposal.md in $PAGER
+#   <padding>
+#   ʜɪꜱᴛᴏʀʏ
+#   <padding>
+#     <rel>  <actor>  <event>  <details>     (up to 3 most-recent — newest first)
+#   +N more...    ← action; opens history.log in $PAGER (only when total > 3)
+#   <padding>
+#   ▶  Start / ⏸ Pause / ✓ Finish / ↩ Revive / ×  Decline   (bucket-conditional)
+#   ←  Back
+#
+# Section headings use ui_small_caps + fd_title — the same small-caps
+# treatment as the main screen's column headers, with fd_title (not
+# dim) because section headings on a single-record screen organise
+# the screen rather than label repeating columns.
+build_detail_entries() {
+  local slug="$1" b="$2"
+  local dir="$CHANGES_DIR/$b/$slug"
+  local title;   title=$("$TRACKING_SH" get "$dir" title 2>/dev/null)
+  local status;  status=$("$TRACKING_SH" get "$dir" status 2>/dev/null)
+  local created; created=$("$TRACKING_SH" get "$dir" created_at 2>/dev/null)
+  local updated; updated=$("$TRACKING_SH" get "$dir" updated_at 2>/dev/null)
+  local reason;  reason=$("$TRACKING_SH" get "$dir" decline_reason 2>/dev/null || true)
+
+  PICKER_ENTRIES=()
+  PICKER_SLUGS=()
+  PICKER_TYPES=()
+  PICKER_FILTERABLE=()
+  PICKER_BUCKET=()
+  PICKER_TITLE=()
+  PICKER_TITLE_W=()
+  PICKER_LEFT=()
+  PICKER_RIGHT=()
+
+  # ── title row: icon + bucket + change title ──
+  _picker_push_padding
+  _picker_push_info "$(printf '   %s  %s  %s' \
+    "$(ui_paint fd_icon "$(ui_icon "$b")")" \
+    "$(ui_paint "$(ui_bucket_color "$b")" "$(printf '%-12s' "$b")")" \
+    "$(ui_paint_bold fd_title "$title")")"
+  _picker_push_padding
+
+  # ── metadata rows ──
+  # Labels: small caps + dim, padded to 10 visual cells so the values
+  # column lines up.  Values: bucket colour for status, fd_updated for
+  # updated (electric lavender), fd_created for created (soft mint).
+  _picker_push_info "$(printf '   %s  %s' \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps STATUS)" 10)")" \
+    "$(ui_paint "$(ui_bucket_color "$b")" "$status")")"
+  _picker_push_info "$(printf '   %s  %s' \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps UPDATED)" 10)")" \
+    "$(ui_paint fd_updated "$(ui_date_relative "$updated") · $(ui_date_full "$updated")")")"
+  _picker_push_info "$(printf '   %s  %s' \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps CREATED)" 10)")" \
+    "$(ui_paint fd_created "$(ui_date_full "$created")")")"
+  if [[ -n "$reason" ]]; then
+    _picker_push_info "$(printf '   %s  %s' \
+      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps REASON)" 10)")" \
+      "$(ui_paint "$(ui_bucket_color "$b")" "$reason")")"
+  fi
+
+  # ── PROPOSAL ──
+  if [[ -f "$dir/proposal.md" ]]; then
+    _picker_push_padding
+    _picker_push_info "   $(ui_paint fd_title "$(ui_small_caps PROPOSAL)")"
+    _picker_push_padding
+
+    local proposal_lines=()
+    # First 5 non-blank lines — blanks suppressed for compactness, same
+    # rule as the plain-mode cmd_show preview.  bash 3.2 has no
+    # mapfile/readarray, hence the while-read + process-sub pattern.
+    local _ln
+    while IFS= read -r _ln; do
+      proposal_lines+=("$_ln")
+    done < <(grep -E '[^[:space:]]' "$dir/proposal.md" | head -n 5)
+    local total_lines; total_lines=$(grep -cE '[^[:space:]]' "$dir/proposal.md" 2>/dev/null || echo 0)
+    local pl
+    for pl in "${proposal_lines[@]}"; do
+      _picker_push_info "     $(ui_dim "$pl")"
+    done
+
+    # "view full" — always shown when the file exists, so user has a
+    # one-keystroke path to the full source whether or not the preview
+    # was truncated.  Label carries the truncated-by-N hint when
+    # applicable.
+    _picker_push_padding
+    local view_label='view full'
+    if (( total_lines > ${#proposal_lines[@]} )); then
+      view_label="view full  ($((total_lines - ${#proposal_lines[@]})) more lines)"
+    fi
+    _picker_push_action "   $(ui_paint fd_chrome "▸  $view_label")" "__view_proposal__"
+  fi
+
+  # ── HISTORY ──
+  if [[ -f "$dir/history.log" ]]; then
+    _picker_push_padding
+    _picker_push_info "   $(ui_paint fd_title "$(ui_small_caps HISTORY)")"
+    _picker_push_padding
+
+    local history_lines=()
+    # Newest first via `tac` (GNU) or `tail -r` (BSD), capped at 3.
+    # bash-3.2-compatible array build (no mapfile).
+    local _hln
+    while IFS= read -r _hln; do
+      history_lines+=("$_hln")
+    done < <({ tac "$dir/history.log" 2>/dev/null || tail -r "$dir/history.log"; } | head -n 3)
+    local total_history
+    total_history=$(grep -c '.' "$dir/history.log" 2>/dev/null || echo 0)
+
+    local hl ts actor event details
+    for hl in "${history_lines[@]}"; do
+      IFS=$'\t' read -r ts actor event details <<< "$hl"
+      local rel; rel=$(ui_date_relative "$ts")
+      local actor_color=muted
+      [[ "$actor" == "user" ]] && actor_color=ok
+      [[ "$actor" == "state-machine" ]] && actor_color=accent
+      local pretty="$details" reason_line=""
+      pretty="${pretty//->/ → }"
+      if [[ "$pretty" =~ ^(.+)\ \((.+)\)$ ]]; then
+        pretty="${BASH_REMATCH[1]}"
+        reason_line="${BASH_REMATCH[2]}"
+      fi
+      _picker_push_info "$(printf '     %s  %s  %s  %s' \
+        "$(ui_dim "$(printf '%-12s' "$rel")")" \
+        "$(ui_paint "$actor_color" "$(printf '%-14s' "$actor")")" \
+        "$(ui_bright "$(printf '%-8s' "$event")")" \
+        "$pretty")"
+      if [[ -n "$reason_line" ]]; then
+        # Wrapped decline reason on its own indented line — aligns under
+        # the details column (5 indent + 12 rel + 2 + 14 actor + 2 + 8 event + 2 = 45).
+        _picker_push_info "$(printf '     %45s%s' '' "$(ui_dim "\"$reason_line\"")")"
+      fi
+    done
+
+    if (( total_history > ${#history_lines[@]} )); then
+      local more=$(( total_history - ${#history_lines[@]} ))
+      _picker_push_action "     $(ui_paint fd_more "+$more more...")" "__view_history__"
+    fi
+  fi
+
+  # ── action bar ──
+  # Icons painted in the target-state's brand colour (▶ green = start,
+  # ⏸ indigo = pause, ✓ mint = finish, ↩ indigo = revive, × pink =
+  # decline, ← chrome = back).  Labels painted fd_chrome so the strip
+  # reads as one cohesive band — matches the main screen's bottom
+  # action bar (+/Sync/Reload/Exit) where everything is fd_chrome.
+  _picker_push_padding
+
+  case "$b" in
+    backlog)
+      _picker_push_action "   $(ui_paint fd_inprogress '▶')  $(ui_paint fd_chrome 'Start (move to in-progress)')" "__act_start__"
+      _picker_push_action "   $(ui_paint fd_declined '×')  $(ui_paint fd_chrome 'Decline')" "__act_decline__"
+      ;;
+    in-progress)
+      _picker_push_action "   $(ui_paint fd_done '✓')  $(ui_paint fd_chrome 'Finish (move to done)')" "__act_finish__"
+      _picker_push_action "   $(ui_paint fd_backlog '⏸')  $(ui_paint fd_chrome 'Pause back to backlog')" "__act_pause__"
+      _picker_push_action "   $(ui_paint fd_declined '×')  $(ui_paint fd_chrome 'Decline')" "__act_decline__"
+      ;;
+    done)
+      : # terminal state — only the Back action below
+      ;;
+    declined)
+      _picker_push_action "   $(ui_paint fd_backlog '↩')  $(ui_paint fd_chrome 'Revive (back to backlog)')" "__act_revive__"
+      ;;
+  esac
+
+  _picker_push_action "   $(ui_paint fd_chrome '←  Back')" "__act_back__"
 }
 
 # Interactive REPL — single screen via custom ui_picker:
