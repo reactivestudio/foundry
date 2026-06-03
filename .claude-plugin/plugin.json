@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "foundry",
-  "version": "0.32.27",
+  "version": "0.32.28",
   "description": "CRISPY methodology for solo senior/staff engineers — change lifecycle, enforcement framework, opinionated coding-agent pipeline.",
   "author": {
     "name": "Dmitriy Bushin",

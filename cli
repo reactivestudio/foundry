@@ -1509,8 +1509,9 @@ cmd_interactive() {
     # tool — "Code change registry — propose, track, implement, ship"
     # — names the artifact (registry) and the four lifecycle verbs in
     # the same order the picker columns surface them.  Line 2 anchors
-    # the screen to the current project (peach fd_project on the
-    # bracketed project token, against the dim 'project:' label).
+    # the screen to the current project (fd_project — same electric
+    # blue-violet as the brand strip — on the bracketed project
+    # token, against the dim 'project:' label).
     local _project _hdr_line2
     _project=$(basename "$PWD")
     _hdr_line2="$(ui_dim 'project:')  $(ui_paint fd_project "[${_project}]")"

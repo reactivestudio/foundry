@@ -52,18 +52,17 @@ ui_color_code() {
     # Brand strip on 256-palette — Terminal.app's truecolor pipeline
     # silently desaturates the values we tried in 0.32.18 / 0.32.23,
     # so the brand slots stay pinned to palette codes that render
-    # honestly.  Nearest-RGB approximations:
-    #   target #5800FF (electric blue-violet) → code 57 #5f00ff (Δ²  49)
-    #   target #FFB399 (lighter peach)        → code 216 #ffaf87 (Δ² 340)
-    # 57 reads as a saturated electric purple — vivid against both
-    # the dim subtitle and the peach project token.  216 stays on
-    # project so the bracketed [project-name] still pops warm and
-    # light against the cool violet brand.
+    # honestly.  Nearest-RGB approximation to the user's #5800FF
+    # target: code 57 #5f00ff (Δ² = 49, only red off by 7 units).
+    # All brand-identity slots — star, wordmark, ⌕, "Search", caret,
+    # selector arrow AND the bracketed project token — share this
+    # one hue for a single-colour brand line.  Contrast against the
+    # data rows comes from saturation, not hue.
     fd_search)      echo 57 ;;   # electric blue-violet #5f00ff — matches fd_brand
     fd_caret)       echo 57 ;;   # electric blue-violet #5f00ff — matches fd_brand
     fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
     fd_brand)       echo 57 ;;   # electric blue-violet #5f00ff — star + "Foundry" + ➤
-    fd_project)     echo 216 ;;  # warm peach #ffaf87 — project name in header
+    fd_project)     echo 57 ;;   # electric blue-violet #5f00ff — bracketed project name
     fd_more)        echo 103 ;;  # gray with subtle blue lift #8787af — "+N more" rows
     *)       echo 7 ;;
   esac
