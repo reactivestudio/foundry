@@ -50,18 +50,19 @@ ui_color_code() {
     fd_done)        echo 121 ;;  # soft mint
     fd_declined)    echo 218 ;;  # pale pink
     # Brand strip on 256-palette — Terminal.app's truecolor pipeline
-    # silently desaturates even the light coral / peach hues we tried
-    # in 0.32.23 (#FF9A86, #FFB399), so we're back on palette codes.
-    # The chosen indices are the nearest-RGB approximations:
-    #   target #FF9A86 (light coral)  → code 210 #ff8787 (Δ² 362)
-    #   target #FFB399 (lighter peach)→ code 216 #ffaf87 (Δ² 340)
-    # 210 reads pink-coral and dense; 216 reads peach and lighter —
-    # the brand vs. project distinction the user asked for survives,
-    # and both render honestly in Terminal.app's 256 palette.
-    fd_search)      echo 210 ;;  # coral pink #ff8787 — matches fd_brand
-    fd_caret)       echo 210 ;;  # coral pink #ff8787 — matches fd_brand
+    # silently desaturates the values we tried in 0.32.18 / 0.32.23,
+    # so the brand slots stay pinned to palette codes that render
+    # honestly.  Nearest-RGB approximations:
+    #   target #5800FF (electric blue-violet) → code 57 #5f00ff (Δ²  49)
+    #   target #FFB399 (lighter peach)        → code 216 #ffaf87 (Δ² 340)
+    # 57 reads as a saturated electric purple — vivid against both
+    # the dim subtitle and the peach project token.  216 stays on
+    # project so the bracketed [project-name] still pops warm and
+    # light against the cool violet brand.
+    fd_search)      echo 57 ;;   # electric blue-violet #5f00ff — matches fd_brand
+    fd_caret)       echo 57 ;;   # electric blue-violet #5f00ff — matches fd_brand
     fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
-    fd_brand)       echo 210 ;;  # coral pink #ff8787 — star + "Foundry"
+    fd_brand)       echo 57 ;;   # electric blue-violet #5f00ff — star + "Foundry" + ➤
     fd_project)     echo 216 ;;  # warm peach #ffaf87 — project name in header
     fd_more)        echo 103 ;;  # gray with subtle blue lift #8787af — "+N more" rows
     *)       echo 7 ;;
