@@ -49,21 +49,20 @@ ui_color_code() {
     fd_inprogress)  echo 215 ;;  # warm orange
     fd_done)        echo 121 ;;  # soft mint
     fd_declined)    echo 218 ;;  # pale pink
-    # Brand strip on 256-palette — Terminal.app's truecolor pipeline
-    # silently desaturates the values we tried in 0.32.18 / 0.32.23,
-    # so the brand slots stay pinned to palette codes that render
-    # honestly.  Nearest-RGB approximation to the user's #5800FF
-    # target: code 57 #5f00ff (Δ² = 49, only red off by 7 units).
-    # All brand-identity slots — star, wordmark, ⌕, "Search", caret,
-    # selector arrow AND the bracketed project token — share this
-    # one hue for a single-colour brand line.  Contrast against the
-    # data rows comes from saturation, not hue.
-    fd_search)      echo 57 ;;   # electric blue-violet #5f00ff — matches fd_brand
-    fd_caret)       echo 57 ;;   # electric blue-violet #5f00ff — matches fd_brand
-    fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
-    fd_brand)       echo 57 ;;   # electric blue-violet #5f00ff — star + "Foundry" + ➤
-    fd_project)     echo 57 ;;   # electric blue-violet #5f00ff — bracketed project name
-    fd_more)        echo 110 ;;  # muted baby blue #87afd7 — same family as fd_title (153), ~15% darker
+    # Brand strip in truecolor — palette code 57 (the standard
+    # nearest-RGB to #5800FF) was rendering noticeably "off" in the
+    # user's Terminal.app profile, which appears to remap parts of
+    # the 256-colour cube.  Truecolor bypasses the palette entirely
+    # and asks Terminal.app for the exact RGB triplet.  If this
+    # specific hue gets desaturated by Terminal.app's known
+    # truecolor wash, fall back to palette — but worth trying first
+    # since the palette path is the one that misrendered.
+    fd_search)      echo '#5800FF' ;;  # electric blue-violet — matches fd_brand
+    fd_caret)       echo '#5800FF' ;;  # electric blue-violet — matches fd_brand
+    fd_match)       echo 222 ;;        # pale gold #ffd787 — search-match highlight in titles
+    fd_brand)       echo '#5800FF' ;;  # electric blue-violet — star + "Foundry" + ➤
+    fd_project)     echo '#5800FF' ;;  # electric blue-violet — bracketed project name
+    fd_more)        echo 110 ;;        # muted baby blue #87afd7 — fd_title (153) ~15% darker
     *)       echo 7 ;;
   esac
 }
