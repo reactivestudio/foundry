@@ -825,10 +825,11 @@ build_picker_header() {
   fi
   if [[ -n "$line2" ]]; then
     # 18-space indent so line 2 starts at column 19 — flush under the
-    # 's' of "structured" (the start of the subtitle), not under the
-    # 'F' of Foundry.  Layout reference: cols 1-3 frame indent, col 4
-    # ★, cols 5-6 spaces, cols 7-13 "Foundry", cols 14-15 spaces,
-    # col 16 "·", cols 17-18 spaces, col 19 first char of subtitle.
+    # first character of the subtitle (currently "Code change…"), not
+    # under the 'F' of Foundry.  Layout reference: cols 1-3 frame
+    # indent, col 4 ★, cols 5-6 spaces, cols 7-13 "Foundry", cols
+    # 14-15 spaces, col 16 "·", cols 17-18 spaces, col 19 first char
+    # of subtitle.
     out+=$'\n                  '"$line2"
   fi
   printf '%s' "$out"
@@ -1503,17 +1504,17 @@ cmd_interactive() {
     build_main_entries
     # Two-line branded header.
     #   Line 1: ★ Foundry · <descriptive tagline>
-    #   Line 2: project: <project-name>
+    #   Line 2: project: [<project-name>]
     # The subtitle is a one-line description of what foundry IS as a
-    # tool — "structured ledger for proposing, tracking and shipping
-    # every code change" — enough context to orient a fresh viewer
-    # without scanning the column data.  Line 2 anchors the screen to
-    # the current project (electric-blue fd_project so the project
-    # name pops against the dim 'project:' label).
+    # tool — "Code change registry — propose, track, implement, ship"
+    # — names the artifact (registry) and the four lifecycle verbs in
+    # the same order the picker columns surface them.  Line 2 anchors
+    # the screen to the current project (peach fd_project on the
+    # bracketed project token, against the dim 'project:' label).
     local _project _hdr_line2
     _project=$(basename "$PWD")
     _hdr_line2="$(ui_dim 'project:')  $(ui_paint fd_project "[${_project}]")"
-    PICKER_HEADER="$(build_picker_header "$(ui_dim 'structured ledger for proposing, tracking and shipping every code change')" "$_hdr_line2")"
+    PICKER_HEADER="$(build_picker_header "$(ui_dim 'Code change registry — propose, track, implement, ship')" "$_hdr_line2")"
     if ui_picker "⌕  Search "; then
       local slug="$PICKER_RESULT_SLUG"
       case "$slug" in
