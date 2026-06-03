@@ -1464,19 +1464,54 @@ ui_picker() {
 #                         __act_add__  "+ Add new"
 #                         __act_reload__ reload
 #                         __act_exit__ exit
-#   PICKER_TYPES      — 'row'|'action'|'header'|'padding'|'summary'
+#   PICKER_TYPES      — 'row'|'action'|'header'|'padding'|'summary'|'info'
 #   PICKER_FILTERABLE — '1' for rows (subject to search filter), '0' for rest
 #
 # Layout: column header → rows (per bucket, capped + "+N more") → blank
 # padding → summary → blank padding → action items.
 # Append empty placeholders to all per-row metadata arrays.  Keeps them
 # parallel with PICKER_ENTRIES so the picker can index any slot safely.
+# CRITICAL: every meta array must get a push here, including
+# PICKER_LEFT_HOVER (which the cursor-hover render path indexes by
+# absolute PICKER_ENTRIES index, not by row count).
 _picker_meta_empty() {
   PICKER_BUCKET+=("")
   PICKER_TITLE+=("")
   PICKER_TITLE_W+=("0")
   PICKER_LEFT+=("")
+  PICKER_LEFT_HOVER+=("")
   PICKER_RIGHT+=("")
+}
+
+# ── detail-screen push helpers (called by build_detail_entries) ──────────
+# These keep all parallel arrays in lock-step so cursor navigation can
+# never index past the end of any meta array.  Push the entry, then call
+# _picker_meta_empty for the unused per-row fields.
+_picker_push_padding() {
+  PICKER_ENTRIES+=("")
+  PICKER_SLUGS+=("")
+  PICKER_TYPES+=("padding")
+  PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
+}
+
+# Info row — display-only, cursor skips over it.  Used in detail-view
+# for headings (PROPOSAL, HISTORY) and rendered metadata lines.
+_picker_push_info() {
+  PICKER_ENTRIES+=("$1")
+  PICKER_SLUGS+=("")
+  PICKER_TYPES+=("info")
+  PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
+}
+
+# Action row — cursor lands on it; selecting returns the slug arg.
+_picker_push_action() {
+  PICKER_ENTRIES+=("$1")
+  PICKER_SLUGS+=("$2")
+  PICKER_TYPES+=("action")
+  PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
 }
 
 build_main_entries() {
@@ -1672,6 +1707,7 @@ build_detail_entries() {
   PICKER_TITLE=()
   PICKER_TITLE_W=()
   PICKER_LEFT=()
+  PICKER_LEFT_HOVER=()
   PICKER_RIGHT=()
 
   # ── title row: icon + bucket + change title ──
