@@ -815,10 +815,10 @@ build_picker_header() {
   # bold SGR is emitted in its own CSI (see ui.sh) — Terminal.app was
   # silently dropping the bold attribute when bundled with the
   # extended-foreground SGR in a single CSI in 0.32.22.  Colour comes
-  # from fd_brand → truecolor #5800FF (electric blue-violet).
-  # Palette code 57 rendered "off" in the user's Terminal.app
-  # profile (suspected 256-cube remap), so we ask for the RGB
-  # triplet directly via \033[38;2;88;0;255m.
+  # from fd_brand → 256 palette code 27 (#005fff, electric blue with
+  # faint green lift) — picked from a 15-row preview after both
+  # palette 57 and truecolor #5800FF mis-rendered in the user's
+  # Terminal.app profile.
   out="$(ui_paint_bold fd_brand '★')  "
   out+="$(ui_paint_bold fd_brand 'Foundry')"
   if [[ -n "$subtitle" ]]; then
@@ -992,7 +992,7 @@ ui_picker() {
   done
 
   # Static render fragments.  ⌕ + "Search" share the brand colour
-  # (fd_search → truecolor #5800FF electric blue-violet); the caret a few
+  # (fd_search → 256 code 27, electric blue #005fff); the caret a few
   # columns to the right is painted in the matching fd_caret slot.
   local prompt_painted; prompt_painted=$(ui_paint fd_search "$prompt_label")
 
@@ -1074,7 +1074,7 @@ ui_picker() {
       # Each printf goes directly to /dev/tty per call (bypasses libc's
       # line-buffered subshell stdout, which was stranding bytes between
       # sleeps).  Colour comes from fd_caret (currently 256 code 210
-      # truecolor #5800FF electric blue-violet) — matches the brand strip so the caret
+      # 256 code 27 electric blue #005fff) — matches the brand strip so the caret
       # reads as "Foundry's" cursor rather than a generic system one.
       case "$phase" in
         0) printf '\033[%s;%sH\033[%sm▏\033[0m' "$_row" "$col" "$_seq" >/dev/tty ;;

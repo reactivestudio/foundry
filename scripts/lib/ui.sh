@@ -49,20 +49,20 @@ ui_color_code() {
     fd_inprogress)  echo 215 ;;  # warm orange
     fd_done)        echo 121 ;;  # soft mint
     fd_declined)    echo 218 ;;  # pale pink
-    # Brand strip in truecolor — palette code 57 (the standard
-    # nearest-RGB to #5800FF) was rendering noticeably "off" in the
-    # user's Terminal.app profile, which appears to remap parts of
-    # the 256-colour cube.  Truecolor bypasses the palette entirely
-    # and asks Terminal.app for the exact RGB triplet.  If this
-    # specific hue gets desaturated by Terminal.app's known
-    # truecolor wash, fall back to palette — but worth trying first
-    # since the palette path is the one that misrendered.
-    fd_search)      echo '#5800FF' ;;  # electric blue-violet — matches fd_brand
-    fd_caret)       echo '#5800FF' ;;  # electric blue-violet — matches fd_brand
-    fd_match)       echo 222 ;;        # pale gold #ffd787 — search-match highlight in titles
-    fd_brand)       echo '#5800FF' ;;  # electric blue-violet — star + "Foundry" + ➤
-    fd_project)     echo '#5800FF' ;;  # electric blue-violet — bracketed project name
-    fd_more)        echo 110 ;;        # muted baby blue #87afd7 — fd_title (153) ~15% darker
+    # Brand strip on 256-palette code 27 (#005fff) — vivid electric
+    # blue with a faint green lift.  Picked from a 15-candidate
+    # preview after both palette 57 (#5f00ff) and truecolor #5800FF
+    # mis-rendered in the user's Terminal.app profile (the 256-cube
+    # appears partly remapped, and the truecolor pipeline desaturates
+    # this violet hue toward gray/green).  Code 27 is in the
+    # standard cube column adjacent to fd_project's old electric-blue
+    # 33 (#0087ff) — confirmed to render cleanly in the same profile.
+    fd_search)      echo 27 ;;   # electric blue #005fff — matches fd_brand
+    fd_caret)       echo 27 ;;   # electric blue #005fff — matches fd_brand
+    fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
+    fd_brand)       echo 27 ;;   # electric blue #005fff — star + "Foundry" + ➤
+    fd_project)     echo 27 ;;   # electric blue #005fff — bracketed project name
+    fd_more)        echo 110 ;;  # muted baby blue #87afd7 — fd_title (153) ~15% darker
     *)       echo 7 ;;
   esac
 }
