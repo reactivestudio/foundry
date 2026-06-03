@@ -857,7 +857,7 @@ ui_bucket_view() {
 # strips ANSI). Display values are produced via ui_paint fd_chrome when
 # building picker entries.
 ACT_ADD='+  Add new change'
-ACT_SYNC='  Sync'    # nf-cod-sync — full rebuild of per-bucket .index.yaml files
+ACT_SYNC='⛖  Sync'    # U+26D6 BLACK TWO-WAY LEFT WAY TRAFFIC — plain Unicode (no Nerd Font); full rebuild of per-bucket .index.yaml files
 ACT_RELOAD='⟳  Reload'
 ACT_EXIT='⏻  Exit'
 
