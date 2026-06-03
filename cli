@@ -700,7 +700,13 @@ ui_add_new() {
 # with bucket-specific column header, page summary, and pagination actions.
 ui_bucket_view() {
   local bucket="$1"
-  local page=1 per_page; per_page="$(config_get bucket_page_size 20)"
+  # Page size 5 — matches the user-requested pagination cadence and
+  # keeps the screen height predictable.  Was 20 previously (with
+  # ◀ Previous page / ▶ Next page footer actions); 0.33.3 moved the
+  # pagination controls inline as "+N previous" / "+M next" entries
+  # that sit at the top/bottom of the list, so the page has to be
+  # smaller to actually surface pagination on realistic data sizes.
+  local page=1 per_page=5
 
   while true; do
     local rows; rows=$(collect_rows all | awk -F'\t' -v b="$bucket" '$1 == b' \
@@ -710,9 +716,13 @@ ui_bucket_view() {
     (( total == 0 )) && return
     local pages=$(( (total + per_page - 1) / per_page ))
     (( pages < 1 )) && pages=1
+    (( page > pages )) && page=$pages
+    (( page < 1 )) && page=1
     local start=$(( (page - 1) * per_page + 1 ))
     local end=$(( page * per_page ))
     (( end > total )) && end=$total
+    local prev_count=$((start - 1))
+    local next_count=$((total - end))
     local page_rows; page_rows=$(printf '%s\n' "$rows" | sed -n "${start},${end}p")
 
     PICKER_ENTRIES=()
@@ -726,8 +736,8 @@ ui_bucket_view() {
     PICKER_LEFT_HOVER=()
     PICKER_RIGHT=()
 
-    # Extra blank row before the column header — user wanted one more
-    # line of breathing space between the ⌕ Search caret and the
+    # Extra blank row before the column header — matches the main
+    # view's breathing space between the ⌕ Search caret and the
     # STATUS / TITLE / CREATED / UPDATED strip.
     PICKER_ENTRIES+=("")
     PICKER_SLUGS+=("")
@@ -742,15 +752,28 @@ ui_bucket_view() {
     PICKER_FILTERABLE+=("0")
     _picker_meta_empty
 
-    # Blank padding row beneath the column header to match the main
-    # view — same "breathing room" requirement from the user.
+    # Blank padding row beneath the column header — matches main view.
     PICKER_ENTRIES+=("")
     PICKER_SLUGS+=("")
     PICKER_TYPES+=("padding")
     PICKER_FILTERABLE+=("0")
     _picker_meta_empty
 
-    # Bucket rows.  Same parts plumbing as build_main_entries so that
+    # ── inline pagination: "+N previous" at top when page > 1 ──
+    # Reuses _build_more_row so the row visually matches the main-
+    # screen overflow row (blank icon/bucket cells, label in fd_more
+    # across the title cell, blank date cells).  Selecting it pages
+    # back; the picker treats it as an action.  Filterable=0 so it
+    # stays visible regardless of search text.
+    if (( prev_count > 0 )); then
+      PICKER_ENTRIES+=("$(_build_more_row "+${prev_count} previous")")
+      PICKER_SLUGS+=("__bv_prev__")
+      PICKER_TYPES+=("action")
+      PICKER_FILTERABLE+=("0")
+      _picker_meta_empty
+    fi
+
+    # Bucket rows.  Same parts plumbing as build_main_entries so the
     # filter-match title highlighting works here too.
     while IFS=$'\t' read -r bb slug title _ upd crt; do
       build_row_parts "$bb" "$title" "$upd" "$crt"
@@ -767,9 +790,28 @@ ui_bucket_view() {
       PICKER_RIGHT+=("$ROW_RIGHT")
     done <<< "$page_rows"
 
-    # Summary block — lifted up one line (no pre-summary padding,
-    # two post-summary padding rows) per user request.
-    PICKER_ENTRIES+=("   $(ui_paint fd_chrome "$(ui_status "$bucket")  ·  page $page of $pages  ·  $total total")")
+    # ── inline pagination: "+M next" at bottom when more pages exist ──
+    if (( next_count > 0 )); then
+      PICKER_ENTRIES+=("$(_build_more_row "+${next_count} next")")
+      PICKER_SLUGS+=("__bv_next__")
+      PICKER_TYPES+=("action")
+      PICKER_FILTERABLE+=("0")
+      _picker_meta_empty
+    fi
+
+    # Minimal summary — replaces the verbose
+    #   "○ backlog  ·  page X of Y  ·  N total"
+    # of pre-0.33.3.  Position is now implied by the in-list pagination
+    # entries above, and the bucket badge already sits in the header
+    # subtitle, so the only orientation the summary still owes the
+    # user is the total count.  Dim so it reads as chrome, not data.
+    PICKER_ENTRIES+=("")
+    PICKER_SLUGS+=("")
+    PICKER_TYPES+=("padding")
+    PICKER_FILTERABLE+=("0")
+    _picker_meta_empty
+
+    PICKER_ENTRIES+=("   $(ui_dim "${total} changes total")")
     PICKER_SLUGS+=("")
     PICKER_TYPES+=("summary")
     PICKER_FILTERABLE+=("0")
@@ -781,27 +823,8 @@ ui_bucket_view() {
     PICKER_FILTERABLE+=("0")
     _picker_meta_empty
 
-    PICKER_ENTRIES+=("")
-    PICKER_SLUGS+=("")
-    PICKER_TYPES+=("padding")
-    PICKER_FILTERABLE+=("0")
-    _picker_meta_empty
-
-    # Pagination + back actions.
-    if (( page > 1 )); then
-      PICKER_ENTRIES+=("$(ui_paint fd_chrome "◀  Previous page")")
-      PICKER_SLUGS+=("__bv_prev__")
-      PICKER_TYPES+=("action")
-      PICKER_FILTERABLE+=("0")
-      _picker_meta_empty
-    fi
-    if (( page < pages )); then
-      PICKER_ENTRIES+=("$(ui_paint fd_chrome "▶  Next page")")
-      PICKER_SLUGS+=("__bv_next__")
-      PICKER_TYPES+=("action")
-      PICKER_FILTERABLE+=("0")
-      _picker_meta_empty
-    fi
+    # Back action.  Pagination is now in-list, so the only chrome
+    # action left at the bottom is the back navigation.
     PICKER_ENTRIES+=("$(ui_paint fd_chrome "←  Back to all changes")")
     PICKER_SLUGS+=("__bv_back__")
     PICKER_TYPES+=("action")
@@ -910,19 +933,24 @@ _build_header_row() {
     "$(ui_dim "$(ui_pad_visual "$(ui_small_caps UPDATED)" "$uw")")"
 }
 
-# Build a "+N more..." row formatted like a regular change row, but
-# with the icon AND bucket columns blank.  Text uses fd_more so it
-# reads as a recessed sibling of the brighter title color.
+# Build a chrome row in the "+N more..." visual style — blank bucket
+# cell, caller-supplied label painted in fd_more across the title
+# cell, blank date cells.  Column widths come from _picker_widths so
+# alignment with real change rows is preserved.
+#
+# Used for:
+#   - main-screen bucket overflow ("+5 more...")
+#   - bucket-view pagination       ("+N previous" / "+M next")
+#
+# fd_more is 256-palette 110 (#87afd7) — same baby-blue family as
+# fd_title (153, #afd7ff) dropped roughly 15% in luminance, so these
+# rows sit "under" real titles without falling into chrome-gray.
 _build_more_row() {
-  local b="$1" n="$2"
+  local label="$1"
   read -r bw tw cw uw <<< "$(_picker_widths)"
-  # "+N more..." text uses fd_more — code 110 (#87afd7), the same baby-
-  # blue family as fd_title (153, #afd7ff) dropped roughly 15% in
-  # luminance, so it sits "under" real row titles without dropping
-  # into chrome-gray territory.
   printf '   %s  %s  %s  %s' \
     "$(printf '%-*s' "$bw" "")" \
-    "$(ui_paint fd_more "$(printf '%-*s' "$tw" "+$n more...")")" \
+    "$(ui_paint fd_more "$(printf '%-*s' "$tw" "$label")")" \
     "$(printf '%-*s' "$cw" "")" \
     "$(printf '%-*s' "$uw" "")"
 }
@@ -995,6 +1023,13 @@ ui_picker() {
   local prompt_label="${1:-⌕ Search }"
 
   local filter="" filter_lc="" cursor=0
+  # First-render flag — used once below to snap the initial cursor
+  # onto the first 'row' selectable instead of the first 'action'.
+  # Matters for the bucket view's "+N previous" pagination entry
+  # which sits ABOVE the data rows when page > 1; without this nudge
+  # the cursor would land on the prev-page button and Enter would
+  # accidentally page backwards.
+  local _first_render=1
   local stty_save; stty_save=$(stty -g)
   stty -echo -icanon
   # Hide the hardware cursor — we draw our own ▏ thin bar so we control
@@ -1191,9 +1226,26 @@ ui_picker() {
       if (( n_sel == 0 )); then
         cursor=0
       else
+        if (( _first_render )); then
+          # Prefer the first 'row' selectable over the first 'action'
+          # — keeps the cursor away from pagination entries that may
+          # sit above the data rows (see _first_render declaration).
+          # Falls through to cursor=0 if no rows exist (e.g. an empty
+          # bucket showing only action items).
+          local _k _vi _ei
+          for (( _k = 0; _k < n_sel; _k++ )); do
+            _vi="${sel_idx[$_k]}"
+            _ei="${vis_idx[$_vi]}"
+            if [[ "${PICKER_TYPES[$_ei]}" == "row" ]]; then
+              cursor=$_k
+              break
+            fi
+          done
+        fi
         (( cursor >= n_sel )) && cursor=$((n_sel - 1))
         (( cursor < 0 )) && cursor=0
       fi
+      _first_render=0
       current=-1
       (( n_sel > 0 )) && current="${sel_idx[$cursor]}"
 
@@ -1480,7 +1532,7 @@ build_main_entries() {
       PICKER_RIGHT+=("$ROW_RIGHT")
     done <<< "$show"
     if (( n > limit )); then
-      PICKER_ENTRIES+=("$(_build_more_row "$b" "$((n - limit))")")
+      PICKER_ENTRIES+=("$(_build_more_row "+$((n - limit)) more...")")
       PICKER_SLUGS+=("__more__$b")
       PICKER_TYPES+=("action")
       # Filterable=1 so "+N more" hides when the user is searching by text
