@@ -49,18 +49,21 @@ ui_color_code() {
     fd_inprogress)  echo 215 ;;  # warm orange
     fd_done)        echo 121 ;;  # soft mint
     fd_declined)    echo 218 ;;  # pale pink
-    # Brand strip in truecolor — these are *light* coral/peach tones
-    # (#FF9A86, #FFB399).  Terminal.app's known truecolor desaturation
-    # bug bites dark/mid-luminance hues hardest; pale, bright tones in
-    # the upper-right of the RGB cube reliably render the requested
-    # value.  fd_created stays on 256 because the user previously picked
-    # the "softer mint" palette colour explicitly.
-    fd_search)      echo '#FF9A86' ;;  # light coral — matches fd_brand (user-aligned)
-    fd_caret)       echo '#FF9A86' ;;  # light coral — matches fd_brand
-    fd_match)       echo 222 ;;        # pale gold #ffd787 — search-match highlight in titles
-    fd_brand)       echo '#FF9A86' ;;  # light coral — star + "Foundry"
-    fd_project)     echo '#FFB399' ;;  # lighter peach — project name in header
-    fd_more)        echo 103 ;;        # gray with subtle blue lift #8787af — "+N more" rows
+    # Brand strip on 256-palette — Terminal.app's truecolor pipeline
+    # silently desaturates even the light coral / peach hues we tried
+    # in 0.32.23 (#FF9A86, #FFB399), so we're back on palette codes.
+    # The chosen indices are the nearest-RGB approximations:
+    #   target #FF9A86 (light coral)  → code 210 #ff8787 (Δ² 362)
+    #   target #FFB399 (lighter peach)→ code 216 #ffaf87 (Δ² 340)
+    # 210 reads pink-coral and dense; 216 reads peach and lighter —
+    # the brand vs. project distinction the user asked for survives,
+    # and both render honestly in Terminal.app's 256 palette.
+    fd_search)      echo 210 ;;  # coral pink #ff8787 — matches fd_brand
+    fd_caret)       echo 210 ;;  # coral pink #ff8787 — matches fd_brand
+    fd_match)       echo 222 ;;  # pale gold #ffd787 — search-match highlight in titles
+    fd_brand)       echo 210 ;;  # coral pink #ff8787 — star + "Foundry"
+    fd_project)     echo 216 ;;  # warm peach #ffaf87 — project name in header
+    fd_more)        echo 103 ;;  # gray with subtle blue lift #8787af — "+N more" rows
     *)       echo 7 ;;
   esac
 }
