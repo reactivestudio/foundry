@@ -767,7 +767,7 @@ ui_bucket_view() {
     local _project _bucket_badge _hdr_line2
     _project=$(basename "$PWD")
     _bucket_badge="$(ui_paint fd_icon "$(ui_icon "$bucket")") $(ui_paint "$(ui_bucket_color "$bucket")" "$bucket")"
-    _hdr_line2="$(ui_dim 'project:')  $(ui_paint fd_project "$_project")"
+    _hdr_line2="$(ui_dim 'project:')  $(ui_paint fd_project "[${_project}]")"
     PICKER_HEADER="$(build_picker_header "$_bucket_badge" "$_hdr_line2")"
     if ui_picker "⌕  Search "; then
       case "$PICKER_RESULT_SLUG" in
@@ -1001,8 +1001,10 @@ ui_picker() {
   local _caret_seq; _caret_seq=$(_ui_fg_seq "$_caret_code")
   # Selector arrow on the cursor row.  ➤ (U+27A4 BLACK RIGHTWARDS
   # ARROWHEAD) — solid filled, heavier than the previous ▸ small
-  # triangle so the user can see "this is the selected row" at a glance.
-  local cursor_arrow;   cursor_arrow=$(ui_bright '➤')
+  # triangle so the user can see "this is the selected row" at a
+  # glance.  Painted in fd_brand so the selector reads as part of the
+  # Foundry brand identity (matches ★ + "Foundry" + ⌕ + caret).
+  local cursor_arrow;   cursor_arrow=$(ui_paint fd_brand '➤')
 
   # Optional N-line header above the search prompt.  Callers set
   # PICKER_HEADER (a fully-painted, ANSI-styled string with embedded
@@ -1510,7 +1512,7 @@ cmd_interactive() {
     # name pops against the dim 'project:' label).
     local _project _hdr_line2
     _project=$(basename "$PWD")
-    _hdr_line2="$(ui_dim 'project:')  $(ui_paint fd_project "$_project")"
+    _hdr_line2="$(ui_dim 'project:')  $(ui_paint fd_project "[${_project}]")"
     PICKER_HEADER="$(build_picker_header "$(ui_dim 'structured ledger for proposing, tracking and shipping every code change')" "$_hdr_line2")"
     if ui_picker "⌕  Search "; then
       local slug="$PICKER_RESULT_SLUG"
