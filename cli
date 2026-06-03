@@ -862,19 +862,19 @@ _build_header_row() {
     "$(ui_dim "$(ui_pad_visual "$(ui_small_caps UPDATED)" "$uw")")"
 }
 
-# Build a "+N more ..." row formatted like a regular change row, but
+# Build a "+N more..." row formatted like a regular change row, but
 # with the icon AND bucket columns blank.  Text uses fd_more so it
 # reads as a recessed sibling of the brighter title color.
 _build_more_row() {
   local b="$1" n="$2"
   read -r bw tw cw uw <<< "$(_picker_widths)"
-  # "+N more ..." text uses fd_more — code 110 (#87afd7), the same baby-
+  # "+N more..." text uses fd_more — code 110 (#87afd7), the same baby-
   # blue family as fd_title (153, #afd7ff) dropped roughly 15% in
   # luminance, so it sits "under" real row titles without dropping
   # into chrome-gray territory.
   printf '   %s  %s  %s  %s' \
     "$(printf '%-*s' "$bw" "")" \
-    "$(ui_paint fd_more "$(printf '%-*s' "$tw" "+$n more ...")")" \
+    "$(ui_paint fd_more "$(printf '%-*s' "$tw" "+$n more...")")" \
     "$(printf '%-*s' "$cw" "")" \
     "$(printf '%-*s' "$uw" "")"
 }
@@ -1405,7 +1405,7 @@ build_main_entries() {
       PICKER_SLUGS+=("__more__$b")
       PICKER_TYPES+=("action")
       # Filterable=1 so "+N more" hides when the user is searching by text
-      # (its label "+N more ..." rarely matches a query).
+      # (its label "+N more..." rarely matches a query).
       PICKER_FILTERABLE+=("1")
       # Tag the +N more action with the bucket it belongs to — Tab on the
       # last row of bucket X then lands on the next bucket (not on +N more
