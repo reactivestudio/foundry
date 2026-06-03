@@ -1788,8 +1788,11 @@ build_detail_entries() {
   PICKER_RIGHT=()
 
   # ── title row: icon + bucket + change title ──
+  # No leading spaces in the entry — the picker adds 3 cells of prefix
+  # before every row, so this lands the icon at col 4 (same column as
+  # data-row icons on the main screen) and the bucket label at col 7.
   _picker_push_padding
-  _picker_push_info "$(printf '   %s  %s  %s' \
+  _picker_push_info "$(printf '%s  %s  %s' \
     "$(ui_paint fd_icon "$(ui_icon "$b")")" \
     "$(ui_paint "$(ui_bucket_color "$b")" "$(printf '%-12s' "$b")")" \
     "$(ui_paint_bold fd_title "$title")")"
@@ -1854,13 +1857,24 @@ build_detail_entries() {
     if (( total_lines > ${#proposal_lines[@]} )); then
       view_label="view full  ($((total_lines - ${#proposal_lines[@]})) more lines)"
     fi
-    _picker_push_action "   $(ui_paint fd_chrome "▸  $view_label")" "__view_proposal__"
+    _picker_push_action "$(ui_paint fd_chrome "▸  $view_label")" "__view_proposal__"
   fi
 
   # ── HISTORY ──
   if [[ -f "$dir/history.log" ]]; then
     _picker_push_padding
     _picker_push_info "   $(ui_paint fd_title "$(ui_small_caps HISTORY)")"
+    _picker_push_padding
+
+    # Column header row — same small-caps + dim treatment as the main
+    # screen's STATUS / TITLE / CREATED / UPDATED strip, padded to the
+    # same column widths the data rows below use.  Sits a sub-indent
+    # (5 leading) under the HISTORY section heading.
+    _picker_push_info "$(printf '     %s  %s  %s  %s' \
+      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps WHEN)" 12)")" \
+      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps ACTOR)" 14)")" \
+      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps EVENT)" 8)")" \
+      "$(ui_dim "$(ui_small_caps CHANGE)")")"
     _picker_push_padding
 
     local history_lines=()
@@ -1877,23 +1891,33 @@ build_detail_entries() {
     for hl in "${history_lines[@]}"; do
       IFS=$'\t' read -r ts actor event details <<< "$hl"
       local rel; rel=$(ui_date_relative "$ts")
+      # Actor colours mapped onto the main palette so the history block
+      # reads as the same colour grammar as the rest of the screen:
+      #   user           → fd_done    (121 mint, "I shipped this")
+      #   state-machine  → fd_chrome  (117 sky, automation chrome)
+      #   else           → muted      (244 gray)
       local actor_color=muted
-      [[ "$actor" == "user" ]] && actor_color=ok
-      [[ "$actor" == "state-machine" ]] && actor_color=accent
+      [[ "$actor" == "user" ]]          && actor_color=fd_done
+      [[ "$actor" == "state-machine" ]] && actor_color=fd_chrome
       local pretty="$details" reason_line=""
       pretty="${pretty//->/ → }"
       if [[ "$pretty" =~ ^(.+)\ \((.+)\)$ ]]; then
         pretty="${BASH_REMATCH[1]}"
         reason_line="${BASH_REMATCH[2]}"
       fi
+      # Column-to-palette mapping:
+      #   when    → fd_updated (lavender) — it's a date column
+      #   actor   → actor_color (per-actor, see above)
+      #   event   → fd_title   (153 baby blue) — primary verb
+      #   change  → fd_created (121 soft mint) — the substance
       _picker_push_info "$(printf '     %s  %s  %s  %s' \
-        "$(ui_dim "$(printf '%-12s' "$rel")")" \
+        "$(ui_paint fd_updated "$(printf '%-12s' "$rel")")" \
         "$(ui_paint "$actor_color" "$(printf '%-14s' "$actor")")" \
-        "$(ui_bright "$(printf '%-8s' "$event")")" \
-        "$pretty")"
+        "$(ui_paint fd_title "$(printf '%-8s' "$event")")" \
+        "$(ui_paint fd_created "$pretty")")"
       if [[ -n "$reason_line" ]]; then
         # Wrapped decline reason on its own indented line — aligns under
-        # the details column (5 indent + 12 rel + 2 + 14 actor + 2 + 8 event + 2 = 45).
+        # the change column (5 indent + 12 when + 2 + 14 actor + 2 + 8 event + 2 = 45).
         _picker_push_info "$(printf '     %45s%s' '' "$(ui_dim "\"$reason_line\"")")"
       fi
     done
@@ -1910,27 +1934,34 @@ build_detail_entries() {
   # decline, ← chrome = back).  Labels painted fd_chrome so the strip
   # reads as one cohesive band — matches the main screen's bottom
   # action bar (+/Sync/Reload/Exit) where everything is fd_chrome.
+  #
+  # IMPORTANT: NO leading spaces on the action entries.  The picker
+  # prepends a 3-cell prefix ("   " for non-cursor, " ➤ " for cursor)
+  # before every row — adding more leading spaces here pushes the
+  # icon away from column 4 where the main screen's "+ Add new
+  # change" / "⟳ Reload" anchor.  Same convention applies to the
+  # __view_proposal__ / __view_history__ entries above.
   _picker_push_padding
 
   case "$b" in
     backlog)
-      _picker_push_action "   $(ui_paint fd_inprogress '▶')  $(ui_paint fd_chrome 'Start (move to in-progress)')" "__act_start__"
-      _picker_push_action "   $(ui_paint fd_declined '×')  $(ui_paint fd_chrome 'Decline')" "__act_decline__"
+      _picker_push_action "$(ui_paint fd_inprogress '▶')  $(ui_paint fd_chrome 'Start (move to in-progress)')" "__act_start__"
+      _picker_push_action "$(ui_paint fd_declined '×')  $(ui_paint fd_chrome 'Decline')" "__act_decline__"
       ;;
     in-progress)
-      _picker_push_action "   $(ui_paint fd_done '✓')  $(ui_paint fd_chrome 'Finish (move to done)')" "__act_finish__"
-      _picker_push_action "   $(ui_paint fd_backlog '⏸')  $(ui_paint fd_chrome 'Pause back to backlog')" "__act_pause__"
-      _picker_push_action "   $(ui_paint fd_declined '×')  $(ui_paint fd_chrome 'Decline')" "__act_decline__"
+      _picker_push_action "$(ui_paint fd_done '✓')  $(ui_paint fd_chrome 'Finish (move to done)')" "__act_finish__"
+      _picker_push_action "$(ui_paint fd_backlog '⏸')  $(ui_paint fd_chrome 'Pause back to backlog')" "__act_pause__"
+      _picker_push_action "$(ui_paint fd_declined '×')  $(ui_paint fd_chrome 'Decline')" "__act_decline__"
       ;;
     done)
       : # terminal state — only the Back action below
       ;;
     declined)
-      _picker_push_action "   $(ui_paint fd_backlog '↩')  $(ui_paint fd_chrome 'Revive (back to backlog)')" "__act_revive__"
+      _picker_push_action "$(ui_paint fd_backlog '↩')  $(ui_paint fd_chrome 'Revive (back to backlog)')" "__act_revive__"
       ;;
   esac
 
-  _picker_push_action "   $(ui_paint fd_chrome '←  Back')" "__act_back__"
+  _picker_push_action "$(ui_paint fd_chrome '←  Back')" "__act_back__"
 }
 
 # Interactive REPL — single screen via custom ui_picker:
