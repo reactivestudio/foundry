@@ -698,7 +698,17 @@ ui_bucket_view() {
     PICKER_TITLE=()
     PICKER_TITLE_W=()
     PICKER_LEFT=()
+    PICKER_LEFT_HOVER=()
     PICKER_RIGHT=()
+
+    # Extra blank row before the column header — user wanted one more
+    # line of breathing space between the ⌕ Search caret and the
+    # STATUS / TITLE / CREATED / UPDATED strip.
+    PICKER_ENTRIES+=("")
+    PICKER_SLUGS+=("")
+    PICKER_TYPES+=("padding")
+    PICKER_FILTERABLE+=("0")
+    _picker_meta_empty
 
     # Column header.
     PICKER_ENTRIES+=("$(_build_header_row)")
@@ -728,19 +738,21 @@ ui_bucket_view() {
       PICKER_TITLE+=("$ROW_TITLE")
       PICKER_TITLE_W+=("$ROW_TITLE_W")
       PICKER_LEFT+=("$ROW_LEFT")
+      PICKER_LEFT_HOVER+=("$ROW_LEFT_HOVER")
       PICKER_RIGHT+=("$ROW_RIGHT")
     done <<< "$page_rows"
 
-    # Padding → summary → padding.
-    PICKER_ENTRIES+=("")
-    PICKER_SLUGS+=("")
-    PICKER_TYPES+=("padding")
-    PICKER_FILTERABLE+=("0")
-    _picker_meta_empty
-
+    # Summary block — lifted up one line (no pre-summary padding,
+    # two post-summary padding rows) per user request.
     PICKER_ENTRIES+=("   $(ui_paint fd_chrome "$(ui_status "$bucket")  ·  page $page of $pages  ·  $total total")")
     PICKER_SLUGS+=("")
     PICKER_TYPES+=("summary")
+    PICKER_FILTERABLE+=("0")
+    _picker_meta_empty
+
+    PICKER_ENTRIES+=("")
+    PICKER_SLUGS+=("")
+    PICKER_TYPES+=("padding")
     PICKER_FILTERABLE+=("0")
     _picker_meta_empty
 
@@ -975,10 +987,10 @@ ui_picker() {
   # Pre-derive everything that doesn't depend on the filter or cursor so
   # the per-frame loop stays in pure bash — no sed/tr forks during render.
   #   entries_lc[i]     — ANSI-stripped lowercase for substring filtering
-  #   entries_bright[i] — entry recoloured as primary (used when cursor
-  #                       lands on an action item)
+  #   entries_brand[i]  — entry recoloured in fd_brand (used when the
+  #                       cursor lands on an action item)
   #   title_lc[i]       — lowercase raw title for filter-match highlighting
-  local -a entries_lc=() entries_bright=() title_lc=()
+  local -a entries_lc=() entries_brand=() title_lc=()
   local i stripped
   for (( i = 0; i < n_total; i++ )); do
     stripped=""
@@ -991,9 +1003,9 @@ ui_picker() {
       entries_lc[$i]=""
     fi
     if [[ "${PICKER_TYPES[$i]}" == "action" ]]; then
-      entries_bright[$i]=$(ui_bright "$stripped")
+      entries_brand[$i]=$(ui_paint fd_brand "$stripped")
     else
-      entries_bright[$i]=""
+      entries_brand[$i]=""
     fi
     if [[ "${PICKER_TYPES[$i]}" == "row" && -n "${PICKER_TITLE[$i]:-}" ]]; then
       title_lc[$i]=$(printf '%s' "${PICKER_TITLE[$i]}" | tr '[:upper:]' '[:lower:]')
@@ -1001,6 +1013,21 @@ ui_picker() {
       title_lc[$i]=""
     fi
   done
+
+  # Brand-colour code for cursor hover (row-title + action-label and
+  # the row's status icon via PICKER_LEFT_HOVER).  Pre-derived so the
+  # render loop's printf format \033[38;5;%sm stays a single SGR per
+  # title cell.  If fd_brand ever moves to truecolor (#hex form) this
+  # falls back to the literal — the assignment below splits on `;`
+  # to detect a multi-component sequence and re-routes through
+  # _ui_fg_seq's full SGR-fragment path.  For now it's palette 27.
+  local _brand_code _brand_fmt
+  _brand_code=$(ui_color_code fd_brand)
+  if [[ "$_brand_code" == \#* ]]; then
+    _brand_fmt='\033['"$(_ui_fg_seq "$_brand_code")"'m'
+  else
+    _brand_fmt='\033[38;5;'"$_brand_code"'m'
+  fi
 
   # Static render fragments.  ⌕ + "Search" share the brand colour
   # (fd_search → 256 code 27, electric blue #005fff); the caret a few
@@ -1162,32 +1189,38 @@ ui_picker() {
       # is empty) or the last typed character (when not).  The extra
       # space lives outside `ui_bright "$filter"` so the caret column
       # math (PROMPT_COLS = 14) stays in step.
-      frame+=$'   '"${prompt_painted}$(ui_bright "$filter") "$'\033['"${_caret_seq}m"$'▏\033[0m\n\n'
+      frame+=$'   '"${prompt_painted}$(ui_bright "$filter") "$'\033['"${_caret_seq}m"$'▏\033[0m\n\n\n'
       local j idx row_render is_cursor
       for (( j = 0; j < ${#vis_idx[@]}; j++ )); do
         idx="${vis_idx[$j]}"
         is_cursor=0
         (( j == current )) && is_cursor=1
-        # Title color:
-        #   153 = fd_title  (baby blue) when not on cursor
-        #   255 = primary   (bright)    when cursor is on this row
-        # action items get full ANSI-stripped bright via entries_bright (no
-        # column-specific recolouring) — same code path as before.
-        # Row types: when the cursor lands on the row, or when the user is
-        # typing a filter that matches the row's title, we rebuild the
-        # title cell from raw parts (PICKER_TITLE / PICKER_LEFT / PICKER_RIGHT)
-        # so we can paint title-color + optional fd_match (222) highlight.
+        # Title colour on rows:
+        #   default (no cursor, no filter match) → ${PICKER_ENTRIES[i]} verbatim
+        #   filter match, no cursor              → 153 fd_title + 222 fd_match
+        #   cursor on row                        → _brand_fmt (fd_brand) for
+        #                                          the title AND the status
+        #                                          icon (via PICKER_LEFT_HOVER)
+        # action items get the entire label re-painted in fd_brand via
+        # entries_brand[idx] so the action label matches the brand-coloured
+        # selector arrow on its left.
         if [[ "${PICKER_TYPES[$idx]}" == "row" ]]; then
-          local _tc=153 _has_match=0
-          (( is_cursor )) && _tc=255
+          local _has_match=0 _use_left
+          _use_left="${PICKER_LEFT[$idx]}"
+          (( is_cursor )) && _use_left="${PICKER_LEFT_HOVER[$idx]}"
           if [[ -n "$filter_lc" && -n "${title_lc[$idx]}" \
                 && "${title_lc[$idx]}" == *"$filter_lc"* ]]; then
             _has_match=1
           fi
           if (( _has_match || is_cursor )); then
-            local _t _tw
+            local _t _tw _title_fmt
             _t="${PICKER_TITLE[$idx]}"
             _tw="${PICKER_TITLE_W[$idx]}"
+            if (( is_cursor )); then
+              _title_fmt="$_brand_fmt"
+            else
+              _title_fmt='\033[38;5;153m'
+            fi
             # NB: split assignments — bash 3.2 evaluates `local a=… b=$((…a…))`
             # right-to-left through the outer scope, which trips set -u when
             # `a` doesn't exist there yet.
@@ -1205,16 +1238,15 @@ ui_picker() {
               _pre="${_t:0:_pos}"
               _mat="${_t:_pos:_mlen}"
               _suf="${_t:_pos+_mlen}"
-              # title-color prefix → fd_match (222) match → title-color suffix
-              # → trailing pad, reset.  title-color picks 153 or 255.
-              printf -v _hl '\033[38;5;%sm%s\033[38;5;222m%s\033[38;5;%sm%s%s\033[0m' \
-                "$_tc" "$_pre" "$_mat" "$_tc" "$_suf" "$_padding"
-              row_render="${PICKER_LEFT[$idx]}${_hl}${PICKER_RIGHT[$idx]}"
+              # title-fmt prefix → 222 fd_match → title-fmt suffix → pad, reset
+              printf -v _hl '%s%s\033[38;5;222m%s%s%s%s\033[0m' \
+                "$_title_fmt" "$_pre" "$_mat" "$_title_fmt" "$_suf" "$_padding"
+              row_render="${_use_left}${_hl}${PICKER_RIGHT[$idx]}"
             else
-              # Cursor on row, no filter match — recolour title to bright.
+              # Cursor on row, no filter match — recolour title via title-fmt.
               local _ti
-              printf -v _ti '\033[38;5;%sm%s%s\033[0m' "$_tc" "$_t" "$_padding"
-              row_render="${PICKER_LEFT[$idx]}${_ti}${PICKER_RIGHT[$idx]}"
+              printf -v _ti '%s%s%s\033[0m' "$_title_fmt" "$_t" "$_padding"
+              row_render="${_use_left}${_ti}${PICKER_RIGHT[$idx]}"
             fi
           else
             row_render="${PICKER_ENTRIES[$idx]}"
@@ -1224,7 +1256,7 @@ ui_picker() {
         fi
         if (( is_cursor )); then
           if [[ "${PICKER_TYPES[$idx]}" == "action" ]]; then
-            frame+=" ${cursor_arrow} ${entries_bright[$idx]}"$'\n'
+            frame+=" ${cursor_arrow} ${entries_brand[$idx]}"$'\n'
           else
             frame+=" ${cursor_arrow} ${row_render}"$'\n'
           fi
@@ -1367,9 +1399,19 @@ build_main_entries() {
   PICKER_TITLE=()
   PICKER_TITLE_W=()
   PICKER_LEFT=()
+  PICKER_LEFT_HOVER=()
   PICKER_RIGHT=()
 
   local rows; rows=$(collect_rows all)
+
+  # Extra blank row before the column header — user wanted one more
+  # line of breathing space between the ⌕ Search caret and the
+  # STATUS / TITLE / CREATED / UPDATED strip.
+  PICKER_ENTRIES+=("")
+  PICKER_SLUGS+=("")
+  PICKER_TYPES+=("padding")
+  PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
 
   # Column headers.
   PICKER_ENTRIES+=("$(_build_header_row)")
@@ -1409,6 +1451,7 @@ build_main_entries() {
       PICKER_TITLE+=("$ROW_TITLE")
       PICKER_TITLE_W+=("$ROW_TITLE_W")
       PICKER_LEFT+=("$ROW_LEFT")
+      PICKER_LEFT_HOVER+=("$ROW_LEFT_HOVER")
       PICKER_RIGHT+=("$ROW_RIGHT")
     done <<< "$show"
     if (( n > limit )); then
@@ -1425,6 +1468,7 @@ build_main_entries() {
       PICKER_TITLE+=("")
       PICKER_TITLE_W+=("0")
       PICKER_LEFT+=("")
+      PICKER_LEFT_HOVER+=("")
       PICKER_RIGHT+=("")
       # Empty padding row after +N more.  Note: the user has asked
       # multiple times for "half a row" of gap here.  In a cell-based
@@ -1441,19 +1485,21 @@ build_main_entries() {
     fi
   done
 
-  # Bottom summary block — restored in 0.32.9 (user asked for the
-  # familiar layout back).  padding → "N changes · ⊙ a · ⊗ b · ..."
-  # → padding so it doesn't crash into Add/Reload/Exit below.
+  # Bottom summary block — restored in 0.32.9.  In 0.33.0 the user
+  # asked to lift the summary one line up: drop the pre-summary
+  # padding (the bucket-rows loop's trailing "+N more" padding
+  # already leaves a natural gap), keep two padding rows after so
+  # the summary doesn't crash into Add/Reload/Exit below.
   local _total; _total=$(printf '%s\n' "$rows" | wc -l | tr -d ' ')
-  PICKER_ENTRIES+=("")
-  PICKER_SLUGS+=("")
-  PICKER_TYPES+=("padding")
-  PICKER_FILTERABLE+=("0")
-  _picker_meta_empty
-
   PICKER_ENTRIES+=("$(_build_summary_row "$_total" "$rows")")
   PICKER_SLUGS+=("")
   PICKER_TYPES+=("summary")
+  PICKER_FILTERABLE+=("0")
+  _picker_meta_empty
+
+  PICKER_ENTRIES+=("")
+  PICKER_SLUGS+=("")
+  PICKER_TYPES+=("padding")
   PICKER_FILTERABLE+=("0")
   _picker_meta_empty
 
