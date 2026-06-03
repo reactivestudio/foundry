@@ -1918,27 +1918,51 @@ build_detail_entries() {
     _picker_push_info "$(ui_paint fd_title "⛰  $(ui_small_caps PROPOSAL)")"
     _picker_push_padding
 
-    local _ln _rendered _plain
+    # Preview cap: render at most the first 5 NON-BLANK lines of the
+    # proposal here on the detail screen.  Blank lines between them
+    # are preserved as paragraph breaks (they don't count against the
+    # cap).  If the proposal has more than 5 visible lines we tack on
+    # a "⏿ View..." action that opens the full document in
+    # ui_view_proposal; if everything fits, the View action is
+    # suppressed entirely — no reason to expose a "view full" link
+    # when the user is already looking at the full thing.
+    local _src_lines=() _rendered_lines=() _plain_lines=()
+    local _ln
     while IFS= read -r _ln || [[ -n "$_ln" ]]; do
-      _rendered="$(_render_md_line "$_ln")"
-      _plain="$(_render_md_line_plain "$_ln")"
-      if [[ -z "$_rendered" ]]; then
+      _src_lines+=("$_ln")
+    done < "$dir/proposal.md"
+
+    # Pre-render so each source line is processed exactly once: we
+    # need rendered (for the entry), plain (for PICKER_TITLE / search
+    # highlight), and a total-visible count to decide the View action.
+    local _total_visible=0 _idx
+    for _idx in "${!_src_lines[@]}"; do
+      _rendered_lines[$_idx]="$(_render_md_line "${_src_lines[$_idx]}")"
+      _plain_lines[$_idx]="$(_render_md_line_plain "${_src_lines[$_idx]}")"
+      [[ -n "${_rendered_lines[$_idx]}" ]] && _total_visible=$((_total_visible + 1))
+    done
+
+    local _shown=0 _cap=5
+    for _idx in "${!_src_lines[@]}"; do
+      (( _shown >= _cap )) && break
+      if [[ -z "${_rendered_lines[$_idx]}" ]]; then
         # Blank line → paragraph break, non-filterable info row.
         _picker_push_info ''
       else
-        # Pass plain title so search-match highlights the substring.
-        _picker_push_filtered_info "   $_rendered" "$_plain"
+        _picker_push_filtered_info "   ${_rendered_lines[$_idx]}" "${_plain_lines[$_idx]}"
+        _shown=$((_shown + 1))
       fi
-    done < "$dir/proposal.md"
+    done
 
-    # "View..." action — opens ui_view_proposal, a dedicated picker
-    # screen with the full proposal and a single ← Back action.  Eye
-    # glyph: ⏿ (U+23FF OBSERVER EYE SYMBOL) — pure unicode, picked
-    # over earlier candidates because it actually renders in the
-    # user's font (◉ U+25C9 didn't show as an eye in 0.33.12).
-    _picker_push_padding
-    _picker_push_action "$(ui_paint fd_chrome '⏿  View...')" "__view_proposal__"
-    _picker_push_padding  # extra spacer after View (user asked +1)
+    # "View..." action — only when there's more to view.  Eye glyph
+    # ⏿ (U+23FF OBSERVER EYE SYMBOL) is pure unicode (no Nerd Font
+    # cluster).  Opens ui_view_proposal, a dedicated picker screen
+    # with the full document + a single ← Back action.
+    if (( _total_visible > _cap )); then
+      _picker_push_padding
+      _picker_push_action "$(ui_paint fd_chrome '⏿  View...')" "__view_proposal__"
+      _picker_push_padding  # extra spacer after View (user-asked +1)
+    fi
   fi
 
   # ── HISTORY ──
