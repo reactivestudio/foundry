@@ -522,6 +522,32 @@ pause_for_user() {
   read -r _ || true
 }
 
+# Hand the terminal to a pager so the user can read a full file (the
+# proposal.md or history.log behind a "view full" / "+N more" action).
+# Two confusion sources in the picker → less handoff in 0.33.0 were:
+#   1. the default less prompt "(END)" gave no hint how to exit, leaving
+#      users stuck on the file with the picker chrome gone;
+#   2. raw markdown with literal "##" / "-" is harder to read than the
+#      coloured glyph rendering glow(1) produces.
+# Both addressed here:
+#   - `glow -s dark` if the file is .md AND glow is installed; cat
+#     otherwise.  Output piped into less so we still get scrolling on
+#     long files.
+#   - less prompt overridden with the visible "press q to return to
+#     foundry" string at every state (including end-of-file).
+_view_full_with_pager() {
+  local file="$1"
+  local renderer=cat
+  if [[ "$file" == *.md ]] && command -v glow >/dev/null 2>&1; then
+    renderer='glow -s dark'
+  fi
+  # `-R` keeps ANSI from the renderer rendering as colour.
+  # `-P` short prompt — applied to all states so the user always sees
+  # the exit hint, including the (END) state that used to be opaque.
+  $renderer "$file" 2>/dev/null \
+    | ${PAGER:-less} -R -P "press q to return to foundry" >/dev/tty
+}
+
 # (Action buttons live in a separate bar — see horizontal_action_bar.
 # Earlier sentinels SENT_ADD/SORT/RELOAD/EXIT were removed in 0.26.0.)
 
@@ -632,16 +658,17 @@ ui_drill() {
     if ui_picker "⌕  Search "; then
       case "$PICKER_RESULT_SLUG" in
         __view_proposal__)
-          # Hand the terminal to $PAGER (less) for full proposal view.
-          # The picker has already restored the terminal to cooked mode
-          # on its way out, so less reads keystrokes normally.  -R keeps
-          # any ANSI in proposal.md rendering as colour, not literal.
-          ${PAGER:-less} -R "$dir/proposal.md" </dev/tty >/dev/tty 2>/dev/tty || true
+          # _view_full_with_pager: glow-renders the .md if glow is
+          # installed, falls back to cat otherwise, and overrides
+          # less's prompt with an explicit "press q to return to
+          # foundry" hint so the user always sees how to come back.
+          _view_full_with_pager "$dir/proposal.md" || true
           ;;
         __view_history__)
-          # Full history.log in pager — tab-separated rows render OK
-          # under less; user gets a chronological audit trail.
-          ${PAGER:-less} -R "$dir/history.log" </dev/tty >/dev/tty 2>/dev/tty || true
+          # Same pager wrapper for history.log — tab-separated rows
+          # render OK under less, prompt hint applies, and the user
+          # gets a chronological audit trail.
+          _view_full_with_pager "$dir/history.log" || true
           ;;
         __act_start__)
           cmd_move "$slug" --to=in-progress
@@ -1689,6 +1716,53 @@ build_main_entries() {
 #   ▶  Start / ⏸ Pause / ✓ Finish / ↩ Revive / ×  Decline   (bucket-conditional)
 #   ←  Back
 #
+# Lightweight inline markdown renderer for the proposal preview rows.
+# Caller passes one source line; we return that line wrapped in ANSI to
+# read as colour-coded markdown rather than flat dim text:
+#   "# h1"        → bold + bright primary  (top-level heading)
+#   "## h2"       → bold + fd_title        (section heading)
+#   "### h3"+     → fd_title                (sub-section)
+#   "- " / "* "   → dim bullet + fd_title body
+#   "1. " etc     → dim number + fd_title body
+#   "> "          → dim (quote)
+#   "```"         → fd_chrome (code fence)
+#   plain text    → dim
+# Glyph stays as-is — no markdown-to-ANSI substitution (no real bold
+# inside ` ` `, no link expansion).  Goal is to make the preview
+# *scannable*, not to ship a full markdown engine — glow handles the
+# real rendering in "view full".
+_render_md_line() {
+  local line="$1"
+  case "$line" in
+    '# '*)
+      printf '%s' "$(ui_paint_bold primary "$line")" ;;
+    '## '*)
+      printf '%s' "$(ui_paint_bold fd_title "$line")" ;;
+    '### '*|'#### '*|'##### '*|'###### '*)
+      printf '%s' "$(ui_paint fd_title "$line")" ;;
+    '- '*|'* '*|'+ '*)
+      printf '%s%s' \
+        "$(ui_dim "${line:0:2}")" \
+        "$(ui_paint fd_title "${line:2}")" ;;
+    [0-9].' '*|[0-9][0-9].' '*)
+      # ordered list — `N. ` or `NN. ` prefix
+      local _prefix _rest
+      if [[ "$line" =~ ^([0-9]+\.\ )(.*)$ ]]; then
+        _prefix="${BASH_REMATCH[1]}"
+        _rest="${BASH_REMATCH[2]}"
+        printf '%s%s' "$(ui_dim "$_prefix")" "$(ui_paint fd_title "$_rest")"
+      else
+        printf '%s' "$(ui_dim "$line")"
+      fi ;;
+    '> '*)
+      printf '%s' "$(ui_dim "$line")" ;;
+    '```'*)
+      printf '%s' "$(ui_paint fd_chrome "$line")" ;;
+    *)
+      printf '%s' "$(ui_dim "$line")" ;;
+  esac
+}
+
 # Section headings use ui_small_caps + fd_title — the same small-caps
 # treatment as the main screen's column headers, with fd_title (not
 # dim) because section headings on a single-record screen organise
@@ -1755,10 +1829,21 @@ build_detail_entries() {
       proposal_lines+=("$_ln")
     done < <(grep -E '[^[:space:]]' "$dir/proposal.md" | head -n 5)
     local total_lines; total_lines=$(grep -cE '[^[:space:]]' "$dir/proposal.md" 2>/dev/null || echo 0)
+    # Each line passes through _render_md_line so headings, lists,
+    # quotes and code fences get colour-coded instead of all reading
+    # as flat dim text.  Indent stays 5 spaces to align under the
+    # heading.
     local pl
     for pl in "${proposal_lines[@]}"; do
-      _picker_push_info "     $(ui_dim "$pl")"
+      _picker_push_info "     $(_render_md_line "$pl")"
     done
+
+    # Truncation ellipsis — single dim "…" row when the preview cut
+    # the proposal short, so the user sees there's more before they
+    # even read the "view full (N more lines)" action label.
+    if (( total_lines > ${#proposal_lines[@]} )); then
+      _picker_push_info "     $(ui_dim '…')"
+    fi
 
     # "view full" — always shown when the file exists, so user has a
     # one-keystroke path to the full source whether or not the preview
