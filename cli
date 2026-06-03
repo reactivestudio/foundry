@@ -1116,6 +1116,15 @@ ui_picker() {
     printf -v _brand_fmt '\033[38;5;%sm' "$_brand_code"
   fi
   printf -v _title_dim_fmt '\033[38;5;153m'
+  # Pre-built dim (gray 244) SGR for the info-row match-highlight
+  # rebuild — same printf -v pattern as _title_dim_fmt above, picked
+  # over inlining "\033[38;5;244m" directly in the rebuild's format
+  # string so we go through the exact same SGR-building path as the
+  # working row-type rebuild.  Defensive: 0.33.13's inline version
+  # had reports of the highlight not rendering on the detail
+  # proposal even though the bytes traced correctly.
+  local _dim_fmt
+  printf -v _dim_fmt '\033[38;5;244m'
 
   # Static render fragments.  ⌕ + "Search" share the brand colour
   # (fd_search → 256 code 27, electric blue #005fff); the caret a few
@@ -1372,24 +1381,26 @@ ui_picker() {
         elif [[ "${PICKER_TYPES[$idx]}" == "info" \
                 && -n "$filter_lc" \
                 && -n "${title_lc[$idx]:-}" \
-                && "${title_lc[$idx]}" == *"$filter_lc"* ]]; then
+                && "${title_lc[$idx]:-}" == *"$filter_lc"* ]]; then
           # Info row with caller-supplied plain title that matched the
-          # filter — rebuild as 3-cell indent + dim prefix + gold
-          # match + dim suffix.  The caller-stored PICKER_ENTRIES gets
-          # discarded for this frame (info rows don't carry the LEFT/
-          # RIGHT split that row-type uses, so the rebuild is the full
-          # visible line, not a splice).
+          # filter — rebuild the visible line as 3-cell indent + dim
+          # prefix + gold (fd_match 222) match + dim suffix + reset.
+          # PICKER_ENTRIES gets discarded for this frame; info rows
+          # don't carry the LEFT/RIGHT split that row-type uses, so
+          # the rebuild is the full line, not a splice.  Uses the
+          # pre-built $_dim_fmt SGR string so the format-string path
+          # matches the row-rebuild path one-for-one.
           local _it _ilc _ibefore _ipos _imlen _ipre _imat _isuf _ihl
-          _it="${PICKER_TITLE[$idx]}"
-          _ilc="${title_lc[$idx]}"
+          _it="${PICKER_TITLE[$idx]:-}"
+          _ilc="${title_lc[$idx]:-}"
           _ibefore="${_ilc%%"$filter_lc"*}"
           _ipos=${#_ibefore}
           _imlen=${#filter_lc}
           _ipre="${_it:0:_ipos}"
           _imat="${_it:_ipos:_imlen}"
           _isuf="${_it:_ipos+_imlen}"
-          printf -v _ihl '   \033[38;5;244m%s\033[38;5;222m%s\033[38;5;244m%s\033[0m' \
-            "$_ipre" "$_imat" "$_isuf"
+          printf -v _ihl '   %s%s\033[38;5;222m%s%s%s\033[0m' \
+            "$_dim_fmt" "$_ipre" "$_imat" "$_dim_fmt" "$_isuf"
           row_render="$_ihl"
         else
           row_render="${PICKER_ENTRIES[$idx]}"
