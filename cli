@@ -607,7 +607,7 @@ _norm_picker_line() {
 }
 
 # Drill into one change — picker-based detail screen.  Same branded
-# header (★ Foundry · subtitle / project: [name]) and ⌕  Search prompt
+# header (⭑ Foundry · subtitle / project: [name]) and ⌕  Search prompt
 # as the main screen, with the change's metadata, proposal preview,
 # history preview, and an action bar inline as picker entries.  Loops
 # until the user picks Back (or ESC) so an action that doesn't leave
@@ -630,7 +630,7 @@ ui_drill() {
     build_detail_entries "$slug" "$b"
 
     # Branded header — identical bytes to cmd_interactive so the user
-    # sees the same ★ Foundry strip and project line.  Kept in sync by
+    # sees the same ⭑ Foundry strip and project line.  Kept in sync by
     # construction (same build_picker_header call, same subtitle text,
     # same _hdr_line2 shape).
     local _project _hdr_line2
@@ -877,11 +877,11 @@ ACT_EXIT='⏻  Exit'
 
 # Build the brand header shown above the search prompt.  Two lines:
 #
-#     ★  Foundry  ·  <subtitle>
+#     ⭑  Foundry  ·  <subtitle>
 #        project: <name>
 #
 # Line 1:
-#   ★            — brand mark, bold, in fd_brand (#443199 royal purple)
+#   ⭑            — brand mark, bold, in fd_brand (#443199 royal purple)
 #   Foundry      — app name, bold, same fd_brand colour
 #   ·            — dim separator
 #   <subtitle>   — caller-supplied per-screen description, already painted
@@ -896,7 +896,7 @@ build_picker_header() {
   local subtitle="${1:-}"   # already-painted text supplied by the caller
   local line2="${2:-}"      # already-painted text supplied by the caller
   local out
-  # ★ and "Foundry" rendered bold via ui_paint_bold.  As of 0.32.23 the
+  # ⭑ and "Foundry" rendered bold via ui_paint_bold.  As of 0.32.23 the
   # bold SGR is emitted in its own CSI (see ui.sh) — Terminal.app was
   # silently dropping the bold attribute when bundled with the
   # extended-foreground SGR in a single CSI in 0.32.22.  Colour comes
@@ -904,7 +904,7 @@ build_picker_header() {
   # faint green lift) — picked from a 15-row preview after both
   # palette 57 and truecolor #5800FF mis-rendered in the user's
   # Terminal.app profile.
-  out="$(ui_paint_bold fd_brand '★')  "
+  out="$(ui_paint_bold fd_brand '⭑')  "
   out+="$(ui_paint_bold fd_brand 'Foundry')"
   if [[ -n "$subtitle" ]]; then
     out+="  $(ui_dim '·')  ${subtitle}"
@@ -913,7 +913,7 @@ build_picker_header() {
     # 18-space indent so line 2 starts at column 19 — flush under the
     # first character of the subtitle (currently "Code change…"), not
     # under the 'F' of Foundry.  Layout reference: cols 1-3 frame
-    # indent, col 4 ★, cols 5-6 spaces, cols 7-13 "Foundry", cols
+    # indent, col 4 ⭑, cols 5-6 spaces, cols 7-13 "Foundry", cols
     # 14-15 spaces, col 16 "·", cols 17-18 spaces, col 19 first char
     # of subtitle.
     out+=$'\n                  '"$line2"
@@ -1142,7 +1142,7 @@ ui_picker() {
   # ARROWHEAD) — solid filled, heavier than the previous ▸ small
   # triangle so the user can see "this is the selected row" at a
   # glance.  Painted in fd_brand so the selector reads as part of the
-  # Foundry brand identity (matches ★ + "Foundry" + ⌕ + caret).
+  # Foundry brand identity (matches ⭑ + "Foundry" + ⌕ + caret).
   local cursor_arrow;   cursor_arrow=$(ui_paint fd_brand '➤')
 
   # Optional N-line header above the search prompt.  Callers set
@@ -2139,7 +2139,7 @@ cmd_interactive() {
 
     build_main_entries
     # Two-line branded header.
-    #   Line 1: ★ Foundry · <descriptive tagline>
+    #   Line 1: ⭑ Foundry · <descriptive tagline>
     #   Line 2: project: [<project-name>]
     # The subtitle is a one-line description of what foundry IS as a
     # tool — "Code change registry — propose, track, implement, ship"
