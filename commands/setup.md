@@ -1,5 +1,5 @@
 ---
-description: Scaffold .foundry/ in the current project (asks about CLI symlink)
+description: Scaffold .foundry/ in the current project (asks about CLI symlink). For Claude inside a session; terminal equivalent — foundry setup
 allowed-tools: Bash(bash ${CLAUDE_PLUGIN_ROOT}/cli:*), AskUserQuestion
 ---
 

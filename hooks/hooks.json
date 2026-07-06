@@ -1,16 +1,5 @@
 {
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/trajectory-counter.sh"
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "matcher": "",

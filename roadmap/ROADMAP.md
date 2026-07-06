@@ -33,14 +33,14 @@ Claude Code marketplace plugin, реализующий CRISPY methodology для
 
 | # | Механизм | Тип | Где живёт |
 |---|----------|-----|-----------|
-| M1 | **State machine** | hard (bash) | `scripts/tracking.sh`, `scripts/state-machine.sh` |
+| M1 | **State machine** | hard (bash) | `scripts/cli/spec/tracking.sh`, `scripts/cli/spec/state-machine.sh` |
 | M2 | **Tool restrictions** | hard (Claude Code) | `allowed-tools:` в frontmatter агентов/команд |
 | M3 | **Sub-agent isolation** | structural | Task tool invocation с restricted prompt |
-| M4 | **Bash wrappers** | hard (через allowed-tools) | `scripts/build-check.sh`, `test-check.sh` |
+| M4 | **Bash wrappers** | hard (через allowed-tools) | build/test-обёртки — пишутся на Phase 6 под сборщик целевого проекта |
 | M5 | **Hooks** | intervention | `hooks/*.sh` через `hooks.json` |
 | M6 | **Agent prompts** | soft | тело `agents/*.md` |
 | M7 | **Skill content** | soft | `skills/**/SKILL.md` |
-| M8 | **Validation scripts** | post-action | `scripts/lint-*.sh` на review gate |
+| M8 | **Validation scripts** | post-action | `scripts/cli/spec/lint/*.sh` на review gate |
 | M9 | **Frontmatter config** | declarative | `model:`, `allowed-tools:`, `description:` |
 
 **Hard** — нельзя обойти. **Soft** — агент следует потому что так написано в prompt.
@@ -57,8 +57,7 @@ Claude Code marketplace plugin, реализующий CRISPY methodology для
 | Research = только факты, без opinion-words | [CRISPY §3](CRISPY.md) | **M8** (`opinion-words.sh` grep `recommend\|should\|better`) — потом M6+M7 в Phase 3 | **2** |
 | Design discussion ≤220 строк | [CRISPY §4](CRISPY.md) | **M8** (generic line-count) — потом M6 в Phase 4 | **2** |
 | Structure outline ≤100 строк, vertical | [CRISPY §5, §6](CRISPY.md) | **M8** (line-count + horizontal-pattern lint) — потом M6 в Phase 5 | **2** |
-| Compact errors — PASS/FAIL + первые 20 строк | [12-FACTOR §7](12-FACTOR.md), [NO-VIBES §8 анти](NO-VIBES.md) | **M4** (`build-check.sh`/`test-check.sh`) — wrapper, потом M2 (gradle direct запрещён) в Phase 6 | **2** |
-| Trajectory protection (>2 ошибки подряд = новый контекст) | [NO-VIBES §4](NO-VIBES.md) | **M5** (PostToolUse counter в `handoff.md`) | **2** |
+| Compact errors — PASS/FAIL + первые 20 строк | [12-FACTOR §7](12-FACTOR.md), [NO-VIBES §8 анти](NO-VIBES.md) | **M4** (build/test-обёртки; первая gradle-версия выпилена 2026-07-06 как преждевременная) + M2 (сборщик напрямую запрещён) | 6 |
 | Questions/research БЕЗ знания задачи | [CRISPY §3](CRISPY.md) | **M2** (researcher не читает `proposal.md`) + M3 + M6 + M7 + M8 (\*reuse Phase 2\*) | 3 |
 | Не читать whole files | [NO-VIBES](NO-VIBES.md) anti | M7 (skill учит Grep/Read с offset) | 3+ |
 | Validation Contract до кода | [MISSIONS §4](MISSIONS.md) | **M1** (design не → completed без VC файла) | 4 |
@@ -76,6 +75,7 @@ Claude Code marketplace plugin, реализующий CRISPY methodology для
 |---|---|---|---|
 | Smart Zone (≤35% context fill для новичков, ≤60% experienced) | [NO-VIBES §5](NO-VIBES.md), [CRISPY Q&A](CRISPY.md) | Real token count недоступен mid-session; порог fuzzy (Dex сам ходит до 60%); эвристика char-count врёт на 20-30%; Goodhart's law. | Claude Code's built-in `/context` + привычка |
 | «Wrap up при degradation» | [NO-VIBES §1, §4](NO-VIBES.md) | Qualitative («I apologize for the confusion» паттерн), не сводится к числу | Engineer's judgement — framework не блокирует |
+| Trajectory protection (>2 ошибки подряд = новый контекст) | [NO-VIBES §4](NO-VIBES.md) | Хук-счётчик выпилен 2026-07-06: stderr-детекция ошибок шумная, jq-зависимость, потребителя нет до Phase 6 — преждевременный инструментарий | Дисциплина: заметил серию ошибок → новый контекст руками; пересмотреть на Phase 6 |
 | Compaction infra | [CRISPY §11](CRISPY.md) — явно retract | Artifacts per stage = resume точки, compaction не нужна | — |
 
 ### Worked example: research isolation
@@ -87,8 +87,8 @@ Claude Code marketplace plugin, реализующий CRISPY methodology для
 1. **M2 (tool restrictions):** researcher агент имеет `allowed-tools: Read(.foundry/changes/*/questions.md), Read(src/**), Grep, Glob`. **Не имеет права читать `proposal.md`** — это hard enforcement через Claude Code.
 2. **M3 (sub-agent isolation):** researcher делегирует чтение кодебазы research sub-agent'у через Task tool — свежий контекст. Sub-agent тоже без `proposal.md`.
 3. **M6 (agent prompt):** `agents/researcher.md` явно специфицирует output format и запрещённые слова.
-4. **M7 (skill):** `skills/workflow/research-contract/SKILL.md` — детальный контракт + анти-паттерны.
-5. **M8 (validation):** `scripts/lint-research.sh` грепает на `recommend|should|better|следует|рекомендую`, считает строки. Запускается перед approve gate — `tracking.sh` отказывается выполнить `set-stage research completed` если lint fail.
+4. **M7 (skill):** `skills/spec/research-contract/SKILL.md` — детальный контракт + анти-паттерны.
+5. **M8 (validation):** `scripts/cli/spec/lint/`-скрипт для research грепает на `recommend|should|better|следует|рекомендую`, считает строки. Запускается перед approve gate — `tracking.sh` отказывается выполнить `set-stage research completed` если lint fail.
 
 Один принцип = пять слоёв, работающих вместе. **Это и есть "framework enforce'ит доктрину".** Если убрать любой слой — discipline ослабевает (агент может проигнорировать prompt, но не может обойти M2 + M8).
 
@@ -239,12 +239,12 @@ stages:
 - `state-machine.sh` — валидация переходов bucket'ов и stage state'ов
 
 **Команды** (`commands/`):
-- `change.md` — `/change` (browse + drill + state mutations через AskUserQuestion)
+- `change.md` — `/foundry:change` (browse + drill + state mutations через AskUserQuestion)
 - `setup.md` — `/foundry:setup` (скаффолд `.foundry/` в целевом проекте)
 
 **Skills** (`skills/`):
-- `workflow/lifecycle/SKILL.md` — state machine reference, schema YAML
-- `workflow/conventions/SKILL.md` — раскладка `.foundry/`, naming, slug rules
+- `spec/lifecycle/SKILL.md` — state machine reference, schema YAML
+- `spec/naming/SKILL.md` — раскладка `.foundry/`, naming, slug rules
 
 **Template** (внутри `commands/setup.md` создаёт):
 - `.foundry/changes/.template/tracking.yaml`
@@ -256,10 +256,10 @@ stages:
 - [ ] `/foundry:setup` в пустом проекте создаёт `.foundry/` структуру
 - [ ] `/change "rate limit for orders"` создаёт change в `backlog/` с tracking.yaml и propose.md
 - [ ] Создать 3 change'а с разными slug'ами
-- [ ] Переместить один: `backlog → in-progress` (через `/change` drill + AskUserQuestion)
+- [ ] Переместить один: `backlog → in-progress` (через `/foundry:change` drill + AskUserQuestion)
 - [ ] Переместить один в `declined` с причиной — поле `decline_reason` в YAML
 - [ ] `tracking.sh` отказывается выполнить invalid transition (`done → backlog`)
-- [ ] `/change` (без аргументов) показывает таблицу всех change'ей с их bucket'ом
+- [ ] `/foundry:change` (без аргументов) показывает таблицу всех change'ей с их bucket'ом
 - [ ] `history:` в YAML корректно накапливается на каждой мутации
 
 ### Применяемые принципы
@@ -273,7 +273,7 @@ stages:
 Не идём в Phase 2, пока:
 1. На реальном проекте можно создать-провести-завершить change без LLM
 2. State machine ловит invalid transitions
-3. `/change` drill UX работает (можно из него мутировать состояние)
+3. `/foundry:change` drill UX работает (можно из него мутировать состояние)
 
 Это базовый каркас. Без него LLM-стадии бессмысленны — они должны куда-то писать артефакты и обновлять state.
 
@@ -283,7 +283,7 @@ stages:
 
 Детализируется по мере прохождения. Список даётся чтобы видеть направление, не как commitment:
 
-- **Phase 2** — **M4 + M8 substrate**: generic lint scripts (instruction count, line count, opinion-words, horizontal-pattern) + bash wrappers для build/test (compact errors PASS/FAIL + 20 строк) + trajectory-counter hook. Reusable infra **до** producer-агентов. [CRISPY §1, §3, §4, §5, §7](CRISPY.md), [12-FACTOR §7](12-FACTOR.md), [NO-VIBES §4, §6](NO-VIBES.md). *(Прежний план «Metrics через OTel» drop'нут — runtime token metrics не поддержаны докладами, см. секцию «Что фреймворк НЕ enforce'ит» выше.)*
+- **Phase 2** — **M8 substrate**: generic lint scripts (instruction count, line count, opinion-words, horizontal-pattern). Reusable infra **до** producer-агентов. Build/test-обёртки (M4) переехали в Phase 6 — писать под сборщик, когда появится потребитель. [CRISPY §1, §3, §4, §5, §7](CRISPY.md), [12-FACTOR §7](12-FACTOR.md), [NO-VIBES §4, §6](NO-VIBES.md). *(Прежний план «Metrics через OTel» drop'нут — runtime token metrics не поддержаны докладами, см. секцию «Что фреймворк НЕ enforce'ит» выше.)*
 - **Phase 3** — Stages `questions` + `research`: валидация objectivity-разделения. Plug в Phase 2 lint substrate. [CRISPY §3](CRISPY.md)
 - **Phase 4** — Stage `design`: главный leverage point, deep human review. [CRISPY §4](CRISPY.md). Здесь же — Validation Contract init. [MISSIONS §4](MISSIONS.md)
 - **Phase 5** — Stage `structure`: vertical outline. [CRISPY §5, §6](CRISPY.md)

@@ -22,8 +22,8 @@ set -euo pipefail
 FOUNDRY_ROOT="${FOUNDRY_ROOT:-$PWD/.foundry}"
 CHANGES_DIR="$FOUNDRY_ROOT/changes"
 
-# shellcheck source=lib/constants.sh
-. "$(dirname "${BASH_SOURCE[0]}")/lib/constants.sh"
+# shellcheck source=../config/constants.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../config/constants.sh"
 
 usage() {
   cat >&2 <<'EOF'

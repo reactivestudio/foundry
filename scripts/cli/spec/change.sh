@@ -11,12 +11,12 @@ CHANGES_DIR="$FOUNDRY_ROOT/changes"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TRACKING_SH="$SCRIPT_DIR/tracking.sh"
 SM_SH="$SCRIPT_DIR/state-machine.sh"
-# shellcheck source=lib/render.sh
-. "$SCRIPT_DIR/lib/render.sh"
-# shellcheck source=lib/constants.sh
-. "$SCRIPT_DIR/lib/constants.sh"
-# shellcheck source=lib/index.sh
-. "$SCRIPT_DIR/lib/index.sh"
+# shellcheck source=../ui/render.sh
+. "$SCRIPT_DIR/../ui/render.sh"
+# shellcheck source=../config/constants.sh
+. "$SCRIPT_DIR/../config/constants.sh"
+# shellcheck source=index.sh
+. "$SCRIPT_DIR/index.sh"
 
 usage() {
   cat >&2 <<'EOF'

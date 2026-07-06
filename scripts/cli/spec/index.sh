@@ -34,8 +34,8 @@ _INDEX_VERSION=1
 # Pull in BUCKETS if the caller hasn't already sourced constants.sh.
 if [[ -z "${BUCKETS:-}" ]]; then
   _INDEX_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  # shellcheck source=constants.sh
-  . "$_INDEX_SCRIPT_DIR/constants.sh"
+  # shellcheck source=../config/constants.sh
+  . "$_INDEX_SCRIPT_DIR/../config/constants.sh"
 fi
 
 _index_changes_dir() { echo "${FOUNDRY_ROOT:-$PWD/.foundry}/changes"; }

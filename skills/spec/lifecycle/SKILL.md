@@ -1,11 +1,11 @@
 ---
-name: workflow-lifecycle
+name: spec-lifecycle
 description: Change lifecycle state machine for foundry — bucket transitions, serial invariant, tracking.yaml schema, history.log format. Use when handling /foundry:change mutations or reading a change's state.
 ---
 
 # Change Lifecycle
 
-A **change** = one unit of work moving through CRISPY stages. Phase 0.2 implements only the bucket-level state machine; stage-level state (`questions`, `research`, …) arrives in later phases.
+A **change** = one unit of work moving through CRISPY stages. Phase 1 implements only the bucket-level state machine; stage-level state (`questions`, `research`, …) arrives in later phases.
 
 ## Buckets
 
@@ -40,11 +40,11 @@ Filesystem layout in the **target project**:
 | `done` → anything | ✗ | terminal |
 | `backlog` → `done` | ✗ | cannot skip implementation |
 
-Validation lives in `scripts/state-machine.sh` and is invoked from `scripts/change.sh move` — never bypass.
+Validation lives in `scripts/cli/spec/state-machine.sh` and is invoked from `scripts/cli/spec/change.sh move` — never bypass.
 
 ## Serial invariant
 
-At most **one** change in `in-progress` at any time ([MISSIONS §7](../../../../roadmap/MISSIONS.md)). State machine rejects the second `→ in-progress` move with exit code 1 and stderr listing the current in-progress slug.
+At most **one** change in `in-progress` at any time ([MISSIONS §7](../../../roadmap/MISSIONS.md)). State machine rejects the second `→ in-progress` move with exit code 1 and stderr listing the current in-progress slug.
 
 ## `tracking.yaml` schema (flat YAML)
 
@@ -75,8 +75,8 @@ Append-only — no rotation, no edits. To inspect: `tracking.sh history-tail <di
 
 ## Scripts (the only sanctioned mutation paths)
 
-- `scripts/change.sh new|locate|path|move|list|show` — CRUD orchestration
-- `scripts/tracking.sh init|get|set|has|history|history-tail` — flat YAML + history I/O
-- `scripts/state-machine.sh validate-bucket|check-serial|list-buckets` — transition + invariant checks
+- `scripts/cli/spec/change.sh new|locate|path|move|list|show` — CRUD orchestration
+- `scripts/cli/spec/tracking.sh init|get|set|history|history-tail` — flat YAML + history I/O
+- `scripts/cli/spec/state-machine.sh validate-bucket|check-serial|list-buckets` — transition + invariant checks
 
 **Hard rule:** never edit `.foundry/changes/**` files by hand. All mutations go through `change.sh`.

@@ -20,7 +20,6 @@ usage:
   tracking.sh init <dir> <slug> <title>
   tracking.sh get <dir> <field>
   tracking.sh set <dir> <field> <value>
-  tracking.sh has <dir> <field>                 # exit 0 if present
   tracking.sh history <dir> <actor> <event> [details]
   tracking.sh history-tail <dir> [n]
 EOF
@@ -63,8 +62,8 @@ yaml_set() {
 }
 
 SCRIPT_DIR_TRACKING="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/render.sh
-. "$SCRIPT_DIR_TRACKING/lib/render.sh"
+# shellcheck source=../ui/render.sh
+. "$SCRIPT_DIR_TRACKING/../ui/render.sh"
 
 cmd_init() {
   local dir="$1" slug="$2" title="$3"
@@ -97,11 +96,6 @@ cmd_set() {
   fi
 }
 
-cmd_has() {
-  local dir="$1" field="$2"
-  yaml_has "$dir/tracking.yaml" "$field"
-}
-
 cmd_history() {
   local dir="$1" actor="$2" event="$3"
   local details="${4:-}"
@@ -120,7 +114,6 @@ main() {
     init)         [[ $# -eq 3 ]] || usage; cmd_init "$@" ;;
     get)          [[ $# -eq 2 ]] || usage; cmd_get "$@" ;;
     set)          [[ $# -eq 3 ]] || usage; cmd_set "$@" ;;
-    has)          [[ $# -eq 2 ]] || usage; cmd_has "$@" ;;
     history)      [[ $# -ge 3 && $# -le 4 ]] || usage; cmd_history "$@" ;;
     history-tail) [[ $# -ge 1 && $# -le 2 ]] || usage; cmd_history_tail "$@" ;;
     *)            usage ;;

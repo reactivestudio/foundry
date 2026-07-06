@@ -1,4 +1,5 @@
 {
+  "$schema": "https://www.schemastore.org/claude-code-marketplace.json",
   "name": "foundry",
   "description": "CRISPY methodology framework for solo senior/staff engineers — change lifecycle, enforcement, opinionated coding-agent pipeline.",
   "owner": {

@@ -52,12 +52,12 @@ done
 
 FOUNDRY_ROOT="${FOUNDRY_ROOT:-$PWD/.foundry}"
 PROJECT_ROOT="${PROJECT_ROOT:-$PWD}"
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 SRC_TEMPLATE="$PLUGIN_ROOT/.template"
 SRC_CLI="$PLUGIN_ROOT/cli"
 
-# shellcheck source=lib/constants.sh
-. "$(dirname "${BASH_SOURCE[0]}")/lib/constants.sh"
+# shellcheck source=../config/constants.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../config/constants.sh"
 
 if [[ ! -d "$SRC_TEMPLATE" ]]; then
   echo "no template source at $SRC_TEMPLATE" >&2

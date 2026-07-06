@@ -1,5 +1,5 @@
 ---
-name: workflow-conventions
+name: spec-naming
 description: Naming, layout, slug rules for foundry changes. Use when generating a slug from a title, naming a stage artifact, or creating any file under .foundry/.
 ---
 
@@ -51,13 +51,13 @@ A slug uniquely names a change inside `.foundry/changes/<bucket>/`. It is the di
   …                  — further stage artifacts accrue here
 ```
 
-Phase 0.2 only guarantees `tracking.yaml`, `history.log`, `proposal.md`.
+Phase 1 only guarantees `tracking.yaml`, `history.log`, `proposal.md`.
 
 ## Artifact naming
 
 Use **noun** filenames for artifacts: `proposal.md`, `research.md`, `design.md`. Avoid verb forms (`propose.md`, `research`, `design`) — they mix tense with file purpose and don't sort as well.
 
-Avoid the word **"spec"** anywhere in the framework ([NO-VIBES §8](../../../../roadmap/NO-VIBES.md) — semantically diffused). Use the CRISPY-canon names (`questions`, `research`, `design`, `structure`, `plan`, `implement`, `verify`) instead.
+Avoid the word **"spec"** in artifact filenames ([NO-VIBES §8](../../../roadmap/NO-VIBES.md) — semantically diffused). Use the CRISPY-canon names (`questions`, `research`, `design`, `structure`, `plan`, `implement`, `verify`) instead.
 
 ## Foundry root vs target project
 

@@ -1,13 +1,13 @@
 ---
-description: Browse / create / drill into a change in .foundry/
+description: Browse / create / drill into a change in .foundry/. For Claude inside a session — thin adapter over the cli; humans use ./foundry (TUI) in the terminal instead
 allowed-tools: Bash(bash ${CLAUDE_PLUGIN_ROOT}/cli:*), AskUserQuestion
 ---
 
 Argument: `$ARGUMENTS`
 
 First read the lifecycle and conventions skills so your slug and action choices match the framework:
-- `${CLAUDE_PLUGIN_ROOT}/skills/workflow/lifecycle/SKILL.md`
-- `${CLAUDE_PLUGIN_ROOT}/skills/workflow/conventions/SKILL.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/spec/lifecycle/SKILL.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/spec/naming/SKILL.md`
 
 All foundry calls below MUST use `--plain` — Claude is not a TTY and the interactive UI relies on a real terminal.
 
@@ -23,7 +23,7 @@ Show the output verbatim. Stop — user can re-invoke with a slug to drill.
 
 ## (b) Argument looks like a free-form title (multi-word, contains space, or quoted) → **new**
 
-1. Generate a kebab-case slug from the title following [conventions/SKILL.md](${CLAUDE_PLUGIN_ROOT}/skills/workflow/conventions/SKILL.md): lowercase, `[a-z0-9-]` only, ≤40 chars, **semantic** (not first-N-words). Examples: `"Rate limiting for /api/orders"` → `add-rate-limiting`; `"Fix flaky kafka consumer test"` → `fix-flaky-kafka-test`.
+1. Generate a kebab-case slug from the title following [spec/naming/SKILL.md](${CLAUDE_PLUGIN_ROOT}/skills/spec/naming/SKILL.md): lowercase, `[a-z0-9-]` only, ≤40 chars, **semantic** (not first-N-words). Examples: `"Rate limiting for /api/orders"` → `add-rate-limiting`; `"Fix flaky kafka consumer test"` → `fix-flaky-kafka-test`.
 2. Pass the slug to foundry via env so it overrides the default ASCII-fold:
    ```bash
    FOUNDRY_SLUG=<your-slug> bash ${CLAUDE_PLUGIN_ROOT}/cli --plain new "<title>"
@@ -36,7 +36,7 @@ Show the output verbatim. Stop — user can re-invoke with a slug to drill.
    ```bash
    bash ${CLAUDE_PLUGIN_ROOT}/cli --plain show <slug>
    ```
-2. Read the `status:` field from the output. Based on it, present a single `AskUserQuestion` with valid next actions from [lifecycle/SKILL.md](${CLAUDE_PLUGIN_ROOT}/skills/workflow/lifecycle/SKILL.md):
+2. Read the `status:` field from the output. Based on it, present a single `AskUserQuestion` with valid next actions from [spec/lifecycle/SKILL.md](${CLAUDE_PLUGIN_ROOT}/skills/spec/lifecycle/SKILL.md):
    - `backlog` → Start (move to in-progress), Decline, Cancel
    - `in-progress` → Finish (move to done), Pause (revert to backlog), Decline, Cancel
    - `done` → Cancel (terminal — no mutations)
@@ -51,6 +51,6 @@ Show the output verbatim. Stop — user can re-invoke with a slug to drill.
 ## Hard rules
 
 - Always use `--plain`. Never invoke `foundry` without it from Claude Code.
-- Never edit `.foundry/changes/**` files directly — always go through the `cli` or `scripts/change.sh`.
-- Never invent a transition not listed in lifecycle/SKILL.md.
+- Never edit `.foundry/changes/**` files directly — always go through the `cli` or `scripts/cli/spec/change.sh`.
+- Never invent a transition not listed in spec/lifecycle/SKILL.md.
 - If a command exits non-zero, report stderr verbatim and stop. Do not retry with a different transition to "make it work".
