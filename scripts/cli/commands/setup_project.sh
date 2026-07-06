@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — `foundry setup`: idempotent scaffold of .foundry/ in the
+# setup_project.sh — `foundry setup`: idempotent scaffold of .foundry/ in the
 # target project (cwd).
 #
 # Source this file; do not execute it directly.
@@ -93,7 +93,7 @@ _setup_remove_shell_hook() {
   CLEANUP_NOTE+=" removed foundry shell hook from ${rc_file/#$HOME/~};"
 }
 
-cmd_setup() {
+cmd_setup_project() {
   local install_cli=0
   for arg in "$@"; do
     case "$arg" in

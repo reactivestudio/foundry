@@ -11,7 +11,7 @@
 # Per-slug tracking.yaml remains the source of truth — the index is
 # rebuilt from those files by `foundry sync` (or lazily on first launch
 # when an index file is missing) and incrementally maintained by
-# cmd_new / cmd_move / tracking.sh set.
+# change.sh new / change.sh move / tracking.sh set.
 #
 # Format — canonical YAML, one block per entry:
 #   # .foundry/changes/<bucket>/.index.yaml

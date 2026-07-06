@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# move.sh — `foundry move <slug>`: transition a change between buckets.
+# move_change.sh — `foundry move <slug>`: transition a change between buckets.
 #
 # Source this file; do not execute it directly.
-# Needs: query.sh, render/primitives.sh, CHANGE_SH, require_foundry.
+# Needs: store/query.sh, render/primitives.sh, CHANGE_SH, require_foundry.
 # The transition itself is validated by spec/state-machine.sh via
 # store/change.sh — this command only collects the arguments.
 
-cmd_move() {
+cmd_move_change() {
   require_foundry
   local slug="${1:-}"
   [[ -n "$slug" ]] || { ui_error "move: missing slug"; exit 64; }

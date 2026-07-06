@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# new.sh — `foundry new ["title"]`: create a change in backlog.
+# new_change.sh — `foundry new ["title"]`: create a change in backlog.
 #
 # Source this file; do not execute it directly.
 # Needs: spec/slug.sh, render/primitives.sh, CHANGE_SH, require_foundry.
 
-cmd_new() {
+cmd_new_change() {
   local title="${1:-}"
   if [[ -z "$title" ]]; then
     if [[ "$UI_MODE" == "interactive" ]]; then

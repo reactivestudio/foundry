@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# list.sh — `foundry list`: grouped or single-bucket change listing.
+# list_changes.sh — `foundry list`: grouped or single-bucket change listing.
 #
 # Source this file; do not execute it directly.
 # Needs: store/query.sh, render/table.sh, render/primitives.sh, config_loader.sh, require_foundry.
 
-cmd_list() {
+cmd_list_changes() {
   require_foundry
   local bucket_filter="all" sort_key
   sort_key="$(config_get default_sort updated)"
@@ -25,7 +25,7 @@ cmd_list() {
     *) ui_error "--sort must be one of: updated, created, slug, title"; exit 64 ;;
   esac
 
-  local rows; rows=$(query_rows all)
+  local rows; rows=$(query_change_rows all)
 
   if [[ -z "$rows" ]]; then
     ui_header "Foundry" "empty"

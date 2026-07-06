@@ -26,7 +26,7 @@ query_bucket_of() {
 # When an expected index is missing (first launch after upgrade, or
 # someone deleted the file) we rebuild it lazily before reading; the
 # explicit `foundry sync` action item rebuilds all four unconditionally.
-query_rows() {
+query_change_rows() {
   local bucket_filter="${1:-all}"
   local buckets=("${BUCKETS[@]}")
   [[ "$bucket_filter" != "all" ]] && buckets=("$bucket_filter")

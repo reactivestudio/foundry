@@ -2,8 +2,9 @@
 # detail_page.sh — change-detail page + full-proposal reader.
 #
 # Source this file; do not execute it directly.
-# Needs: query.sh, render/{table,brand_header,markdown,history,picker_widget,primitives}.sh,
-# commands/move.sh, TRACKING_SH.
+# Needs: store/query.sh,
+# render/{table,brand_header,markdown,history,picker_widget,primitives}.sh,
+# commands/move_change.sh, TRACKING_SH.
 #
 # NOTE: 0.33.0's _view_full_with_pager (piping into `less`) was deleted
 # in 0.33.12 — users found the pager-driven view confusing.  Replaced by
@@ -265,26 +266,26 @@ detail_page() {
           proposal_page "$slug" "$bucket"
           ;;
         __act_start__)
-          cmd_move "$slug" --to=in-progress
+          cmd_move_change "$slug" --to=in-progress
           ui_pause
           ;;
         __act_finish__)
-          cmd_move "$slug" --to=done
+          cmd_move_change "$slug" --to=done
           ui_pause
           ;;
         __act_pause__)
-          cmd_move "$slug" --to=backlog
+          cmd_move_change "$slug" --to=backlog
           ui_pause
           ;;
         __act_revive__)
-          cmd_move "$slug" --to=backlog
+          cmd_move_change "$slug" --to=backlog
           ui_pause
           ;;
         __act_decline__)
           local reason
           reason=$(ui_input "Reason for declining" --header "Decline $slug") || reason=""
           if [[ -n "$reason" ]]; then
-            cmd_move "$slug" --to=declined --reason="$reason"
+            cmd_move_change "$slug" --to=declined --reason="$reason"
             ui_pause
           fi
           ;;

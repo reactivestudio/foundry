@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# show.sh — `foundry show <slug>`: tracking metadata + history for one change.
+# show_change.sh — `foundry show <slug>`: tracking metadata + history for one change.
 #
 # Source this file; do not execute it directly.
-# Needs: query.sh, render/{primitives,history}.sh, TRACKING_SH, require_foundry.
+# Needs: store/query.sh, render/{primitives,history}.sh, TRACKING_SH, require_foundry.
 
-cmd_show() {
+cmd_show_change() {
   require_foundry
   local slug="${1:-}"
   [[ -n "$slug" ]] || { ui_error "show: missing slug"; exit 64; }
@@ -13,7 +13,7 @@ cmd_show() {
     ui_error "not found: $slug"
     # offer near matches
     local hits
-    hits=$(query_rows all 2>/dev/null | awk -F'\t' -v query="$slug" '
+    hits=$(query_change_rows all 2>/dev/null | awk -F'\t' -v query="$slug" '
       BEGIN { query_lowercase = tolower(query) }
       index(tolower($2), query_lowercase) > 0 || \
       index(tolower($3), query_lowercase) > 0 { print $0 }

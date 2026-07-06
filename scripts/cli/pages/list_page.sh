@@ -18,7 +18,7 @@ list_page() {
   local page=1 per_page=5
 
   while true; do
-    local rows; rows=$(query_rows all | query_filter_bucket "$bucket" \
+    local rows; rows=$(query_change_rows all | query_filter_bucket "$bucket" \
                       | query_sort "$PAGE_SORT" "$PAGE_REVERSE")
     local total; total=$(ui_count_lines "$rows")
     (( total == 0 )) && return

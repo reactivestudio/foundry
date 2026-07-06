@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sync.sh — `foundry sync`: full rebuild of all per-bucket .index.yaml files.
+# sync_indexes.sh — `foundry sync`: full rebuild of all per-bucket .index.yaml files.
 #
 # Source this file; do not execute it directly.
 # Needs: store/index_cache.sh, render/primitives.sh, CLI_DIR, FOUNDRY_ROOT, require_foundry.
@@ -8,7 +8,7 @@
 # gum spinner covers the rebuild; in --plain mode we print a single
 # success line.
 
-cmd_sync() {
+cmd_sync_indexes() {
   require_foundry
   if [[ "$UI_MODE" == "interactive" ]] && command -v gum >/dev/null 2>&1; then
     gum spin --title "Syncing change indexes…" --spinner dot -- \

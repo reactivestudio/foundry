@@ -94,18 +94,18 @@ CHANGES_DIR="$FOUNDRY_ROOT/changes"
 . "$CLI_DIR/render/picker_widget.sh"
 # shellcheck source=commands/help.sh
 . "$CLI_DIR/commands/help.sh"
-# shellcheck source=commands/list.sh
-. "$CLI_DIR/commands/list.sh"
-# shellcheck source=commands/show.sh
-. "$CLI_DIR/commands/show.sh"
-# shellcheck source=commands/new.sh
-. "$CLI_DIR/commands/new.sh"
-# shellcheck source=commands/move.sh
-. "$CLI_DIR/commands/move.sh"
-# shellcheck source=commands/sync.sh
-. "$CLI_DIR/commands/sync.sh"
-# shellcheck source=commands/setup.sh
-. "$CLI_DIR/commands/setup.sh"
+# shellcheck source=commands/list_changes.sh
+. "$CLI_DIR/commands/list_changes.sh"
+# shellcheck source=commands/show_change.sh
+. "$CLI_DIR/commands/show_change.sh"
+# shellcheck source=commands/new_change.sh
+. "$CLI_DIR/commands/new_change.sh"
+# shellcheck source=commands/move_change.sh
+. "$CLI_DIR/commands/move_change.sh"
+# shellcheck source=commands/sync_indexes.sh
+. "$CLI_DIR/commands/sync_indexes.sh"
+# shellcheck source=commands/setup_project.sh
+. "$CLI_DIR/commands/setup_project.sh"
 # shellcheck source=pages/main_page.sh
 . "$CLI_DIR/pages/main_page.sh"
 # shellcheck source=pages/list_page.sh
@@ -126,12 +126,12 @@ main() {
   fi
   local subcommand="$1"; shift
   case "$subcommand" in
-    list)            cmd_list "$@" ;;
-    show)            cmd_show "$@" ;;
-    new)             cmd_new "$@" ;;
-    move)            cmd_move "$@" ;;
-    setup)           cmd_setup "$@" ;;
-    sync)            cmd_sync "$@" ;;
+    list)            cmd_list_changes "$@" ;;
+    show)            cmd_show_change "$@" ;;
+    new)             cmd_new_change "$@" ;;
+    move)            cmd_move_change "$@" ;;
+    setup)           cmd_setup_project "$@" ;;
+    sync)            cmd_sync_indexes "$@" ;;
     -h|--help|help)  cmd_help ;;
     *)               ui_error "unknown subcommand: $subcommand"; cmd_help; exit 64 ;;
   esac

@@ -2,8 +2,9 @@
 # main_page.sh — the main interactive screen: all changes grouped by bucket.
 #
 # Source this file; do not execute it directly.
-# Needs: query.sh, render/{table,brand_header,picker_widget,primitives}.sh, config_loader.sh,
-# commands/{new,sync}.sh, pages/{list_page,detail_page}.sh, require_foundry.
+# Needs: store/query.sh, render/{table,brand_header,picker_widget,primitives}.sh,
+# config_loader.sh, commands/{new_change,sync_indexes}.sh,
+# pages/{list_page,detail_page}.sh, require_foundry.
 #
 # Shared page state (set here, read by pages/list_page.sh too):
 #   PAGE_SORT / PAGE_REVERSE — sort key + direction from config.
@@ -21,7 +22,7 @@ _main_page_entries() {
   local reload_label='⟳  Reload'
   local exit_label='⏻  Exit'
 
-  local rows; rows=$(query_rows all)
+  local rows; rows=$(query_change_rows all)
 
   # Extra blank row before the column header — user wanted one more
   # line of breathing space between the ⌕ Search caret and the
@@ -97,7 +98,7 @@ _new_change_dialog() {
   local title
   title=$(ui_input "Change title (free text)" --width 60) || return
   [[ -z "$title" ]] && return
-  cmd_new "$title"
+  cmd_new_change "$title"
   ui_pause
 }
 
@@ -119,7 +120,7 @@ main_page() {
   trap 'clear; exit 0' INT
 
   while true; do
-    local rows; rows=$(query_rows all)
+    local rows; rows=$(query_change_rows all)
 
     if [[ -z "$rows" ]]; then
       clear
@@ -146,7 +147,7 @@ main_page() {
         __act_add__)
           _new_change_dialog ;;
         __act_sync__)
-          cmd_sync ;;   # full rebuild of per-bucket .index.yaml files
+          cmd_sync_indexes ;;   # full rebuild of per-bucket .index.yaml files
         __act_reload__)
           : ;;   # loop back, rebuild entries
         __act_exit__)

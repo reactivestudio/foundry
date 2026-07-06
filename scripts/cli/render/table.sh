@@ -178,7 +178,7 @@ render_more_row() {
 #   "·" separator     → ui_dim
 #   "<icon> <count>"  → per-bucket color (one painted segment so the ANSI
 #                       reset doesn't bleed back to dim)
-render_stats() {
+render_change_stats() {
   local total="$1" all_rows="$2"
   local stats_line
   stats_line="$(ui_dim "$total changes")"
@@ -193,9 +193,9 @@ render_stats() {
 
 # Bottom summary row — picker-formatted (leading indent matches the
 # column-header / +N-more / row prefix so everything aligns).  Wraps
-# render_stats.
+# render_change_stats.
 render_summary_row() {
-  printf '   %s' "$(render_stats "$1" "$2")"
+  printf '   %s' "$(render_change_stats "$1" "$2")"
 }
 
 # Render one change row and push it into the picker — the composition
