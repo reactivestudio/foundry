@@ -12,14 +12,16 @@
 # the components listed in the manifest below:
 #
 #   config/    — constants (buckets) + user config lookup
-#   spec/      — domain & data: change CRUD (change.sh, subprocess),
-#                state machine, tracking, index cache, queries, slug rules
+#   spec/      — CRISPY rules (mirrors skills/spec/): state machine,
+#                slug naming, artifact lint gates
+#   store/     — change data: CRUD (change.sh, subprocess), tracking,
+#                index cache, read queries, file templating
 #   render/    — everything that draws: ANSI primitives, row/column/
 #                markdown/history formatting, branded header, picker widget
 #   commands/  — plain subcommands: list show new move sync setup help
 #   pages/     — interactive picker pages: main_page, list_page, detail_page
 #
-# All state mutations go through spec/change.sh.
+# All state mutations go through store/change.sh.
 #
 # Exit codes (one convention across every component):
 #   0   success
@@ -48,8 +50,8 @@ CLI_DIR="$PLUGIN_ROOT/scripts/cli"
 
 # Subprocess scripts (executed, not sourced — same entry points that
 # /foundry:change and /foundry:setup use from Claude Code).
-CHANGE_SH="$CLI_DIR/spec/change.sh"
-TRACKING_SH="$CLI_DIR/spec/tracking.sh"
+CHANGE_SH="$CLI_DIR/store/change.sh"
+TRACKING_SH="$CLI_DIR/store/tracking.sh"
 
 # ── parse --plain anywhere in the args ────────────────────────────────────
 ARGS=()
@@ -74,10 +76,10 @@ CHANGES_DIR="$FOUNDRY_ROOT/changes"
 . "$CLI_DIR/config/config_loader.sh"
 # shellcheck source=render/primitives.sh
 . "$CLI_DIR/render/primitives.sh"
-# shellcheck source=spec/index_cache.sh
-. "$CLI_DIR/spec/index_cache.sh"
-# shellcheck source=spec/query.sh
-. "$CLI_DIR/spec/query.sh"
+# shellcheck source=store/index_cache.sh
+. "$CLI_DIR/store/index_cache.sh"
+# shellcheck source=store/query.sh
+. "$CLI_DIR/store/query.sh"
 # shellcheck source=spec/slug.sh
 . "$CLI_DIR/spec/slug.sh"
 # shellcheck source=render/table.sh

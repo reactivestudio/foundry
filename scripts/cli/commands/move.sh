@@ -4,7 +4,7 @@
 # Source this file; do not execute it directly.
 # Needs: query.sh, render/primitives.sh, CHANGE_SH, require_foundry.
 # The transition itself is validated by spec/state-machine.sh via
-# spec/change.sh — this command only collects the arguments.
+# store/change.sh — this command only collects the arguments.
 
 cmd_move() {
   require_foundry

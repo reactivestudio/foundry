@@ -2,7 +2,7 @@
 # table.sh — row/column formatting for lists and picker pages.
 #
 # Source this file; do not execute it directly.
-# Needs: primitives.sh, BUCKETS (constants.sh), query_sort (spec/query.sh).
+# Needs: primitives.sh, BUCKETS (constants.sh), query_sort (store/query.sh).
 #
 # Two column geometries live here on purpose (do NOT unify):
 #   render_list_widths   — plain `foundry list`, terminal capped at 100

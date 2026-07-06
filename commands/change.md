@@ -51,6 +51,6 @@ Show the output verbatim. Stop — user can re-invoke with a slug to drill.
 ## Hard rules
 
 - Always use `--plain`. Never invoke `foundry` without it from Claude Code.
-- Never edit `.foundry/changes/**` files directly — always go through the `cli` or `scripts/cli/spec/change.sh`.
+- Never edit `.foundry/changes/**` files directly — always go through the `cli` or `scripts/cli/store/change.sh`.
 - Never invent a transition not listed in spec/lifecycle/SKILL.md.
 - If a command exits non-zero, report stderr verbatim and stop. Do not retry with a different transition to "make it work".

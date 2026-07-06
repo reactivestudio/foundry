@@ -2,7 +2,7 @@
 # list.sh — `foundry list`: grouped or single-bucket change listing.
 #
 # Source this file; do not execute it directly.
-# Needs: query.sh, render/table.sh, render/primitives.sh, config_loader.sh, require_foundry.
+# Needs: store/query.sh, render/table.sh, render/primitives.sh, config_loader.sh, require_foundry.
 
 cmd_list() {
   require_foundry

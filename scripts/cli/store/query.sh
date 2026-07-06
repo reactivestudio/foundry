@@ -2,10 +2,10 @@
 # query.sh — read model over the change store.
 #
 # Source this file; do not execute it directly.
-# Needs: BUCKETS (config/constants.sh), CHANGES_DIR, index_* (spec/index_cache.sh).
+# Needs: BUCKETS (config/constants.sh), CHANGES_DIR, index_* (store/index_cache.sh).
 #
 # Every list/page reads changes through these three functions; writes
-# go through spec/change.sh only.
+# go through store/change.sh only.
 
 # Echo bucket containing slug or empty + exit 1.
 query_bucket_of() {
@@ -21,7 +21,7 @@ query_bucket_of() {
 # Emit a TSV row per change:
 #   bucket  slug  title  age_str  updated_epoch  created_epoch
 #
-# Reads from per-bucket .index.yaml (built by scripts/cli/spec/index_cache.sh) —
+# Reads from per-bucket .index.yaml (built by scripts/cli/store/index_cache.sh) —
 # one awk fork per bucket instead of N×3 grep|sed forks per slug.
 # When an expected index is missing (first launch after upgrade, or
 # someone deleted the file) we rebuild it lazily before reading; the

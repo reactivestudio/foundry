@@ -67,8 +67,8 @@ yaml_set() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=../render/template.sh
-. "$SCRIPT_DIR/../render/template.sh"
+# shellcheck source=template.sh
+. "$SCRIPT_DIR/template.sh"
 
 cmd_init() {
   local dir="$1" slug="$2" title="$3"

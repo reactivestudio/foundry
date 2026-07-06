@@ -40,7 +40,7 @@ Filesystem layout in the **target project**:
 | `done` → anything | ✗ | terminal |
 | `backlog` → `done` | ✗ | cannot skip implementation |
 
-Validation lives in `scripts/cli/spec/state-machine.sh` and is invoked from `scripts/cli/spec/change.sh move` — never bypass.
+Validation lives in `scripts/cli/spec/state-machine.sh` and is invoked from `scripts/cli/store/change.sh move` — never bypass.
 
 ## Serial invariant
 
@@ -75,8 +75,8 @@ Append-only — no rotation, no edits. To inspect: `tracking.sh history-tail <di
 
 ## Scripts (the only sanctioned mutation paths)
 
-- `scripts/cli/spec/change.sh new|locate|path|move|list|show` — CRUD orchestration
-- `scripts/cli/spec/tracking.sh init|get|set|history|history-tail` — flat YAML + history I/O
+- `scripts/cli/store/change.sh new|locate|path|move|list|show` — CRUD orchestration
+- `scripts/cli/store/tracking.sh init|get|set|history|history-tail` — flat YAML + history I/O
 - `scripts/cli/spec/state-machine.sh validate-bucket|check-serial|list-buckets` — transition + invariant checks
 
 **Hard rule:** never edit `.foundry/changes/**` files by hand. All mutations go through `change.sh`.

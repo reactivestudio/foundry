@@ -33,7 +33,7 @@ Claude Code marketplace plugin, реализующий CRISPY methodology для
 
 | # | Механизм | Тип | Где живёт |
 |---|----------|-----|-----------|
-| M1 | **State machine** | hard (bash) | `scripts/cli/spec/tracking.sh`, `scripts/cli/spec/state-machine.sh` |
+| M1 | **State machine** | hard (bash) | `scripts/cli/store/tracking.sh`, `scripts/cli/spec/state-machine.sh` |
 | M2 | **Tool restrictions** | hard (Claude Code) | `allowed-tools:` в frontmatter агентов/команд |
 | M3 | **Sub-agent isolation** | structural | Task tool invocation с restricted prompt |
 | M4 | **Bash wrappers** | hard (через allowed-tools) | build/test-обёртки — пишутся на Phase 6 под сборщик целевого проекта |

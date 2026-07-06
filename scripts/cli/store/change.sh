@@ -11,9 +11,9 @@ FOUNDRY_ROOT="${FOUNDRY_ROOT:-$PWD/.foundry}"
 CHANGES_DIR="$FOUNDRY_ROOT/changes"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TRACKING_SH="$SCRIPT_DIR/tracking.sh"
-SM_SH="$SCRIPT_DIR/state-machine.sh"
-# shellcheck source=../render/template.sh
-. "$SCRIPT_DIR/../render/template.sh"
+SM_SH="$SCRIPT_DIR/../spec/state-machine.sh"
+# shellcheck source=template.sh
+. "$SCRIPT_DIR/template.sh"
 # shellcheck source=../config/constants.sh
 . "$SCRIPT_DIR/../config/constants.sh"
 # shellcheck source=index_cache.sh
@@ -40,10 +40,10 @@ require_foundry() {
 }
 
 # Slug rules (slug_valid) live in spec/slug.sh; bucket lookup
-# (query_bucket_of) in spec/query.sh — shared with the sourced CLI
+# (query_bucket_of) in store/query.sh — shared with the sourced CLI
 # components so the logic exists exactly once.
-# shellcheck source=slug.sh
-. "$SCRIPT_DIR/slug.sh"
+# shellcheck source=../spec/slug.sh
+. "$SCRIPT_DIR/../spec/slug.sh"
 # shellcheck source=query.sh
 . "$SCRIPT_DIR/query.sh"
 
