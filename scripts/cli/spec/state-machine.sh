@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # state-machine.sh — bucket transition rules + serial invariant.
 #
 # Buckets: backlog | in-progress | done | declined
@@ -35,7 +36,7 @@ EOF
   exit 64
 }
 
-is_valid_bucket() {
+bucket_valid() {
   local b="$1"
   for v in "${BUCKETS[@]}"; do
     [[ "$b" == "$v" ]] && return 0
@@ -47,11 +48,11 @@ cmd_validate_bucket() {
   local from="$1" to="$2"
   local reason="${3:-}"
 
-  if ! is_valid_bucket "$from"; then
+  if ! bucket_valid "$from"; then
     echo "invalid from-bucket: $from" >&2
     return 2
   fi
-  if ! is_valid_bucket "$to"; then
+  if ! bucket_valid "$to"; then
     echo "invalid to-bucket: $to" >&2
     return 2
   fi

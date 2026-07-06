@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# config.sh — flat-YAML config lookup with defaults.
+# config_loader.sh — flat-YAML config lookup with defaults.
 #
 # Source this; do not execute. Reads from $FOUNDRY_ROOT/config.yaml
 # (per-project, optional). Each line is "key: value".
@@ -12,8 +12,11 @@ config_get() {
   local cfg="${FOUNDRY_ROOT:-$PWD/.foundry}/config.yaml"
   if [[ -f "$cfg" ]]; then
     local value
-    value=$(grep -E "^${key}:" "$cfg" 2>/dev/null | head -1 \
-            | sed -E "s/^${key}:[[:space:]]*//")
+    # index()==1 → literal prefix match: the key can't inject regex,
+    # and one awk replaces the grep|head|sed pipeline.
+    value=$(awk -v k="$key" 'index($0, k ":") == 1 {
+              sub(/^[^:]*:[[:space:]]*/, ""); print; exit
+            }' "$cfg" 2>/dev/null)
     if [[ -n "$value" ]]; then
       printf '%s' "$value"
       return

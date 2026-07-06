@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# setup.sh — idempotent scaffold of .foundry/ in the target project (cwd).
+# setup.sh — `foundry setup`: idempotent scaffold of .foundry/ in the
+# target project (cwd).
+#
+# Source this file; do not execute it directly.
+# Needs: BUCKETS (constants.sh), FOUNDRY_ROOT, PLUGIN_ROOT.
 #
 # Creates:
 #   .foundry/changes/{backlog,in-progress,done,declined}/.gitkeep
@@ -29,69 +33,10 @@
 # Templates are copied from ${CLAUDE_PLUGIN_ROOT}/.template/. Target
 # copies are preserved on re-run so users can customize per-project.
 
-set -euo pipefail
-
-INSTALL_CLI=0
-for arg in "$@"; do
-  case "$arg" in
-    --install-cli) INSTALL_CLI=1 ;;
-    -h|--help)
-      cat <<'EOF'
-usage: setup.sh [--install-cli]
-
-  --install-cli   also create the CLI symlinks (.foundry/cli, ./foundry,
-                  ./f) and add the root-level ones to .gitignore.
-
-                  This run will ALSO clean up any per-project aliases.sh
-                  or rc-file shell hook left by older setup versions.
-EOF
-      exit 0 ;;
-    *) echo "setup.sh: unknown arg: $arg" >&2; exit 64 ;;
-  esac
-done
-
-FOUNDRY_ROOT="${FOUNDRY_ROOT:-$PWD/.foundry}"
-PROJECT_ROOT="${PROJECT_ROOT:-$PWD}"
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
-SRC_TEMPLATE="$PLUGIN_ROOT/.template"
-SRC_CLI="$PLUGIN_ROOT/cli"
-
-# shellcheck source=../config/constants.sh
-. "$(dirname "${BASH_SOURCE[0]}")/../config/constants.sh"
-
-if [[ ! -d "$SRC_TEMPLATE" ]]; then
-  echo "no template source at $SRC_TEMPLATE" >&2
-  echo "(set CLAUDE_PLUGIN_ROOT or run from inside the plugin)" >&2
-  exit 2
-fi
-
-# bucket dirs with .gitkeep
-for b in "${BUCKETS[@]}"; do
-  mkdir -p "$FOUNDRY_ROOT/changes/$b"
-  [[ -f "$FOUNDRY_ROOT/changes/$b/.gitkeep" ]] || : > "$FOUNDRY_ROOT/changes/$b/.gitkeep"
-done
-
-# Mirror plugin's .template/ into .foundry/, preserving structure;
-# never overwrites existing files (idempotent + user-editable).
-while IFS= read -r rel; do
-  rel="${rel#./}"
-  dst="$FOUNDRY_ROOT/$rel"
-  if [[ ! -f "$dst" ]]; then
-    mkdir -p "$(dirname "$dst")"
-    cp "$SRC_TEMPLATE/$rel" "$dst"
-  fi
-done < <(cd "$SRC_TEMPLATE" && find . -type f)
-
-# Clean up the pre-0.21.3 layout (.foundry/bin/foundry) if present
-if [[ -L "$FOUNDRY_ROOT/bin/foundry" ]]; then
-  rm "$FOUNDRY_ROOT/bin/foundry"
-  rmdir "$FOUNDRY_ROOT/bin" 2>/dev/null || true
-fi
-
 # Idempotently append a literal line to the project .gitignore.  Creates
 # the file if it doesn't exist.  Matches exact whole lines so we don't
 # stomp on entries the user already has.
-_ensure_gitignore_line() {
+_setup_ensure_gitignore_line() {
   local entry="$1"
   local gi="$PROJECT_ROOT/.gitignore"
   if [[ ! -f "$gi" ]]; then
@@ -107,7 +52,7 @@ _ensure_gitignore_line() {
 
 # Remove a literal whole-line entry from .gitignore if it's present.
 # No-op if the file or the line doesn't exist.
-_remove_gitignore_line() {
+_setup_remove_gitignore_line() {
   local entry="$1"
   local gi="$PROJECT_ROOT/.gitignore"
   [[ -f "$gi" ]] || return 0
@@ -120,9 +65,9 @@ _remove_gitignore_line() {
 
 # Strip the foundry shell-hook block (added by 0.32.11 setup) from the
 # user's rc file if present.  Identified by the start/end markers.
-# No-op if the rc file doesn't exist or the block isn't there.  Sets
-# CLEANUP_NOTE so the user sees what we removed.
-_remove_shell_hook() {
+# No-op if the rc file doesn't exist or the block isn't there.  Appends
+# to CLEANUP_NOTE (caller's local) so the user sees what we removed.
+_setup_remove_shell_hook() {
   local rc
   case "${SHELL:-}" in
     */zsh)  rc="$HOME/.zshrc"  ;;
@@ -147,55 +92,107 @@ _remove_shell_hook() {
   CLEANUP_NOTE+=" removed foundry shell hook from ${rc/#$HOME/~};"
 }
 
-cli_status=""
-CLEANUP_NOTE=""
-if (( INSTALL_CLI )); then
-  if [[ ! -x "$SRC_CLI" ]]; then
-    echo "setup.sh: CLI not found at $SRC_CLI (CLAUDE_PLUGIN_ROOT wrong?)" >&2
+cmd_setup() {
+  local install_cli=0
+  for arg in "$@"; do
+    case "$arg" in
+      --install-cli) install_cli=1 ;;
+      -h|--help)
+        cat <<'EOF'
+usage: foundry setup [--install-cli]
+
+  --install-cli   also create the CLI symlinks (.foundry/cli, ./foundry,
+                  ./f) and add the root-level ones to .gitignore.
+
+                  This run will ALSO clean up any per-project aliases.sh
+                  or rc-file shell hook left by older setup versions.
+EOF
+        return 0 ;;
+      *) ui_error "setup: unknown arg: $arg"; exit 64 ;;
+    esac
+  done
+
+  local PROJECT_ROOT="${PROJECT_ROOT:-$PWD}"
+  local src_template="$PLUGIN_ROOT/.template"
+  local src_cli="$PLUGIN_ROOT/cli"
+
+  if [[ ! -d "$src_template" ]]; then
+    ui_error "no template source at $src_template"
+    ui_error "(set CLAUDE_PLUGIN_ROOT or run from inside the plugin)"
     exit 2
   fi
-  # .foundry/cli is the canonical local pointer to the plugin's CLI.
-  # ./foundry and ./f are RELATIVE symlinks that chain through it, so
-  # the plugin path appears in exactly one place — re-running setup
-  # after a plugin version bump updates the chain without touching
-  # the root-level symlinks.
-  inner_link="$FOUNDRY_ROOT/cli"
-  foundry_link="$PROJECT_ROOT/foundry"
-  f_link="$PROJECT_ROOT/f"
-  ln -sf "$SRC_CLI" "$inner_link"
-  ln -sf ".foundry/cli" "$foundry_link"
-  ln -sf ".foundry/cli" "$f_link"
 
-  # .gitignore for the root-level symlinks — they're host-specific.
-  _ensure_gitignore_line "/foundry"
-  _ensure_gitignore_line "/f"
-  _ensure_gitignore_line "/.foundry/cli"
+  # bucket dirs with .gitkeep
+  local bucket
+  for bucket in "${BUCKETS[@]}"; do
+    mkdir -p "$FOUNDRY_ROOT/changes/$bucket"
+    [[ -f "$FOUNDRY_ROOT/changes/$bucket/.gitkeep" ]] || : > "$FOUNDRY_ROOT/changes/$bucket/.gitkeep"
+  done
 
-  # ── cleanup of 0.32.10–0.32.11 experiments ─────────────────────────
-  # Per-project aliases.sh and the rc-file shell hook were the user's
-  # explicit "no global aliases" rejection — undo them on every setup.
-  if [[ -f "$FOUNDRY_ROOT/aliases.sh" ]]; then
-    rm -f "$FOUNDRY_ROOT/aliases.sh"
-    CLEANUP_NOTE+=" removed obsolete .foundry/aliases.sh;"
+  # Mirror plugin's .template/ into .foundry/, preserving structure;
+  # never overwrites existing files (idempotent + user-editable).
+  local rel dst
+  while IFS= read -r rel; do
+    rel="${rel#./}"
+    dst="$FOUNDRY_ROOT/$rel"
+    if [[ ! -f "$dst" ]]; then
+      mkdir -p "$(dirname "$dst")"
+      cp "$src_template/$rel" "$dst"
+    fi
+  done < <(cd "$src_template" && find . -type f)
+
+  # Clean up the pre-0.21.3 layout (.foundry/bin/foundry) if present
+  if [[ -L "$FOUNDRY_ROOT/bin/foundry" ]]; then
+    rm "$FOUNDRY_ROOT/bin/foundry"
+    rmdir "$FOUNDRY_ROOT/bin" 2>/dev/null || true
   fi
-  _remove_gitignore_line "/.foundry/aliases.sh"
-  _remove_shell_hook
 
-  cli_status="
-  cli              — .foundry/cli → $SRC_CLI
+  local cli_status=""
+  local CLEANUP_NOTE=""
+  if (( install_cli )); then
+    if [[ ! -x "$src_cli" ]]; then
+      ui_error "setup: CLI not found at $src_cli (CLAUDE_PLUGIN_ROOT wrong?)"
+      exit 2
+    fi
+    # .foundry/cli is the canonical local pointer to the plugin's CLI.
+    # ./foundry and ./f are RELATIVE symlinks that chain through it, so
+    # the plugin path appears in exactly one place — re-running setup
+    # after a plugin version bump updates the chain without touching
+    # the root-level symlinks.
+    ln -sf "$src_cli" "$FOUNDRY_ROOT/cli"
+    ln -sf ".foundry/cli" "$PROJECT_ROOT/foundry"
+    ln -sf ".foundry/cli" "$PROJECT_ROOT/f"
+
+    # .gitignore for the root-level symlinks — they're host-specific.
+    _setup_ensure_gitignore_line "/foundry"
+    _setup_ensure_gitignore_line "/f"
+    _setup_ensure_gitignore_line "/.foundry/cli"
+
+    # ── cleanup of 0.32.10–0.32.11 experiments ─────────────────────────
+    # Per-project aliases.sh and the rc-file shell hook were the user's
+    # explicit "no global aliases" rejection — undo them on every setup.
+    if [[ -f "$FOUNDRY_ROOT/aliases.sh" ]]; then
+      rm -f "$FOUNDRY_ROOT/aliases.sh"
+      CLEANUP_NOTE+=" removed obsolete .foundry/aliases.sh;"
+    fi
+    _setup_remove_gitignore_line "/.foundry/aliases.sh"
+    _setup_remove_shell_hook
+
+    cli_status="
+  cli              — .foundry/cli → $src_cli
                      ./foundry    → .foundry/cli   (relative)
                      ./f          → .foundry/cli   (relative)
                      run from project root:
                        ./foundry list      ./f list
                        ./foundry show <slug>   etc.
   .gitignore       — /foundry, /f, /.foundry/cli added"
-  if [[ -n "$CLEANUP_NOTE" ]]; then
-    cli_status+="
+    if [[ -n "$CLEANUP_NOTE" ]]; then
+      cli_status+="
   cleanup          —${CLEANUP_NOTE}"
+    fi
   fi
-fi
 
-cat <<EOF
+  cat <<EOF
 foundry scaffold ready: $FOUNDRY_ROOT
 
   changes/
@@ -207,3 +204,4 @@ foundry scaffold ready: $FOUNDRY_ROOT
 
 next: /foundry:change "your first idea"
 EOF
+}

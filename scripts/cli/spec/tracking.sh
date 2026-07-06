@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # tracking.sh — read/write flat tracking.yaml + append history.log
 #
 # Schema (flat YAML, one key:value per line, no nesting):
@@ -29,9 +30,13 @@ EOF
 now_utc() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 
 # Read field value. Echoes value (without leading space) or empty.
+# index()==1 → literal prefix match: the field name can't inject regex,
+# and one awk replaces the grep|head|sed pipeline.
 yaml_get() {
   local file="$1" field="$2"
-  grep -E "^${field}:( |$)" "$file" 2>/dev/null | head -n1 | sed -E "s/^${field}:[[:space:]]?//"
+  awk -v f="$field" 'index($0, f ":") == 1 {
+    sub(/^[^:]*:[[:space:]]?/, ""); print; exit
+  }' "$file" 2>/dev/null
 }
 
 yaml_has() {
@@ -61,9 +66,9 @@ yaml_set() {
   fi
 }
 
-SCRIPT_DIR_TRACKING="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=../ui/render.sh
-. "$SCRIPT_DIR_TRACKING/../ui/render.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../render/template.sh
+. "$SCRIPT_DIR/../render/template.sh"
 
 cmd_init() {
   local dir="$1" slug="$2" title="$3"

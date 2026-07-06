@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# list.sh — `foundry list`: grouped or single-bucket change listing.
+#
+# Source this file; do not execute it directly.
+# Needs: query.sh, render/table.sh, render/primitives.sh, config_loader.sh, require_foundry.
+
+cmd_list() {
+  require_foundry
+  local bucket_filter="all" sort_key
+  sort_key="$(config_get default_sort updated)"
+  local reverse=0
+  [[ "$(config_get default_reverse false)" == "true" ]] && reverse=1
+
+  for arg in "$@"; do
+    case "$arg" in
+      --bucket=*) bucket_filter="${arg#--bucket=}" ;;
+      --sort=*)   sort_key="${arg#--sort=}" ;;
+      --reverse)  reverse=1 ;;
+      *) ui_error "unknown flag: $arg"; exit 64 ;;
+    esac
+  done
+
+  case "$sort_key" in
+    updated|created|slug|title) ;;
+    *) ui_error "--sort must be one of: updated, created, slug, title"; exit 64 ;;
+  esac
+
+  local rows; rows=$(query_rows all)
+
+  if [[ -z "$rows" ]]; then
+    ui_header "Foundry" "empty"
+    ui_info "get started: foundry new \"your idea\""
+    echo
+    return 0
+  fi
+
+  local total; total=$(ui_count_lines "$rows")
+  local arrow; (( reverse )) && arrow='↑' || arrow='↓'
+
+  if [[ "$bucket_filter" != "all" ]]; then
+    # single-list page — no grouping, no cap.
+    local bucket_rows; bucket_rows=$(printf '%s\n' "$rows" | query_filter_bucket "$bucket_filter")
+    local n; n=$(ui_count_lines "$bucket_rows")
+    if (( n == 0 )); then
+      ui_header "Foundry" "$(ui_status "$bucket_filter") · empty"
+      echo
+      return 0
+    fi
+    ui_header "Foundry" "$(ui_status "$bucket_filter") · $n · sort: $sort_key $arrow"
+    read -r slug_w title_w upd_w <<< "$(render_list_widths)"
+    while IFS=$'\t' read -r row_bucket slug title _ updated_epoch _; do
+      render_list_row "$row_bucket" "$slug" "$title" "$updated_epoch" "$slug_w" "$title_w" "$upd_w"
+    done < <(printf '%s\n' "$bucket_rows" | query_sort "$sort_key" "$reverse")
+    echo
+    return 0
+  fi
+
+  # Grouped view: summary line + section per non-empty bucket.
+  local breakdown=""
+  for bucket in "${BUCKETS[@]}"; do
+    local cnt; cnt=$(ui_count_lines "$(printf '%s\n' "$rows" | query_filter_bucket "$bucket")")
+    breakdown+="$(ui_status_icon "$bucket") $cnt  "
+  done
+  ui_header "Foundry" "$total · ${breakdown% } · sort: $sort_key $arrow"
+  local limit; limit="$(config_get list_per_bucket_limit 3)"
+  for bucket in "${BUCKETS[@]}"; do
+    render_bucket_section "$bucket" "$rows" "$sort_key" "$reverse" "$limit"
+  done
+  echo
+
+  if [[ "$UI_MODE" == "interactive" ]]; then
+    printf '  %s  %s\n' \
+      "$(ui_dim 'open      :')" "$(ui_dim 'foundry show <slug>')"
+    printf '  %s  %s\n' \
+      "$(ui_dim 'add       :')" "$(ui_dim 'foundry new "your idea"')"
+    printf '  %s  %s\n' \
+      "$(ui_dim 'one bucket:')" "$(ui_dim 'foundry list --bucket=<status>')"
+    printf '  %s  %s\n' \
+      "$(ui_dim 'configure :')" "$(ui_dim '.foundry/config.yaml')"
+    echo
+  fi
+}

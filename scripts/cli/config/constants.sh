@@ -7,4 +7,5 @@
 
 # Buckets a change can live in. Order is significant for `list` output
 # (backlog first, terminal states last).
-BUCKETS=(backlog in-progress done declined)
+# shellcheck disable=SC2034  # read by every layer that iterates buckets
+BUCKETS=(backlog in-progress 'done' declined)

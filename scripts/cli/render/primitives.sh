@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ui.sh — presentation primitives for the foundry CLI.
+# primitives.sh — presentation primitives for the foundry CLI.
 #
 # Two modes:
 #   interactive — gum-driven; colored cells, panels, prompts. Default
@@ -154,10 +154,10 @@ ui_ts_to_epoch() {
 # "3d ago", "Mon Jun 1".
 ui_date_relative() {
   local ts="$1"
-  local then; then=$(ui_ts_to_epoch "$ts")
-  if [[ "$then" == "0" ]]; then echo "$ts"; return; fi
+  local past; past=$(ui_ts_to_epoch "$ts")
+  if [[ "$past" == "0" ]]; then echo "$ts"; return; fi
   local now; now=$(date -u +%s)
-  local d=$((now - then))
+  local d=$((now - past))
   if   (( d < 0 ));       then echo "in future"
   elif (( d < 60 ));      then echo "just now"
   elif (( d < 3600 ));    then echo "$((d/60))m ago"
@@ -183,40 +183,47 @@ ui_small_caps() {
   if [[ "$UI_MODE" != "interactive" ]]; then
     printf '%s' "$text"; return
   fi
-  text=$(printf '%s' "$text" | tr 'A-Z' 'a-z')
-  text="${text//a/ᴀ}"
-  text="${text//b/ʙ}"
-  text="${text//c/ᴄ}"
-  text="${text//d/ᴅ}"
-  text="${text//e/ᴇ}"
-  text="${text//f/ꜰ}"
-  text="${text//g/ɢ}"
-  text="${text//h/ʜ}"
-  text="${text//i/ɪ}"
-  text="${text//j/ᴊ}"
-  text="${text//k/ᴋ}"
-  text="${text//l/ʟ}"
-  text="${text//m/ᴍ}"
-  text="${text//n/ɴ}"
-  text="${text//o/ᴏ}"
-  text="${text//p/ᴘ}"
-  text="${text//q/ǫ}"
-  text="${text//r/ʀ}"
-  text="${text//s/ꜱ}"
-  text="${text//t/ᴛ}"
-  text="${text//u/ᴜ}"
-  text="${text//v/ᴠ}"
-  text="${text//w/ᴡ}"
-  text="${text//y/ʏ}"
-  text="${text//z/ᴢ}"
+  text=$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')
+  # One substitution pass per letter:glyph pair.  tr/sed can't do this —
+  # neither handles multibyte replacement glyphs portably.  'x' is
+  # missing on purpose: Unicode has no small-capital x, it stays as-is.
+  local pair
+  for pair in a:ᴀ b:ʙ c:ᴄ d:ᴅ e:ᴇ f:ꜰ g:ɢ h:ʜ i:ɪ j:ᴊ k:ᴋ l:ʟ m:ᴍ \
+              n:ɴ o:ᴏ p:ᴘ q:ǫ r:ʀ s:ꜱ t:ᴛ u:ᴜ v:ᴠ w:ᴡ y:ʏ z:ᴢ; do
+    text="${text//${pair%%:*}/${pair#*:}}"
+  done
   printf '%s' "$text"
+}
+
+# Terminal width capped at $1, falling back to $2 (default 100) when
+# neither COLUMNS nor tput can tell.  Each layout picks its own cap —
+# plain list 120, picker table 140, divider 100 — so the cap is an arg.
+ui_term_cols() {
+  local cap="$1" fallback="${2:-100}" cols
+  cols=${COLUMNS:-$(tput cols 2>/dev/null || echo "$fallback")}
+  (( cols > cap )) && cols=$cap
+  printf '%d' "$cols"
+}
+
+# Epoch seconds → ISO-8601 UTC; empty output when both the BSD (-r)
+# and GNU (-d @) date variants fail.  Always exits 0 (set -e safe).
+ui_epoch_to_iso() {
+  date -u -r "$1" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+    || date -u -d "@$1" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+    || echo ""
+}
+
+# Count lines in a string.  Empty string counts as 0 (printf would emit
+# one newline and wc would say 1); tr strips BSD wc's space padding.
+ui_count_lines() {
+  [[ -z "$1" ]] && { printf '0'; return; }
+  printf '%s\n' "$1" | wc -l | tr -d ' '
 }
 
 # Section divider — "─── title ──────────────────────" or just dashes.
 ui_divider() {
   local title="${1:-}"
-  local width; width=${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}
-  (( width > 100 )) && width=100
+  local width; width=$(ui_term_cols 100 80)
   local dash_count
   if [[ -n "$title" ]]; then
     dash_count=$(( width - ${#title} - 6 ))
@@ -263,16 +270,16 @@ ui_bucket_color() {
 
 # Echo "<icon> <bucket>" — icon in baby blue, label in per-bucket color.
 ui_status() {
-  local b="$1"
+  local bucket="$1"
   printf '%s %s' \
-    "$(ui_paint fd_icon "$(ui_icon "$b")")" \
-    "$(ui_paint "$(ui_bucket_color "$b")" "$b")"
+    "$(ui_paint fd_icon "$(ui_icon "$bucket")")" \
+    "$(ui_paint "$(ui_bucket_color "$bucket")" "$bucket")"
 }
 
 # Just the icon, in the shared baby-blue.
 ui_status_icon() {
-  local b="$1"
-  ui_paint fd_icon "$(ui_icon "$b")"
+  local bucket="$1"
+  ui_paint fd_icon "$(ui_icon "$bucket")"
 }
 
 # ── header (used at top of every command output) ───────────────────────────
@@ -344,10 +351,13 @@ ui_choose() {
   fi
 }
 
+# ui_input <placeholder> [extra gum flags…] — e.g. --width 60,
+# --header "Decline foo".  Extra flags pass through verbatim.
 ui_input() {
   local placeholder="${1:-}"
+  shift || true
   if [[ "$UI_MODE" == "interactive" ]]; then
-    gum input --placeholder "$placeholder"
+    gum input --placeholder "$placeholder" "$@"
   else
     ui_error "ui_input: interactive only"
     return 2
@@ -362,5 +372,12 @@ ui_confirm() {
     ui_error "ui_confirm: interactive only"
     return 2
   fi
+}
+
+# Press-any-key gate; used between an action's output and the next redraw.
+# `|| true`: read exits nonzero on EOF — tolerate it under set -e.
+ui_pause() {
+  printf '\n  %s ' "$(ui_dim 'press ↵ to continue')"
+  read -r _ || true
 }
 

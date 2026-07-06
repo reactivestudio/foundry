@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # change.sh — CRUD over changes in .foundry/changes/<bucket>/<slug>/
 #
 # Wraps tracking.sh + state-machine.sh. All filesystem mutations go through
@@ -11,12 +12,12 @@ CHANGES_DIR="$FOUNDRY_ROOT/changes"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TRACKING_SH="$SCRIPT_DIR/tracking.sh"
 SM_SH="$SCRIPT_DIR/state-machine.sh"
-# shellcheck source=../ui/render.sh
-. "$SCRIPT_DIR/../ui/render.sh"
+# shellcheck source=../render/template.sh
+. "$SCRIPT_DIR/../render/template.sh"
 # shellcheck source=../config/constants.sh
 . "$SCRIPT_DIR/../config/constants.sh"
-# shellcheck source=index.sh
-. "$SCRIPT_DIR/index.sh"
+# shellcheck source=index_cache.sh
+. "$SCRIPT_DIR/index_cache.sh"
 
 usage() {
   cat >&2 <<'EOF'
@@ -38,31 +39,24 @@ require_foundry() {
   fi
 }
 
-valid_slug() {
-  [[ "$1" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] && (( ${#1} <= 60 ))
-}
-
-# Echo bucket containing slug, or empty + nonzero exit if not found.
-find_bucket() {
-  local slug="$1"
-  for b in "${BUCKETS[@]}"; do
-    if [[ -d "$CHANGES_DIR/$b/$slug" ]]; then
-      echo "$b"
-      return 0
-    fi
-  done
-  return 1
-}
+# Slug rules (slug_valid) live in spec/slug.sh; bucket lookup
+# (query_bucket_of) in spec/query.sh — shared with the sourced CLI
+# components so the logic exists exactly once.
+# shellcheck source=slug.sh
+. "$SCRIPT_DIR/slug.sh"
+# shellcheck source=query.sh
+. "$SCRIPT_DIR/query.sh"
 
 cmd_new() {
   require_foundry
   local slug="$1" title="$2"
-  if ! valid_slug "$slug"; then
+  if ! slug_valid "$slug"; then
     echo "invalid slug: '$slug' (kebab-case, [a-z0-9-], ≤60 chars)" >&2
     exit 2
   fi
-  if find_bucket "$slug" >/dev/null 2>&1; then
-    echo "slug already exists: $slug (in $(find_bucket "$slug"))" >&2
+  local existing_bucket
+  if existing_bucket=$(query_bucket_of "$slug" 2>/dev/null); then
+    echo "slug already exists: $slug (in $existing_bucket)" >&2
     exit 2
   fi
   local dir="$CHANGES_DIR/backlog/$slug"
@@ -76,23 +70,23 @@ cmd_new() {
   # Keep the backlog index in sync — pull the freshly-written
   # timestamps back from tracking.yaml so created_at / updated_at agree
   # with the per-slug file exactly (down to the second).
-  local _ct _ut
-  _ct=$("$TRACKING_SH" get "$dir" created_at)
-  _ut=$("$TRACKING_SH" get "$dir" updated_at)
-  index_add_entry backlog "$slug" "$title" "$_ct" "$_ut"
+  local created_at updated_at
+  created_at=$("$TRACKING_SH" get "$dir" created_at)
+  updated_at=$("$TRACKING_SH" get "$dir" updated_at)
+  index_add_entry backlog "$slug" "$title" "$created_at" "$updated_at"
   echo "created: $dir"
 }
 
 cmd_locate() {
   require_foundry
-  find_bucket "$1" || { echo "not found: $1" >&2; exit 1; }
+  query_bucket_of "$1" || { echo "not found: $1" >&2; exit 1; }
 }
 
 cmd_path() {
   require_foundry
-  local slug="$1" b
-  b=$(find_bucket "$slug") || { echo "not found: $slug" >&2; exit 1; }
-  echo "$CHANGES_DIR/$b/$slug"
+  local slug="$1" bucket
+  bucket=$(query_bucket_of "$slug") || { echo "not found: $slug" >&2; exit 1; }
+  echo "$CHANGES_DIR/$bucket/$slug"
 }
 
 cmd_move() {
@@ -100,7 +94,7 @@ cmd_move() {
   local slug="$1" to="$2"
   local reason="${3:-}"
   local from
-  from=$(find_bucket "$slug") || { echo "not found: $slug" >&2; exit 1; }
+  from=$(query_bucket_of "$slug") || { echo "not found: $slug" >&2; exit 1; }
   if [[ "$from" == "$to" ]]; then
     echo "already in $to: $slug" >&2
     exit 0
@@ -123,11 +117,11 @@ cmd_move() {
   # itself doesn't touch the index — only this single explicit edit
   # at the call-site does.
   index_remove_entry "$from" "$slug"
-  local _t _ct _ut
-  _t=$("$TRACKING_SH"  get "$dst" title)
-  _ct=$("$TRACKING_SH" get "$dst" created_at)
-  _ut=$("$TRACKING_SH" get "$dst" updated_at)
-  index_add_entry "$to" "$slug" "$_t" "$_ct" "$_ut"
+  local title created_at updated_at
+  title=$("$TRACKING_SH"      get "$dst" title)
+  created_at=$("$TRACKING_SH" get "$dst" created_at)
+  updated_at=$("$TRACKING_SH" get "$dst" updated_at)
+  index_add_entry "$to" "$slug" "$title" "$created_at" "$updated_at"
   "$TRACKING_SH" history "$dst" state-machine moved "$from->$to${reason:+ ($reason)}"
   echo "moved: $slug ($from -> $to)"
 }
@@ -142,12 +136,12 @@ cmd_list() {
   printf '%-12s  %-40s  %s\n' "BUCKET" "SLUG" "TITLE"
   printf '%-12s  %-40s  %s\n' "------" "----" "-----"
   shopt -s nullglob
-  for b in "${buckets[@]}"; do
-    [[ -d "$CHANGES_DIR/$b" ]] || continue
-    for entry in "$CHANGES_DIR/$b"/*/; do
+  for bucket in "${buckets[@]}"; do
+    [[ -d "$CHANGES_DIR/$bucket" ]] || continue
+    for entry in "$CHANGES_DIR/$bucket"/*/; do
       local slug; slug=$(basename "$entry")
       local title; title=$("$TRACKING_SH" get "$entry" title 2>/dev/null || echo "?")
-      printf '%-12s  %-40s  %s\n' "$b" "$slug" "$title"
+      printf '%-12s  %-40s  %s\n' "$bucket" "$slug" "$title"
     done
   done
   shopt -u nullglob
@@ -156,8 +150,8 @@ cmd_list() {
 cmd_show() {
   require_foundry
   local slug="$1"
-  local b; b=$(find_bucket "$slug") || { echo "not found: $slug" >&2; exit 1; }
-  local dir="$CHANGES_DIR/$b/$slug"
+  local bucket; bucket=$(query_bucket_of "$slug") || { echo "not found: $slug" >&2; exit 1; }
+  local dir="$CHANGES_DIR/$bucket/$slug"
   echo "=== $dir ==="
   cat "$dir/tracking.yaml"
   echo "--- recent history ---"

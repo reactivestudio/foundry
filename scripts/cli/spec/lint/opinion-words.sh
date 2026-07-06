@@ -36,9 +36,9 @@ usage() {
 file="$1"
 [[ -f "$file" ]] || { echo "no such file: $file" >&2; exit 64; }
 
-EN='recommend|recommends|recommended|suggest|suggests|suggested|should|ought|better|prefer|prefers|propose|proposes|advise|advises|ideally|preferable'
-RU='следует|рекомендую|рекомендуется|рекомендуем|лучше|предлагаю|предпочтительно|желательно'
-PATTERN="\\b(${EN})\\b|(${RU})"
+EN_OPINION_WORDS='recommend|recommends|recommended|suggest|suggests|suggested|should|ought|better|prefer|prefers|propose|proposes|advise|advises|ideally|preferable'
+RU_OPINION_WORDS='следует|рекомендую|рекомендуется|рекомендуем|лучше|предлагаю|предпочтительно|желательно'
+OPINION_PATTERN="\\b(${EN_OPINION_WORDS})\\b|(${RU_OPINION_WORDS})"
 
 # Strip fenced code blocks before scanning. Preserve line numbers by
 # replacing in-block lines with empty strings (awk).
@@ -48,7 +48,7 @@ stripped=$(awk '
                     { print }
 ' "$file")
 
-hits=$(echo "$stripped" | grep -niE "$PATTERN" || true)
+hits=$(echo "$stripped" | grep -niE "$OPINION_PATTERN" || true)
 
 if [[ -n "$hits" ]]; then
   echo "opinion-words FAIL: $file" >&2
