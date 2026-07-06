@@ -73,14 +73,14 @@ ui_color_code() {
 # Used by ui_paint / ui_paint_bold so callers can request exact hex
 # values for a few brand-critical slots without giving up the palette
 # names everywhere else.
-_ui_fg_seq() {
-  local c="$1"
-  if [[ "$c" == \#* ]]; then
-    local hex="${c#\#}"
+_ui_foreground_sequence() {
+  local code="$1"
+  if [[ "$code" == \#* ]]; then
+    local hex="${code#\#}"
     printf '38;2;%d;%d;%d' \
       "$((16#${hex:0:2}))" "$((16#${hex:2:2}))" "$((16#${hex:4:2}))"
   else
-    printf '38;5;%s' "$c"
+    printf '38;5;%s' "$code"
   fi
 }
 
@@ -88,7 +88,7 @@ _ui_fg_seq() {
 ui_paint() {
   local color; color=$(ui_color_code "$1"); shift
   if [[ "$UI_MODE" == "interactive" ]]; then
-    printf '\033[%sm%s\033[0m' "$(_ui_fg_seq "$color")" "$*"
+    printf '\033[%sm%s\033[0m' "$(_ui_foreground_sequence "$color")" "$*"
   else
     printf '%s' "$*"
   fi
@@ -109,67 +109,46 @@ ui_accent()  { ui_paint accent  "$@"; }
 ui_paint_bold() {
   local color; color=$(ui_color_code "$1"); shift
   if [[ "$UI_MODE" == "interactive" ]]; then
-    printf '\033[1m\033[%sm%s\033[0m' "$(_ui_fg_seq "$color")" "$*"
+    printf '\033[1m\033[%sm%s\033[0m' "$(_ui_foreground_sequence "$color")" "$*"
   else
     printf '%s' "$*"
   fi
-}
-
-# Wrap text with SGR 5 (blink). Modern macOS Terminal, iTerm2, Alacritty and
-# WezTerm honor it; on terminals that ignore SGR 5 the text just stays
-# static (graceful degradation).
-ui_blink() {
-  if [[ "$UI_MODE" == "interactive" ]]; then
-    printf '\033[5m%s\033[25m' "$*"
-  else
-    printf '%s' "$*"
-  fi
-}
-
-# Strip ISO-8601 noise: "2026-06-01T11:39:32Z" → "2026-06-01 11:39:32"
-ui_format_ts() {
-  local t="$1"
-  t="${t/T/ }"
-  echo "${t%Z}"
 }
 
 # Format ISO-8601 with strftime — handles macOS BSD date and GNU date.
 # Falls back to original string when both fail.
 ui_date_format() {
-  local ts="$1" fmt="$2"
-  date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ts" "$fmt" 2>/dev/null \
-    || date -u -d "$ts" "$fmt" 2>/dev/null \
-    || echo "$ts"
+  local iso_timestamp="$1" format="$2"
+  date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$iso_timestamp" "$format" 2>/dev/null \
+    || date -u -d "$iso_timestamp" "$format" 2>/dev/null \
+    || echo "$iso_timestamp"
 }
 
 # ISO-8601 → epoch (UTC). Echoes 0 on parse failure.
-ui_ts_to_epoch() {
-  local ts="$1"
-  date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null \
-    || date -u -d "$ts" +%s 2>/dev/null \
+ui_iso_to_epoch() {
+  local iso_timestamp="$1"
+  date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$iso_timestamp" +%s 2>/dev/null \
+    || date -u -d "$iso_timestamp" +%s 2>/dev/null \
     || echo 0
 }
 
 # Human-readable age: "just now", "5m ago", "3h ago", "yesterday",
 # "3d ago", "Mon Jun 1".
 ui_date_relative() {
-  local ts="$1"
-  local past; past=$(ui_ts_to_epoch "$ts")
-  if [[ "$past" == "0" ]]; then echo "$ts"; return; fi
-  local now; now=$(date -u +%s)
-  local d=$((now - past))
-  if   (( d < 0 ));       then echo "in future"
-  elif (( d < 60 ));      then echo "just now"
-  elif (( d < 3600 ));    then echo "$((d/60))m ago"
-  elif (( d < 86400 ));   then echo "$((d/3600))h ago"
-  elif (( d < 172800 ));  then echo "yesterday"
-  elif (( d < 604800 ));  then echo "$((d/86400))d ago"
-  else ui_date_format "$ts" "+%a %b %-d"
+  local iso_timestamp="$1"
+  local past_epoch; past_epoch=$(ui_iso_to_epoch "$iso_timestamp")
+  if [[ "$past_epoch" == "0" ]]; then echo "$iso_timestamp"; return; fi
+  local now_epoch; now_epoch=$(date -u +%s)
+  local age_seconds=$((now_epoch - past_epoch))
+  if   (( age_seconds < 0 ));       then echo "in future"
+  elif (( age_seconds < 60 ));      then echo "just now"
+  elif (( age_seconds < 3600 ));    then echo "$((age_seconds/60))m ago"
+  elif (( age_seconds < 86400 ));   then echo "$((age_seconds/3600))h ago"
+  elif (( age_seconds < 172800 ));  then echo "yesterday"
+  elif (( age_seconds < 604800 ));  then echo "$((age_seconds/86400))d ago"
+  else ui_date_format "$iso_timestamp" "+%a %b %-d"
   fi
 }
-
-# Compact absolute: "Mon Jun 1, 11:40"
-ui_date_short() { ui_date_format "$1" "+%a %b %-d, %H:%M"; }
 
 # Full format for the list view: "Mon, May 27, 23:30"
 ui_date_full() { ui_date_format "$1" "+%a, %b %-d, %H:%M"; }
@@ -198,11 +177,11 @@ ui_small_caps() {
 # Terminal width capped at $1, falling back to $2 (default 100) when
 # neither COLUMNS nor tput can tell.  Each layout picks its own cap —
 # plain list 120, picker table 140, divider 100 — so the cap is an arg.
-ui_term_cols() {
-  local cap="$1" fallback="${2:-100}" cols
-  cols=${COLUMNS:-$(tput cols 2>/dev/null || echo "$fallback")}
-  (( cols > cap )) && cols=$cap
-  printf '%d' "$cols"
+ui_terminal_columns() {
+  local cap="$1" fallback="${2:-100}" columns
+  columns=${COLUMNS:-$(tput cols 2>/dev/null || echo "$fallback")}
+  (( columns > cap )) && columns=$cap
+  printf '%d' "$columns"
 }
 
 # Epoch seconds → ISO-8601 UTC; empty output when both the BSD (-r)
@@ -223,7 +202,7 @@ ui_count_lines() {
 # Section divider — "─── title ──────────────────────" or just dashes.
 ui_divider() {
   local title="${1:-}"
-  local width; width=$(ui_term_cols 100 80)
+  local width; width=$(ui_terminal_columns 100 80)
   local dash_count
   if [[ -n "$title" ]]; then
     dash_count=$(( width - ${#title} - 6 ))
@@ -285,29 +264,20 @@ ui_status_icon() {
 # ── header (used at top of every command output) ───────────────────────────
 # ui_header <title> [subtitle]
 ui_header() {
-  local title="$1" sub="${2:-}"
+  local title="$1" subtitle="${2:-}"
   if [[ "$UI_MODE" == "interactive" ]]; then
-    if [[ -n "$sub" ]]; then
-      printf '\n%s  %s\n\n' "$(ui_accent "$title")" "$(ui_dim "$sub")"
+    if [[ -n "$subtitle" ]]; then
+      printf '\n%s  %s\n\n' "$(ui_accent "$title")" "$(ui_dim "$subtitle")"
     else
       printf '\n%s\n\n' "$(ui_accent "$title")"
     fi
   else
-    if [[ -n "$sub" ]]; then
-      printf '\n%s  %s\n\n' "$title" "$sub"
+    if [[ -n "$subtitle" ]]; then
+      printf '\n%s  %s\n\n' "$title" "$subtitle"
     else
       printf '\n%s\n\n' "$title"
     fi
   fi
-}
-
-# ── key-value lines (sectioned show output) ────────────────────────────────
-# Usage: ui_kv <label-width> <key> <value>
-ui_kv() {
-  local w="$1" key="$2" value="$3"
-  printf '  %s  %s\n' \
-    "$(printf '%-*s' "$w" "$(ui_dim "$key")")" \
-    "$(ui_bright "$value")"
 }
 
 # ── single info / success / error lines ────────────────────────────────────
@@ -317,11 +287,11 @@ ui_warn()    { printf '  %s %s\n' "$(ui_paint warn '!')" "$*" >&2; }
 ui_error()   { printf '  %s %s\n' "$(ui_paint danger '✗')" "$*" >&2; }
 
 # ── truncation with ellipsis ───────────────────────────────────────────────
-# ui_truncate <max> <text>
+# ui_truncate <max-length> <text>
 ui_truncate() {
-  local max="$1" text="$2"
-  if (( ${#text} > max )); then
-    printf '%s…' "${text:0:max-1}"
+  local max_length="$1" text="$2"
+  if (( ${#text} > max_length )); then
+    printf '%s…' "${text:0:max_length-1}"
   else
     printf '%s' "$text"
   fi
@@ -331,12 +301,12 @@ ui_truncate() {
 # Plain bash `%-*s` pads by byte count, which breaks alignment for small-caps
 # headers (each glyph is 3 bytes but 1 cell).
 ui_pad_visual() {
-  local s="$1" n="$2"
-  local vlen
-  vlen=$(printf '%s' "$s" | LC_ALL=en_US.UTF-8 wc -m | tr -d ' ')
-  local pad=$((n - vlen))
-  (( pad < 0 )) && pad=0
-  printf '%s%*s' "$s" "$pad" ""
+  local text="$1" target_width="$2"
+  local visible_length
+  visible_length=$(printf '%s' "$text" | LC_ALL=en_US.UTF-8 wc -m | tr -d ' ')
+  local pad_length=$((target_width - visible_length))
+  (( pad_length < 0 )) && pad_length=0
+  printf '%s%*s' "$text" "$pad_length" ""
 }
 
 # ── interactive prompts (caller should branch on UI_MODE before use) ──────

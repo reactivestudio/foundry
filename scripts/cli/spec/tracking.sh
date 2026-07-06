@@ -22,7 +22,7 @@ usage:
   tracking.sh get <dir> <field>
   tracking.sh set <dir> <field> <value>
   tracking.sh history <dir> <actor> <event> [details]
-  tracking.sh history-tail <dir> [n]
+  tracking.sh history-tail <dir> [lines]
 EOF
   exit 64
 }
@@ -34,7 +34,7 @@ now_utc() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 # and one awk replaces the grep|head|sed pipeline.
 yaml_get() {
   local file="$1" field="$2"
-  awk -v f="$field" 'index($0, f ":") == 1 {
+  awk -v field="$field" 'index($0, field ":") == 1 {
     sub(/^[^:]*:[[:space:]]?/, ""); print; exit
   }' "$file" 2>/dev/null
 }
@@ -48,19 +48,19 @@ yaml_has() {
 yaml_set() {
   local file="$1" field="$2" value="$3"
   if yaml_has "$file" "$field"; then
-    local tmp; tmp=$(mktemp)
-    awk -v f="$field" -v v="$value" '
-      BEGIN { done = 0 }
+    local temp_file; temp_file=$(mktemp)
+    awk -v field="$field" -v value="$value" '
+      BEGIN { replaced = 0 }
       {
-        if (!done && index($0, f ":") == 1) {
-          print f ": " v
-          done = 1
+        if (!replaced && index($0, field ":") == 1) {
+          print field ": " value
+          replaced = 1
         } else {
           print
         }
       }
-    ' "$file" > "$tmp"
-    mv "$tmp" "$file"
+    ' "$file" > "$temp_file"
+    mv "$temp_file" "$file"
   else
     printf '%s: %s\n' "$field" "$value" >> "$file"
   fi
@@ -72,20 +72,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cmd_init() {
   local dir="$1" slug="$2" title="$3"
-  local tracking="$dir/tracking.yaml"
-  local history="$dir/history.log"
-  local ts; ts=$(now_utc)
+  local tracking_file="$dir/tracking.yaml"
+  local history_file="$dir/history.log"
+  local timestamp; timestamp=$(now_utc)
 
   # find .template/ by stripping last two path components from $dir
   # (e.g. .foundry/changes/backlog/<slug> → .foundry/changes/)
-  local foundry_changes="${FOUNDRY_CHANGES_DIR:-${dir%/*/*}}"
-  local tpl="$foundry_changes/.template/tracking.yaml"
+  local changes_dir="${FOUNDRY_CHANGES_DIR:-${dir%/*/*}}"
+  local template_file="$changes_dir/.template/tracking.yaml"
 
   mkdir -p "$dir"
-  render_template "$tpl" "$tracking" \
-    SLUG="$slug" TITLE="$title" TIMESTAMP="$ts"
-  : > "$history"
-  printf '%s\t%s\t%s\t%s\n' "$ts" "user" "created" "in backlog" >> "$history"
+  render_template "$template_file" "$tracking_file" \
+    SLUG="$slug" TITLE="$title" TIMESTAMP="$timestamp"
+  : > "$history_file"
+  printf '%s\t%s\t%s\t%s\n' "$timestamp" "user" "created" "in backlog" >> "$history_file"
 }
 
 cmd_get() {
@@ -108,14 +108,14 @@ cmd_history() {
 }
 
 cmd_history_tail() {
-  local dir="$1" n="${2:-20}"
-  tail -n "$n" "$dir/history.log" 2>/dev/null || true
+  local dir="$1" line_count="${2:-20}"
+  tail -n "$line_count" "$dir/history.log" 2>/dev/null || true
 }
 
 main() {
   [[ $# -lt 1 ]] && usage
-  local sub="$1"; shift
-  case "$sub" in
+  local subcommand="$1"; shift
+  case "$subcommand" in
     init)         [[ $# -eq 3 ]] || usage; cmd_init "$@" ;;
     get)          [[ $# -eq 2 ]] || usage; cmd_get "$@" ;;
     set)          [[ $# -eq 3 ]] || usage; cmd_set "$@" ;;

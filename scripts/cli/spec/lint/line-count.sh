@@ -39,18 +39,18 @@ max="$2"
 [[ -f "$file" ]] || { echo "no such file: $file" >&2; exit 64; }
 
 if (( raw )); then
-  count=$(wc -l < "$file" | tr -d ' ')
+  line_count=$(wc -l < "$file" | tr -d ' ')
 else
-  count=$(grep -cE '[^[:space:]]' "$file" || true)
+  line_count=$(grep -cE '[^[:space:]]' "$file" || true)
   # subtract markdown comment-only lines and standalone separators
-  noise=$(grep -cE '^[[:space:]]*(<!--|---[[:space:]]*$)' "$file" || true)
-  count=$((count - noise))
-  (( count < 0 )) && count=0
+  noise_line_count=$(grep -cE '^[[:space:]]*(<!--|---[[:space:]]*$)' "$file" || true)
+  line_count=$((line_count - noise_line_count))
+  (( line_count < 0 )) && line_count=0
 fi
 
-if (( count > max )); then
-  echo "line-count FAIL: $file has $count content lines (max $max)" >&2
+if (( line_count > max )); then
+  echo "line-count FAIL: $file has $line_count content lines (max $max)" >&2
   exit 1
 fi
 
-echo "line-count PASS: $file = $count / $max"
+echo "line-count PASS: $file = $line_count / $max"

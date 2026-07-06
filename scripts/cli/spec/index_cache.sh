@@ -45,10 +45,10 @@ _index_now()         { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 
 # Convert ISO-8601 UTC to unix epoch seconds; echoes 0 on failure.
 _index_iso_to_epoch() {
-  local iso="$1"
-  [[ -z "$iso" ]] && { echo 0; return; }
-  date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$iso" +%s 2>/dev/null \
-    || date -u -d "$iso" +%s 2>/dev/null \
+  local iso_timestamp="$1"
+  [[ -z "$iso_timestamp" ]] && { echo 0; return; }
+  date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$iso_timestamp" +%s 2>/dev/null \
+    || date -u -d "$iso_timestamp" +%s 2>/dev/null \
     || echo 0
 }
 
@@ -61,9 +61,9 @@ index_locate_dir() {
   local bucket; bucket=$(basename "$bucket_dir")
   local changes_dir; changes_dir=$(dirname "$bucket_dir")
   [[ "$(basename "$changes_dir")" == "changes" ]] || return 1
-  local b
-  for b in "${BUCKETS[@]}"; do
-    if [[ "$b" == "$bucket" ]]; then
+  local known_bucket
+  for known_bucket in "${BUCKETS[@]}"; do
+    if [[ "$known_bucket" == "$bucket" ]]; then
       printf '%s\t%s\n' "$bucket" "$slug"
       return 0
     fi
@@ -76,23 +76,24 @@ index_locate_dir() {
 # Returns nonzero (and emits nothing) if the index doesn't exist, so the
 # caller can fall back to a rebuild + retry.
 index_read_bucket() {
-  local f; f=$(_index_path "$1")
-  [[ -f "$f" ]] || return 1
+  local index_file; index_file=$(_index_path "$1")
+  [[ -f "$index_file" ]] || return 1
   awk '
     function emit() {
       if (slug != "") {
-        printf("%s\t%s\t%s\t%s\t%s\t%s\n", slug, title, ct, ut, ce, ue)
+        printf("%s\t%s\t%s\t%s\t%s\t%s\n",
+               slug, title, created_at, updated_at, created_epoch, updated_epoch)
       }
-      slug=""; title=""; ct=""; ut=""; ce="0"; ue="0"
+      slug=""; title=""; created_at=""; updated_at=""; created_epoch="0"; updated_epoch="0"
     }
-    /^  - slug:/        { emit(); sub(/^  - slug:[[:space:]]*/, "");        slug=$0;  next }
-    /^    title:/       { sub(/^    title:[[:space:]]*/, "");               title=$0; next }
-    /^    created_at:/  { sub(/^    created_at:[[:space:]]*/, "");          ct=$0;    next }
-    /^    updated_at:/  { sub(/^    updated_at:[[:space:]]*/, "");          ut=$0;    next }
-    /^    created_epoch:/ { sub(/^    created_epoch:[[:space:]]*/, "");     ce=$0;    next }
-    /^    updated_epoch:/ { sub(/^    updated_epoch:[[:space:]]*/, "");     ue=$0;    next }
+    /^  - slug:/          { emit(); sub(/^  - slug:[[:space:]]*/, "");      slug=$0;          next }
+    /^    title:/         { sub(/^    title:[[:space:]]*/, "");             title=$0;         next }
+    /^    created_at:/    { sub(/^    created_at:[[:space:]]*/, "");        created_at=$0;    next }
+    /^    updated_at:/    { sub(/^    updated_at:[[:space:]]*/, "");        updated_at=$0;    next }
+    /^    created_epoch:/ { sub(/^    created_epoch:[[:space:]]*/, "");     created_epoch=$0; next }
+    /^    updated_epoch:/ { sub(/^    updated_epoch:[[:space:]]*/, "");     updated_epoch=$0; next }
     END { emit() }
-  ' "$f"
+  ' "$index_file"
 }
 
 # Helpers used by both rebuild and incremental write paths.
@@ -103,7 +104,8 @@ _index_read_field() {
 }
 
 _index_write_entry_block() {
-  # Append one entry block to stdout. Args: slug title ct ut ce ue.
+  # Append one entry block to stdout.
+  # Args: slug title created_at updated_at created_epoch updated_epoch.
   printf '  - slug: %s\n'          "$1"
   printf '    title: %s\n'         "$2"
   printf '    created_at: %s\n'    "$3"
@@ -129,9 +131,9 @@ index_rebuild_bucket() {
   local bucket="$1"
   local dir; dir="$(_index_changes_dir)/$bucket"
   [[ -d "$dir" ]] || return 0
-  local f; f=$(_index_path "$bucket")
-  local tmp; tmp=$(mktemp)
-  _index_write_header "$bucket" > "$tmp"
+  local index_file; index_file=$(_index_path "$bucket")
+  local temp_file; temp_file=$(mktemp)
+  _index_write_header "$bucket" > "$temp_file"
   shopt -s nullglob
   local entry slug tracking title
   local created_iso updated_iso created_epoch updated_epoch
@@ -145,18 +147,18 @@ index_rebuild_bucket() {
     created_epoch=$(_index_iso_to_epoch "$created_iso")
     updated_epoch=$(_index_iso_to_epoch "$updated_iso")
     _index_write_entry_block "$slug" "$title" \
-      "$created_iso" "$updated_iso" "$created_epoch" "$updated_epoch" >> "$tmp"
+      "$created_iso" "$updated_iso" "$created_epoch" "$updated_epoch" >> "$temp_file"
   done
   shopt -u nullglob
-  mv "$tmp" "$f"
+  mv "$temp_file" "$index_file"
 }
 
 # Rebuild every bucket's index. Used by `foundry sync` and as the lazy
 # fallback when an expected index is missing.
 index_rebuild_all() {
-  local b
-  for b in "${BUCKETS[@]}"; do
-    index_rebuild_bucket "$b"
+  local bucket
+  for bucket in "${BUCKETS[@]}"; do
+    index_rebuild_bucket "$bucket"
   done
 }
 
@@ -164,25 +166,26 @@ index_rebuild_all() {
 # destination side of cmd_move. If the index is missing, rebuild it
 # from scratch — the new slug will be picked up by the scan.
 index_add_entry() {
-  local bucket="$1" slug="$2" title="$3" ct="$4" ut="$5"
-  local f; f=$(_index_path "$bucket")
-  if [[ ! -f "$f" ]]; then
+  local bucket="$1" slug="$2" title="$3" created_at="$4" updated_at="$5"
+  local index_file; index_file=$(_index_path "$bucket")
+  if [[ ! -f "$index_file" ]]; then
     index_rebuild_bucket "$bucket"
     return
   fi
-  local ce ue
-  ce=$(_index_iso_to_epoch "$ct")
-  ue=$(_index_iso_to_epoch "$ut")
-  _index_write_entry_block "$slug" "$title" "$ct" "$ut" "$ce" "$ue" >> "$f"
+  local created_epoch updated_epoch
+  created_epoch=$(_index_iso_to_epoch "$created_at")
+  updated_epoch=$(_index_iso_to_epoch "$updated_at")
+  _index_write_entry_block "$slug" "$title" \
+    "$created_at" "$updated_at" "$created_epoch" "$updated_epoch" >> "$index_file"
 }
 
 # Remove a slug's entry block from a bucket's index. Used by the source
 # side of cmd_move. Missing index ⇒ nothing to do.
 index_remove_entry() {
   local bucket="$1" slug="$2"
-  local f; f=$(_index_path "$bucket")
-  [[ -f "$f" ]] || return 0
-  local tmp; tmp=$(mktemp)
+  local index_file; index_file=$(_index_path "$bucket")
+  [[ -f "$index_file" ]] || return 0
+  local temp_file; temp_file=$(mktemp)
   awk -v target="$slug" '
     function flush() {
       if (block != "" && key != target) printf("%s", block)
@@ -197,8 +200,8 @@ index_remove_entry() {
     /^    / && block != "" { block = block $0 "\n"; next }
     { flush(); print }
     END { flush() }
-  ' "$f" > "$tmp"
-  mv "$tmp" "$f"
+  ' "$index_file" > "$temp_file"
+  mv "$temp_file" "$index_file"
 }
 
 # Update one or more fields of an existing slug's entry block.
@@ -208,52 +211,53 @@ index_remove_entry() {
 # refreshed automatically (the caller doesn't have to compute it).
 index_update_entry() {
   local bucket="$1" slug="$2"; shift 2
-  local f; f=$(_index_path "$bucket")
-  [[ -f "$f" ]] || return 0
+  local index_file; index_file=$(_index_path "$bucket")
+  [[ -f "$index_file" ]] || return 0
   # Build a parallel pairs file: "field<TAB>value" per line.  Pass it
   # to awk via -v ENV-style isn't enough for multi-value, so we use a
   # here-doc on stdin and merge with the index file via getline.
-  local pairs; pairs=$(mktemp)
+  local pairs_file; pairs_file=$(mktemp)
   while [[ $# -ge 2 ]]; do
-    printf '%s\t%s\n' "$1" "$2" >> "$pairs"
+    printf '%s\t%s\n' "$1" "$2" >> "$pairs_file"
     # Auto-derive *_epoch when a timestamp field changes.
     case "$1" in
-      created_at) printf 'created_epoch\t%s\n' "$(_index_iso_to_epoch "$2")" >> "$pairs" ;;
-      updated_at) printf 'updated_epoch\t%s\n' "$(_index_iso_to_epoch "$2")" >> "$pairs" ;;
+      created_at) printf 'created_epoch\t%s\n' "$(_index_iso_to_epoch "$2")" >> "$pairs_file" ;;
+      updated_at) printf 'updated_epoch\t%s\n' "$(_index_iso_to_epoch "$2")" >> "$pairs_file" ;;
     esac
     shift 2
   done
-  local tmp; tmp=$(mktemp)
-  awk -v target="$slug" -v pairs="$pairs" '
+  local temp_file; temp_file=$(mktemp)
+  awk -v target="$slug" -v pairs_file="$pairs_file" '
     BEGIN {
-      while ((getline line < pairs) > 0) {
-        i = index(line, "\t")
-        if (i > 0) val[substr(line, 1, i - 1)] = substr(line, i + 1)
+      while ((getline line < pairs_file) > 0) {
+        tab_position = index(line, "\t")
+        if (tab_position > 0)
+          updates[substr(line, 1, tab_position - 1)] = substr(line, tab_position + 1)
       }
-      close(pairs)
+      close(pairs_file)
     }
     /^  - slug:/ {
-      m = $0; sub(/^  - slug:[[:space:]]*/, "", m)
-      in_entry = (m == target)
+      entry_slug = $0; sub(/^  - slug:[[:space:]]*/, "", entry_slug)
+      in_entry = (entry_slug == target)
       print; next
     }
     in_entry && /^    [a-z_]+:/ {
-      f = $0
-      sub(/^    /, "", f)
-      i = index(f, ":")
-      if (i > 0) {
-        key = substr(f, 1, i - 1)
-        if (key in val) {
-          printf("    %s: %s\n", key, val[key]); next
+      field_line = $0
+      sub(/^    /, "", field_line)
+      colon_position = index(field_line, ":")
+      if (colon_position > 0) {
+        field = substr(field_line, 1, colon_position - 1)
+        if (field in updates) {
+          printf("    %s: %s\n", field, updates[field]); next
         }
       }
       print; next
     }
     /^[^ ]/ { in_entry = 0; print; next }
     { print }
-  ' "$f" > "$tmp"
-  mv "$tmp" "$f"
-  rm -f "$pairs"
+  ' "$index_file" > "$temp_file"
+  mv "$temp_file" "$index_file"
+  rm -f "$pairs_file"
 }
 
 # Convenience: called by tracking.sh set after a per-slug field write.

@@ -38,15 +38,16 @@
 # stomp on entries the user already has.
 _setup_ensure_gitignore_line() {
   local entry="$1"
-  local gi="$PROJECT_ROOT/.gitignore"
-  if [[ ! -f "$gi" ]]; then
-    : > "$gi"
+  local gitignore_file="$PROJECT_ROOT/.gitignore"
+  if [[ ! -f "$gitignore_file" ]]; then
+    : > "$gitignore_file"
   fi
-  if ! grep -qxF -- "$entry" "$gi"; then
-    if [[ -s "$gi" ]] && [[ $(tail -c1 "$gi" | wc -l | tr -d ' ') == "0" ]]; then
-      printf '\n' >> "$gi"
+  if ! grep -qxF -- "$entry" "$gitignore_file"; then
+    if [[ -s "$gitignore_file" ]] \
+       && [[ $(tail -c1 "$gitignore_file" | wc -l | tr -d ' ') == "0" ]]; then
+      printf '\n' >> "$gitignore_file"
     fi
-    printf '%s\n' "$entry" >> "$gi"
+    printf '%s\n' "$entry" >> "$gitignore_file"
   fi
 }
 
@@ -54,12 +55,12 @@ _setup_ensure_gitignore_line() {
 # No-op if the file or the line doesn't exist.
 _setup_remove_gitignore_line() {
   local entry="$1"
-  local gi="$PROJECT_ROOT/.gitignore"
-  [[ -f "$gi" ]] || return 0
-  if grep -qxF -- "$entry" "$gi"; then
-    local tmp; tmp=$(mktemp)
-    grep -vxF -- "$entry" "$gi" > "$tmp" || true
-    mv "$tmp" "$gi"
+  local gitignore_file="$PROJECT_ROOT/.gitignore"
+  [[ -f "$gitignore_file" ]] || return 0
+  if grep -qxF -- "$entry" "$gitignore_file"; then
+    local temp_file; temp_file=$(mktemp)
+    grep -vxF -- "$entry" "$gitignore_file" > "$temp_file" || true
+    mv "$temp_file" "$gitignore_file"
   fi
 }
 
@@ -68,28 +69,28 @@ _setup_remove_gitignore_line() {
 # No-op if the rc file doesn't exist or the block isn't there.  Appends
 # to CLEANUP_NOTE (caller's local) so the user sees what we removed.
 _setup_remove_shell_hook() {
-  local rc
+  local rc_file
   case "${SHELL:-}" in
-    */zsh)  rc="$HOME/.zshrc"  ;;
-    */bash) rc="$HOME/.bashrc" ;;
-    *)      rc="$HOME/.zshrc"  ;;
+    */zsh)  rc_file="$HOME/.zshrc"  ;;
+    */bash) rc_file="$HOME/.bashrc" ;;
+    *)      rc_file="$HOME/.zshrc"  ;;
   esac
-  [[ -f "$rc" ]] || return 0
+  [[ -f "$rc_file" ]] || return 0
 
   local marker_start='# >>> foundry shell hook (managed by /foundry:setup) >>>'
-  if ! grep -qF -- "$marker_start" "$rc"; then
+  if ! grep -qF -- "$marker_start" "$rc_file"; then
     return 0
   fi
 
-  local tmp; tmp=$(mktemp)
+  local temp_file; temp_file=$(mktemp)
   awk '
     /^# >>> foundry shell hook \(managed by \/foundry:setup\) >>>$/ { in_block = 1; next }
     /^# <<< foundry shell hook <<<$/                                { in_block = 0; next }
     in_block { next }
     { print }
-  ' "$rc" > "$tmp"
-  mv "$tmp" "$rc"
-  CLEANUP_NOTE+=" removed foundry shell hook from ${rc/#$HOME/~};"
+  ' "$rc_file" > "$temp_file"
+  mv "$temp_file" "$rc_file"
+  CLEANUP_NOTE+=" removed foundry shell hook from ${rc_file/#$HOME/~};"
 }
 
 cmd_setup() {
@@ -113,11 +114,11 @@ EOF
   done
 
   local PROJECT_ROOT="${PROJECT_ROOT:-$PWD}"
-  local src_template="$PLUGIN_ROOT/.template"
-  local src_cli="$PLUGIN_ROOT/cli"
+  local template_source="$PLUGIN_ROOT/.template"
+  local cli_source="$PLUGIN_ROOT/cli"
 
-  if [[ ! -d "$src_template" ]]; then
-    ui_error "no template source at $src_template"
+  if [[ ! -d "$template_source" ]]; then
+    ui_error "no template source at $template_source"
     ui_error "(set CLAUDE_PLUGIN_ROOT or run from inside the plugin)"
     exit 2
   fi
@@ -131,15 +132,15 @@ EOF
 
   # Mirror plugin's .template/ into .foundry/, preserving structure;
   # never overwrites existing files (idempotent + user-editable).
-  local rel dst
-  while IFS= read -r rel; do
-    rel="${rel#./}"
-    dst="$FOUNDRY_ROOT/$rel"
-    if [[ ! -f "$dst" ]]; then
-      mkdir -p "$(dirname "$dst")"
-      cp "$src_template/$rel" "$dst"
+  local relative_path destination
+  while IFS= read -r relative_path; do
+    relative_path="${relative_path#./}"
+    destination="$FOUNDRY_ROOT/$relative_path"
+    if [[ ! -f "$destination" ]]; then
+      mkdir -p "$(dirname "$destination")"
+      cp "$template_source/$relative_path" "$destination"
     fi
-  done < <(cd "$src_template" && find . -type f)
+  done < <(cd "$template_source" && find . -type f)
 
   # Clean up the pre-0.21.3 layout (.foundry/bin/foundry) if present
   if [[ -L "$FOUNDRY_ROOT/bin/foundry" ]]; then
@@ -150,8 +151,8 @@ EOF
   local cli_status=""
   local CLEANUP_NOTE=""
   if (( install_cli )); then
-    if [[ ! -x "$src_cli" ]]; then
-      ui_error "setup: CLI not found at $src_cli (CLAUDE_PLUGIN_ROOT wrong?)"
+    if [[ ! -x "$cli_source" ]]; then
+      ui_error "setup: CLI not found at $cli_source (CLAUDE_PLUGIN_ROOT wrong?)"
       exit 2
     fi
     # .foundry/cli is the canonical local pointer to the plugin's CLI.
@@ -159,7 +160,7 @@ EOF
     # the plugin path appears in exactly one place — re-running setup
     # after a plugin version bump updates the chain without touching
     # the root-level symlinks.
-    ln -sf "$src_cli" "$FOUNDRY_ROOT/cli"
+    ln -sf "$cli_source" "$FOUNDRY_ROOT/cli"
     ln -sf ".foundry/cli" "$PROJECT_ROOT/foundry"
     ln -sf ".foundry/cli" "$PROJECT_ROOT/f"
 
@@ -179,7 +180,7 @@ EOF
     _setup_remove_shell_hook
 
     cli_status="
-  cli              — .foundry/cli → $src_cli
+  cli              — .foundry/cli → $cli_source
                      ./foundry    → .foundry/cli   (relative)
                      ./f          → .foundry/cli   (relative)
                      run from project root:

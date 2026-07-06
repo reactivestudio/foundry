@@ -63,28 +63,28 @@ _detail_page_entries() {
   # part is the actionable signal ("when did this change last
   # move?"), the absolute timestamp is still in tracking.yaml for
   # anyone who needs it.
-  local _id_w=16 _title_w=24 _status_w=12 _updated_w=12
-  local _id_trunc;   _id_trunc=$(ui_truncate "$_id_w" "$slug")
-  local _title_trunc; _title_trunc=$(ui_truncate "$_title_w" "$CHANGE_TITLE")
-  local _updated_str; _updated_str="$(ui_date_relative "$CHANGE_UPDATED")"
-  local _created_str; _created_str="$(ui_date_full "$CHANGE_CREATED")"
+  local _id_width=16 _title_width=24 _status_width=12 _updated_width=12
+  local _id_truncated;   _id_truncated=$(ui_truncate "$_id_width" "$slug")
+  local _title_truncated; _title_truncated=$(ui_truncate "$_title_width" "$CHANGE_TITLE")
+  local _updated_display; _updated_display="$(ui_date_relative "$CHANGE_UPDATED")"
+  local _created_display; _created_display="$(ui_date_full "$CHANGE_CREATED")"
 
   picker_push_padding
   # Header row — small caps + dim, padded to column widths.
   picker_push_info "$(printf '   %s  %s  %s  %s  %s' \
-    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps ID)"      "$_id_w")")" \
-    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps TITLE)"   "$_title_w")")" \
-    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps STATUS)"  "$_status_w")")" \
-    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps UPDATED)" "$_updated_w")")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps ID)"      "$_id_width")")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps TITLE)"   "$_title_width")")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps STATUS)"  "$_status_width")")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps UPDATED)" "$_updated_width")")" \
     "$(ui_dim "$(ui_small_caps CREATED)")")"
   # Data row — per-column colours.  Same padded widths so columns line
   # up under their headers.
   picker_push_info "$(printf '   %s  %s  %s  %s  %s' \
-    "$(ui_paint fd_chrome  "$(printf '%-*s' "$_id_w"      "$_id_trunc")")" \
-    "$(ui_paint_bold fd_title "$(printf '%-*s' "$_title_w"  "$_title_trunc")")" \
-    "$(ui_paint "$(ui_bucket_color "$bucket")" "$(printf '%-*s' "$_status_w" "$CHANGE_STATUS")")" \
-    "$(ui_paint fd_updated "$(printf '%-*s' "$_updated_w" "$_updated_str")")" \
-    "$(ui_paint fd_created "$_created_str")")"
+    "$(ui_paint fd_chrome  "$(printf '%-*s' "$_id_width"      "$_id_truncated")")" \
+    "$(ui_paint_bold fd_title "$(printf '%-*s' "$_title_width"  "$_title_truncated")")" \
+    "$(ui_paint "$(ui_bucket_color "$bucket")" "$(printf '%-*s' "$_status_width" "$CHANGE_STATUS")")" \
+    "$(ui_paint fd_updated "$(printf '%-*s' "$_updated_width" "$_updated_display")")" \
+    "$(ui_paint fd_created "$_created_display")")"
   if [[ -n "$CHANGE_REASON" ]]; then
     # Decline reason wraps as its own labelled row underneath — too
     # long to fit horizontally on the same line.
@@ -117,31 +117,31 @@ _detail_page_entries() {
     # proposal_page; if everything fits, the View action is
     # suppressed entirely — no reason to expose a "view full" link
     # when the user is already looking at the full thing.
-    local _src_lines=() _rendered_lines=() _plain_lines=()
+    local _source_lines=() _rendered_lines=() _plain_lines=()
     local _line
     while IFS= read -r _line || [[ -n "$_line" ]]; do
-      _src_lines+=("$_line")
+      _source_lines+=("$_line")
     done < "$dir/proposal.md"
 
     # Pre-render so each source line is processed exactly once: we
     # need rendered (for the entry), plain (for PICKER_TITLE / search
     # highlight), and a total-visible count to decide the View action.
-    local _total_visible=0 _idx
-    for _idx in "${!_src_lines[@]}"; do
-      _rendered_lines[_idx]="$(render_markdown_line "${_src_lines[$_idx]}")"
-      _plain_lines[_idx]="$(render_markdown_line "${_src_lines[$_idx]}" plain)"
-      [[ -n "${_rendered_lines[$_idx]}" ]] && _total_visible=$((_total_visible + 1))
+    local _total_visible=0 _line_index
+    for _line_index in "${!_source_lines[@]}"; do
+      _rendered_lines[_line_index]="$(render_markdown_line "${_source_lines[$_line_index]}")"
+      _plain_lines[_line_index]="$(render_markdown_line "${_source_lines[$_line_index]}" plain)"
+      [[ -n "${_rendered_lines[$_line_index]}" ]] && _total_visible=$((_total_visible + 1))
     done
 
-    local _shown=0 _preview_cap=5
-    for _idx in "${!_src_lines[@]}"; do
-      (( _shown >= _preview_cap )) && break
-      if [[ -z "${_rendered_lines[$_idx]}" ]]; then
+    local _shown_count=0 _preview_cap=5
+    for _line_index in "${!_source_lines[@]}"; do
+      (( _shown_count >= _preview_cap )) && break
+      if [[ -z "${_rendered_lines[$_line_index]}" ]]; then
         # Blank line → paragraph break, non-filterable info row.
         picker_push_info ''
       else
-        picker_push_filtered_info "   ${_rendered_lines[$_idx]}" "${_plain_lines[$_idx]}"
-        _shown=$((_shown + 1))
+        picker_push_filtered_info "   ${_rendered_lines[$_line_index]}" "${_plain_lines[$_line_index]}"
+        _shown_count=$((_shown_count + 1))
       fi
     done
 
@@ -185,7 +185,7 @@ _detail_page_entries() {
         *)             actor_color=muted ;;
       esac
       picker_push_filtered_info "$(printf '   %s  %s  %s  %s' \
-        "$(ui_paint fd_updated "$(printf '%-12s' "$HIST_REL")")" \
+        "$(ui_paint fd_updated "$(printf '%-12s' "$HIST_RELATIVE")")" \
         "$(ui_paint "$actor_color" "$(printf '%-14s' "$HIST_ACTOR")")" \
         "$(ui_paint fd_title    "$(printf '%-8s'  "$HIST_EVENT")")" \
         "$(ui_paint fd_created  "$HIST_PRETTY")")"

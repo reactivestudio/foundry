@@ -43,19 +43,19 @@ _main_page_entries() {
       | query_filter_bucket "$bucket" \
       | query_sort "$PAGE_SORT" "$PAGE_REVERSE")
     [[ -z "$bucket_rows" ]] && continue
-    local n; n=$(ui_count_lines "$bucket_rows")
+    local bucket_count; bucket_count=$(ui_count_lines "$bucket_rows")
     local visible_rows="$bucket_rows"
-    (( n > limit )) && visible_rows=$(printf '%s\n' "$bucket_rows" | head -n "$limit")
+    (( bucket_count > limit )) && visible_rows=$(printf '%s\n' "$bucket_rows" | head -n "$limit")
     while IFS=$'\t' read -r row_bucket slug title _ updated_epoch created_epoch; do
       render_push_change_row "$row_bucket" "$slug" "$title" "$updated_epoch" "$created_epoch"
     done <<< "$visible_rows"
-    if (( n > limit )); then
+    if (( bucket_count > limit )); then
       # Filterable=1 so "+N more" hides when the user is searching by
       # text (its label "+N more..." rarely matches a query).  Tagged
       # with the bucket it belongs to — Tab on the last row of bucket X
       # then lands on the next bucket (not on +N more which still
       # belongs to bucket X).
-      picker_push_action "$(render_more_row "+$((n - limit)) more...")" "__more__$bucket" 1 "$bucket"
+      picker_push_action "$(render_more_row "+$((bucket_count - limit)) more...")" "__more__$bucket" 1 "$bucket"
       # Empty padding row after +N more.  Note: the user has asked
       # multiple times for "half a row" of gap here.  In a cell-based
       # terminal that's physically not possible — rows are atomic units
@@ -72,8 +72,8 @@ _main_page_entries() {
   # padding (the bucket-rows loop's trailing "+N more" padding
   # already leaves a natural gap), keep two padding rows after so
   # the summary doesn't crash into Add/Reload/Exit below.
-  local _total; _total=$(ui_count_lines "$rows")
-  picker_push_summary "$(render_summary_row "$_total" "$rows")"
+  local total_count; total_count=$(ui_count_lines "$rows")
+  picker_push_summary "$(render_summary_row "$total_count" "$rows")"
 
   picker_push_padding
   picker_push_padding

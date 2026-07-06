@@ -37,9 +37,9 @@ EOF
 }
 
 bucket_valid() {
-  local b="$1"
-  for v in "${BUCKETS[@]}"; do
-    [[ "$b" == "$v" ]] && return 0
+  local bucket="$1" known_bucket
+  for known_bucket in "${BUCKETS[@]}"; do
+    [[ "$bucket" == "$known_bucket" ]] && return 0
   done
   return 1
 }
@@ -91,14 +91,14 @@ cmd_validate_bucket() {
 
 # Returns 0 iff zero changes (excluding $1, if given) are in in-progress.
 cmd_check_serial() {
-  local exclude="${1:-}"
+  local excluded_slug="${1:-}"
   local dir="$CHANGES_DIR/in-progress"
   [[ -d "$dir" ]] || return 0
   local count=0
   shopt -s nullglob
   for entry in "$dir"/*/; do
     local slug; slug=$(basename "$entry")
-    [[ "$slug" == "$exclude" ]] && continue
+    [[ "$slug" == "$excluded_slug" ]] && continue
     count=$((count + 1))
     echo "  in-progress: $slug" >&2
   done
@@ -116,8 +116,8 @@ cmd_list_buckets() {
 
 main() {
   [[ $# -lt 1 ]] && usage
-  local sub="$1"; shift
-  case "$sub" in
+  local subcommand="$1"; shift
+  case "$subcommand" in
     validate-bucket) [[ $# -ge 2 && $# -le 3 ]] || usage; cmd_validate_bucket "$@" ;;
     check-serial)    [[ $# -le 1 ]] || usage; cmd_check_serial "$@" ;;
     list-buckets)    [[ $# -eq 0 ]] || usage; cmd_list_buckets ;;

@@ -103,12 +103,12 @@ cmd_move() {
   EXCLUDE_SLUG="$slug" "$SM_SH" validate-bucket "$from" "$to" "$reason" \
     || { echo "transition rejected" >&2; exit 1; }
 
-  local src="$CHANGES_DIR/$from/$slug"
-  local dst="$CHANGES_DIR/$to/$slug"
-  mv "$src" "$dst"
-  "$TRACKING_SH" set "$dst" status "$to"
+  local source_dir="$CHANGES_DIR/$from/$slug"
+  local destination_dir="$CHANGES_DIR/$to/$slug"
+  mv "$source_dir" "$destination_dir"
+  "$TRACKING_SH" set "$destination_dir" status "$to"
   if [[ "$to" == "declined" ]]; then
-    "$TRACKING_SH" set "$dst" decline_reason "$reason"
+    "$TRACKING_SH" set "$destination_dir" decline_reason "$reason"
   fi
   # Re-sync the two bucket indexes — pull post-bump timestamps from
   # tracking.yaml so the index agrees with the per-slug file.  status
@@ -118,20 +118,20 @@ cmd_move() {
   # at the call-site does.
   index_remove_entry "$from" "$slug"
   local title created_at updated_at
-  title=$("$TRACKING_SH"      get "$dst" title)
-  created_at=$("$TRACKING_SH" get "$dst" created_at)
-  updated_at=$("$TRACKING_SH" get "$dst" updated_at)
+  title=$("$TRACKING_SH"      get "$destination_dir" title)
+  created_at=$("$TRACKING_SH" get "$destination_dir" created_at)
+  updated_at=$("$TRACKING_SH" get "$destination_dir" updated_at)
   index_add_entry "$to" "$slug" "$title" "$created_at" "$updated_at"
-  "$TRACKING_SH" history "$dst" state-machine moved "$from->$to${reason:+ ($reason)}"
+  "$TRACKING_SH" history "$destination_dir" state-machine moved "$from->$to${reason:+ ($reason)}"
   echo "moved: $slug ($from -> $to)"
 }
 
 cmd_list() {
   require_foundry
-  local filter="${1:-all}"
+  local bucket_filter="${1:-all}"
   local buckets=("${BUCKETS[@]}")
-  if [[ "$filter" != "all" ]]; then
-    buckets=("$filter")
+  if [[ "$bucket_filter" != "all" ]]; then
+    buckets=("$bucket_filter")
   fi
   printf '%-12s  %-40s  %s\n' "BUCKET" "SLUG" "TITLE"
   printf '%-12s  %-40s  %s\n' "------" "----" "-----"
@@ -160,8 +160,8 @@ cmd_show() {
 
 main() {
   [[ $# -lt 1 ]] && usage
-  local sub="$1"; shift
-  case "$sub" in
+  local subcommand="$1"; shift
+  case "$subcommand" in
     new)    [[ $# -eq 2 ]] || usage; cmd_new "$@" ;;
     locate) [[ $# -eq 1 ]] || usage; cmd_locate "$@" ;;
     path)   [[ $# -eq 1 ]] || usage; cmd_path "$@" ;;

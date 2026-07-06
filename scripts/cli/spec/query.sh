@@ -27,11 +27,11 @@ query_bucket_of() {
 # someone deleted the file) we rebuild it lazily before reading; the
 # explicit `foundry sync` action item rebuilds all four unconditionally.
 query_rows() {
-  local filter="${1:-all}"
+  local bucket_filter="${1:-all}"
   local buckets=("${BUCKETS[@]}")
-  [[ "$filter" != "all" ]] && buckets=("$filter")
-  local now; now=$(date -u +%s)
-  local bucket slug title created_epoch updated_epoch delta age
+  [[ "$bucket_filter" != "all" ]] && buckets=("$bucket_filter")
+  local now_epoch; now_epoch=$(date -u +%s)
+  local bucket slug title created_epoch updated_epoch age_seconds age
   for bucket in "${buckets[@]}"; do
     [[ -d "$CHANGES_DIR/$bucket" ]] || continue
     [[ -f "$CHANGES_DIR/$bucket/.index.yaml" ]] || index_rebuild_bucket "$bucket"
@@ -40,12 +40,12 @@ query_rows() {
     while IFS=$'\t' read -r slug title _ _ created_epoch updated_epoch; do
       [[ -z "$slug" ]] && continue
       if [[ -n "$updated_epoch" && "$updated_epoch" != "0" ]]; then
-        delta=$(( now - updated_epoch ))
-        if   (( delta < 60 ));     then age="${delta}s"
-        elif (( delta < 3600 ));   then age="$(( delta / 60 ))m"
-        elif (( delta < 86400 ));  then age="$(( delta / 3600 ))h"
-        elif (( delta < 604800 )); then age="$(( delta / 86400 ))d"
-        else                            age="$(( delta / 604800 ))w"
+        age_seconds=$(( now_epoch - updated_epoch ))
+        if   (( age_seconds < 60 ));     then age="${age_seconds}s"
+        elif (( age_seconds < 3600 ));   then age="$(( age_seconds / 60 ))m"
+        elif (( age_seconds < 86400 ));  then age="$(( age_seconds / 3600 ))h"
+        elif (( age_seconds < 604800 )); then age="$(( age_seconds / 86400 ))d"
+        else                                  age="$(( age_seconds / 604800 ))w"
         fi
       else
         age="?"
@@ -57,7 +57,7 @@ query_rows() {
 
 # Keep only one bucket's rows from a TSV stream (stdin → stdout).
 query_filter_bucket() {
-  awk -F'\t' -v b="$1" '$1 == b'
+  awk -F'\t' -v bucket="$1" '$1 == bucket'
 }
 
 # Apply --sort within a set of TSV rows (stdin → stdout).

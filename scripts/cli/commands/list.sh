@@ -35,21 +35,21 @@ cmd_list() {
   fi
 
   local total; total=$(ui_count_lines "$rows")
-  local arrow; (( reverse )) && arrow='↑' || arrow='↓'
+  local sort_arrow; (( reverse )) && sort_arrow='↑' || sort_arrow='↓'
 
   if [[ "$bucket_filter" != "all" ]]; then
     # single-list page — no grouping, no cap.
     local bucket_rows; bucket_rows=$(printf '%s\n' "$rows" | query_filter_bucket "$bucket_filter")
-    local n; n=$(ui_count_lines "$bucket_rows")
-    if (( n == 0 )); then
+    local bucket_count; bucket_count=$(ui_count_lines "$bucket_rows")
+    if (( bucket_count == 0 )); then
       ui_header "Foundry" "$(ui_status "$bucket_filter") · empty"
       echo
       return 0
     fi
-    ui_header "Foundry" "$(ui_status "$bucket_filter") · $n · sort: $sort_key $arrow"
-    read -r slug_w title_w upd_w <<< "$(render_list_widths)"
+    ui_header "Foundry" "$(ui_status "$bucket_filter") · $bucket_count · sort: $sort_key $sort_arrow"
+    read -r slug_width title_width updated_width <<< "$(render_list_widths)"
     while IFS=$'\t' read -r row_bucket slug title _ updated_epoch _; do
-      render_list_row "$row_bucket" "$slug" "$title" "$updated_epoch" "$slug_w" "$title_w" "$upd_w"
+      render_list_row "$row_bucket" "$slug" "$title" "$updated_epoch" "$slug_width" "$title_width" "$updated_width"
     done < <(printf '%s\n' "$bucket_rows" | query_sort "$sort_key" "$reverse")
     echo
     return 0
@@ -58,10 +58,11 @@ cmd_list() {
   # Grouped view: summary line + section per non-empty bucket.
   local breakdown=""
   for bucket in "${BUCKETS[@]}"; do
-    local cnt; cnt=$(ui_count_lines "$(printf '%s\n' "$rows" | query_filter_bucket "$bucket")")
-    breakdown+="$(ui_status_icon "$bucket") $cnt  "
+    local bucket_count
+    bucket_count=$(ui_count_lines "$(printf '%s\n' "$rows" | query_filter_bucket "$bucket")")
+    breakdown+="$(ui_status_icon "$bucket") $bucket_count  "
   done
-  ui_header "Foundry" "$total · ${breakdown% } · sort: $sort_key $arrow"
+  ui_header "Foundry" "$total · ${breakdown% } · sort: $sort_key $sort_arrow"
   local limit; limit="$(config_get list_per_bucket_limit 3)"
   for bucket in "${BUCKETS[@]}"; do
     render_bucket_section "$bucket" "$rows" "$sort_key" "$reverse" "$limit"

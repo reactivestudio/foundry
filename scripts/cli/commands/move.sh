@@ -26,13 +26,14 @@ cmd_move() {
   if [[ -z "$to" ]]; then
     if [[ "$UI_MODE" == "interactive" ]]; then
       # offer all buckets except current
-      local opts=() bucket
+      local bucket_options=() bucket
       for bucket in "${BUCKETS[@]}"; do
         [[ "$bucket" == "$from" ]] && continue
-        opts+=("$(ui_icon "$bucket") $bucket")
+        bucket_options+=("$(ui_icon "$bucket") $bucket")
       done
-      local pick; pick=$(ui_choose "Move $slug from $(ui_icon "$from") $from to:" "${opts[@]}") || exit 1
-      to="${pick#* }"
+      local picked_option
+      picked_option=$(ui_choose "Move $slug from $(ui_icon "$from") $from to:" "${bucket_options[@]}") || exit 1
+      to="${picked_option#* }"
     else
       ui_error "move: --to=<bucket> required in --plain mode"
       exit 64
@@ -49,8 +50,8 @@ cmd_move() {
     fi
   fi
 
-  local out
-  if out=$("$CHANGE_SH" move "$slug" "$to" ${reason:+"$reason"} 2>&1); then
+  local move_output
+  if move_output=$("$CHANGE_SH" move "$slug" "$to" ${reason:+"$reason"} 2>&1); then
     printf '\n  %s  %s  %s %s %s\n\n' \
       "$(ui_paint ok '✓')" \
       "$(ui_bright "$slug")" \
@@ -58,7 +59,7 @@ cmd_move() {
       "$(ui_dim '→')" \
       "$(ui_status "$to")"
   else
-    printf '%s\n' "$out" >&2
+    printf '%s\n' "$move_output" >&2
     exit 1
   fi
 }

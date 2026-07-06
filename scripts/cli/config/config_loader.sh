@@ -9,14 +9,14 @@
 
 config_get() {
   local key="$1" default="${2:-}"
-  local cfg="${FOUNDRY_ROOT:-$PWD/.foundry}/config.yaml"
-  if [[ -f "$cfg" ]]; then
+  local config_file="${FOUNDRY_ROOT:-$PWD/.foundry}/config.yaml"
+  if [[ -f "$config_file" ]]; then
     local value
     # index()==1 → literal prefix match: the key can't inject regex,
     # and one awk replaces the grep|head|sed pipeline.
-    value=$(awk -v k="$key" 'index($0, k ":") == 1 {
+    value=$(awk -v key="$key" 'index($0, key ":") == 1 {
               sub(/^[^:]*:[[:space:]]*/, ""); print; exit
-            }' "$cfg" 2>/dev/null)
+            }' "$config_file" 2>/dev/null)
     if [[ -n "$value" ]]; then
       printf '%s' "$value"
       return

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck source-path=SCRIPTDIR
 # foundry — CLI front-end for the change-lifecycle backend.
 #
 # Two modes:
@@ -33,14 +34,14 @@ export LC_ALL="${LC_ALL:-en_US.UTF-8}"
 # back at the plugin works the same as a direct call). app lives at
 # scripts/cli/, so the plugin root is two levels up from resolve_self().─────────────────
 resolve_self() {
-  local src="${BASH_SOURCE[0]}"
-  while [[ -L "$src" ]]; do
-    local tgt; tgt="$(readlink "$src")"
-    if [[ "$tgt" = /* ]]; then src="$tgt"
-    else src="$(dirname "$src")/$tgt"
+  local self_path="${BASH_SOURCE[0]}"
+  while [[ -L "$self_path" ]]; do
+    local link_target; link_target="$(readlink "$self_path")"
+    if [[ "$link_target" = /* ]]; then self_path="$link_target"
+    else self_path="$(dirname "$self_path")/$link_target"
     fi
   done
-  cd "$(dirname "$src")" && pwd
+  cd "$(dirname "$self_path")" && pwd
 }
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(resolve_self)/../.." && pwd)}"
 CLI_DIR="$PLUGIN_ROOT/scripts/cli"
@@ -121,8 +122,8 @@ main() {
     main_page
     return
   fi
-  local sub="$1"; shift
-  case "$sub" in
+  local subcommand="$1"; shift
+  case "$subcommand" in
     list)            cmd_list "$@" ;;
     show)            cmd_show "$@" ;;
     new)             cmd_new "$@" ;;
@@ -130,7 +131,7 @@ main() {
     setup)           cmd_setup "$@" ;;
     sync)            cmd_sync "$@" ;;
     -h|--help|help)  cmd_help ;;
-    *)               ui_error "unknown subcommand: $sub"; cmd_help; exit 64 ;;
+    *)               ui_error "unknown subcommand: $subcommand"; cmd_help; exit 64 ;;
   esac
 }
 

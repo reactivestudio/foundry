@@ -13,9 +13,10 @@ cmd_show() {
     ui_error "not found: $slug"
     # offer near matches
     local hits
-    hits=$(query_rows all 2>/dev/null | awk -F'\t' -v q="$slug" '
-      BEGIN { lq = tolower(q) }
-      index(tolower($2), lq) > 0 || index(tolower($3), lq) > 0 { print $0 }
+    hits=$(query_rows all 2>/dev/null | awk -F'\t' -v query="$slug" '
+      BEGIN { query_lowercase = tolower(query) }
+      index(tolower($2), query_lowercase) > 0 || \
+      index(tolower($3), query_lowercase) > 0 { print $0 }
     ' | head -5)
     if [[ -n "$hits" ]]; then
       echo
@@ -70,8 +71,8 @@ cmd_show() {
   # ── history: log-style, newest first ──
   if [[ -f "$dir/history.log" ]]; then
     ui_divider "history"
-    render_history_newest_first "$dir/history.log" | head -10 | while IFS= read -r hl; do
-      render_history_fields "$hl"
+    render_history_newest_first "$dir/history.log" | head -10 | while IFS= read -r history_line; do
+      render_history_fields "$history_line"
       local actor_color
       case "$HIST_ACTOR" in
         user)          actor_color=ok ;;
@@ -79,7 +80,7 @@ cmd_show() {
         *)             actor_color=muted ;;
       esac
       printf '  %s  %s  %s  %s\n' \
-        "$(ui_dim "$(printf '%-12s' "$HIST_REL")")" \
+        "$(ui_dim "$(printf '%-12s' "$HIST_RELATIVE")")" \
         "$(ui_paint "$actor_color" "$(printf '%-14s' "$HIST_ACTOR")")" \
         "$(ui_bright "$(printf '%-8s' "$HIST_EVENT")")" \
         "$HIST_PRETTY"
