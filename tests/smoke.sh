@@ -6,53 +6,21 @@
 # terminal bucket, decline reason) and all three invocation paths.
 # Needs only what the CLI itself needs: bash 3.2+, coreutils, awk, sed.
 #
-# usage: scripts/test/smoke.sh
+# usage: tests/smoke.sh
 # exit:  0 — all checks passed · 1 — at least one failed
 
+# shellcheck source-path=SCRIPTDIR
 set -uo pipefail   # no -e: assertions inspect non-zero exit codes
 
-PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=harness.sh
+. "$(dirname "${BASH_SOURCE[0]}")/harness.sh"
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
 cd "$SANDBOX" || exit 1
 
-pass_count=0
-fail_count=0
-
-pass() { printf 'ok - %s\n' "$1"; pass_count=$((pass_count + 1)); }
-fail() { printf 'NOT OK - %s\n' "$1" >&2; fail_count=$((fail_count + 1)); }
-
 # shellcheck disable=SC2317,SC2329  # invoked indirectly through assert_* "$@"
 run_cli() { CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" "$PLUGIN_ROOT/cli" --plain "$@"; }
-
-# assert_exit <expected-code> <label> <command...>
-assert_exit() {
-  local expected="$1" label="$2"; shift 2
-  local actual=0
-  "$@" >/dev/null 2>&1 || actual=$?
-  if [[ "$actual" == "$expected" ]]; then
-    pass "$label"
-  else
-    fail "$label (exit $actual, want $expected)"
-  fi
-}
-
-# assert_contains <needle> <label> <command...>
-assert_contains() {
-  local needle="$1" label="$2"; shift 2
-  local output
-  output=$("$@" 2>&1)
-  if [[ "$output" == *"$needle"* ]]; then
-    pass "$label"
-  else
-    fail "$label (output lacks '$needle')"
-  fi
-}
-
-# assert_file <path> <label>
-assert_file() {
-  if [[ -e "$1" ]]; then pass "$2"; else fail "$2 (missing $1)"; fi
-}
 
 # ── setup ──────────────────────────────────────────────────────────────────
 assert_exit 0 "setup scaffolds"            run_cli setup --install-cli
@@ -193,7 +161,4 @@ printf '```\nthis should stay quoted\n```\n' > quoted.md
 assert_exit 0 "opinion-words: code blocks skipped" opinion_words quoted.md
 
 # ── verdict ────────────────────────────────────────────────────────────────
-echo
-echo "passed: $pass_count · failed: $fail_count"
-(( fail_count == 0 )) || exit 1
-exit 0
+test_verdict

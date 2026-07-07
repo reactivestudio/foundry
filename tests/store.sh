@@ -6,13 +6,14 @@
 # entry operations, render_template substitution safety and
 # slug_from_title derivation.
 #
-# usage: scripts/test/store.sh
+# usage: tests/store.sh
 # exit:  0 — all checks passed · 1 — at least one failed
 
-# shellcheck source-path=SCRIPTDIR/../cli
+# shellcheck source-path=SCRIPTDIR/../scripts/cli
+# shellcheck source-path=SCRIPTDIR
 set -uo pipefail   # no -e: assertions inspect non-zero exit codes
 
-PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_DIR="$PLUGIN_ROOT/scripts/cli"
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
@@ -30,15 +31,8 @@ TRACKING_SH="$CLI_DIR/store/tracking.sh"
 # shellcheck source=spec/slug.sh
 . "$CLI_DIR/spec/slug.sh"
 
-pass_count=0
-fail_count=0
-pass() { printf 'ok - %s\n' "$1"; pass_count=$((pass_count + 1)); }
-fail() { printf 'NOT OK - %s\n' "$1" >&2; fail_count=$((fail_count + 1)); }
-
-# assert_equals <expected> <actual> <label>
-assert_equals() {
-  if [[ "$1" == "$2" ]]; then pass "$3"; else fail "$3 (got '$2', want '$1')"; fi
-}
+# shellcheck source=harness.sh
+. "$(dirname "${BASH_SOURCE[0]}")/harness.sh"
 
 # ── tracking.sh: yaml round-trips with hostile values ──────────────────────
 change_dir="$FOUNDRY_ROOT/changes/backlog/unit-test"
@@ -129,7 +123,4 @@ case "$(slug_from_title '!!!')" in
 esac
 
 # ── verdict ────────────────────────────────────────────────────────────────
-echo
-echo "passed: $pass_count · failed: $fail_count"
-(( fail_count == 0 )) || exit 1
-exit 0
+test_verdict

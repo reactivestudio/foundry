@@ -7,18 +7,21 @@
 # and the action bar derived from the state machine.  picker_run itself
 # (the event loop) still needs a real terminal and stays manual.
 #
-# usage: scripts/test/pages.sh
+# usage: tests/pages.sh
 # exit:  0 — all checks passed · 1 — at least one failed
 
-# shellcheck source-path=SCRIPTDIR/../cli
+# shellcheck source-path=SCRIPTDIR/../scripts/cli
+# shellcheck source-path=SCRIPTDIR
 # shellcheck disable=SC2034  # PAGE_* / CHANGE_* feed the sourced builders
 # shellcheck disable=SC2317,SC2329  # the stubs ARE invoked — indirectly, by the
 #                              sourced page builders they override
 set -uo pipefail   # no -e: assertions inspect non-zero exit codes
 
 export FOUNDRY_PLAIN=1
-PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_DIR="$PLUGIN_ROOT/scripts/cli"
+# shellcheck source=harness.sh
+. "$(dirname "${BASH_SOURCE[0]}")/harness.sh"
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
 
@@ -52,11 +55,6 @@ TRACKING_SH="$CLI_DIR/store/tracking.sh"
 # shellcheck source=pages/detail_page.sh
 . "$CLI_DIR/pages/detail_page.sh"
 
-pass_count=0
-fail_count=0
-pass() { printf 'ok - %s\n' "$1"; pass_count=$((pass_count + 1)); }
-fail() { printf 'NOT OK - %s\n' "$1" >&2; fail_count=$((fail_count + 1)); }
-
 # count_slots <needle> — how many PICKER_SLUGS slots equal the needle.
 count_slots() {
   local needle="$1" i count=0
@@ -75,6 +73,16 @@ count_types() {
   printf '%d' "$count"
 }
 
+# count_slots_matching <glob> — slots matching a pattern (e.g. __move__*).
+count_slots_matching() {
+  local pattern="$1" i count=0
+  for (( i = 0; i < ${#PICKER_SLUGS[@]}; i++ )); do
+    # shellcheck disable=SC2254  # unquoted on purpose: glob match
+    case "${PICKER_SLUGS[$i]}" in $pattern) count=$((count + 1)) ;; esac
+  done
+  printf '%d' "$count"
+}
+
 # ── main page ──────────────────────────────────────────────────────────────
 # Stub the store read and the per-bucket cap: 2 backlog rows + 1 done
 # row, limit 1 → each bucket shows 1 row, backlog folds into "+1 more".
@@ -89,38 +97,16 @@ PAGE_REVERSE=0
 
 _main_page_entries
 
-if [[ "$(count_types header)" == "1" ]]; then
-  pass "main: exactly one column-header row"
-else
-  fail "main: exactly one column-header row"
-fi
-if [[ "$(count_types row)" == "2" ]]; then
-  pass "main: limit 1 shows one row per bucket"
-else
-  fail "main: limit 1 shows one row per bucket (got $(count_types row))"
-fi
-if [[ "$(count_slots __more__backlog)" == "1" ]]; then
-  pass "main: backlog overflow folds into __more__backlog"
-else
-  fail "main: backlog overflow folds into __more__backlog"
-fi
-if [[ "$(count_slots __more__done)" == "0" ]]; then
-  pass "main: done bucket fits, no __more__ action"
-else
-  fail "main: done bucket fits, no __more__ action"
-fi
+assert_equals 1 "$(count_types header)"  "main: exactly one column-header row"
+assert_equals 2 "$(count_types row)"     "main: limit 1 shows one row per bucket"
+assert_equals 1 "$(count_slots __more__backlog)" \
+  "main: backlog overflow folds into __more__backlog"
+assert_equals 0 "$(count_slots __more__done)" \
+  "main: done bucket fits, no __more__ action"
 for sentinel in __act_add__ __act_sync__ __act_reload__ __act_exit__; do
-  if [[ "$(count_slots "$sentinel")" == "1" ]]; then
-    pass "main: action $sentinel present once"
-  else
-    fail "main: action $sentinel present once"
-  fi
+  assert_equals 1 "$(count_slots "$sentinel")" "main: action $sentinel present once"
 done
-if [[ "$(count_types summary)" == "1" ]]; then
-  pass "main: summary row present"
-else
-  fail "main: summary row present"
-fi
+assert_equals 1 "$(count_types summary)" "main: summary row present"
 
 # ── detail page ────────────────────────────────────────────────────────────
 # Real files on disk, stubbed tracking fields.  Proposal has 8 content
@@ -149,27 +135,16 @@ if [[ "$(count_types info)" -ge 8 ]]; then
 else
   fail "detail: meta + proposal preview + history rendered as info rows"
 fi
-if [[ "$(count_slots __view_proposal__)" == "1" ]]; then
-  pass "detail: 8 proposal lines > cap 5 → View action offered"
-else
-  fail "detail: 8 proposal lines > cap 5 → View action offered"
-fi
+assert_equals 1 "$(count_slots __view_proposal__)" \
+  "detail: 8 proposal lines > cap 5 → View action offered"
 for sentinel in __move__in-progress __move__done __move__declined; do
-  if [[ "$(count_slots "$sentinel")" == "1" ]]; then
-    pass "detail: backlog action bar offers $sentinel"
-  else
-    fail "detail: backlog action bar offers $sentinel"
-  fi
+  assert_equals 1 "$(count_slots "$sentinel")" \
+    "detail: backlog action bar offers $sentinel"
 done
-if [[ "$(count_slots __act_back__)" == "1" ]]; then
-  pass "detail: Back action present"
-else
-  fail "detail: Back action present"
-fi
+assert_equals 1 "$(count_slots __act_back__)" "detail: Back action present"
 
 # Terminal bucket: the machine allows nothing out of done → bar is Back only.
-done_dir="$CHANGES_DIR/done/gamma"
-mkdir -p "$done_dir"
+mkdir -p "$CHANGES_DIR/done/gamma"
 query_change_fields() {
   CHANGE_TITLE="Gamma change"
   CHANGE_STATUS="done"
@@ -179,23 +154,10 @@ query_change_fields() {
 }
 _detail_page_entries gamma 'done'
 
-move_action_count=0
-for (( i = 0; i < ${#PICKER_SLUGS[@]}; i++ )); do
-  case "${PICKER_SLUGS[$i]}" in __move__*) move_action_count=$((move_action_count + 1)) ;; esac
-done
-if [[ "$move_action_count" == "0" ]]; then
-  pass "detail: done is terminal → no __move__ actions at all"
-else
-  fail "detail: done is terminal → no __move__ actions at all (got $move_action_count)"
-fi
-if [[ "$(count_slots __act_back__)" == "1" ]]; then
-  pass "detail: terminal bucket still offers Back"
-else
-  fail "detail: terminal bucket still offers Back"
-fi
+assert_equals 0 "$(count_slots_matching '__move__*')" \
+  "detail: done is terminal → no __move__ actions at all"
+assert_equals 1 "$(count_slots __act_back__)" \
+  "detail: terminal bucket still offers Back"
 
 # ── verdict ────────────────────────────────────────────────────────────────
-echo
-echo "passed: $pass_count · failed: $fail_count"
-(( fail_count == 0 )) || exit 1
-exit 0
+test_verdict

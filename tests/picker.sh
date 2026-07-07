@@ -6,22 +6,25 @@
 # drive the helpers directly: filter pass, cursor placement, Tab bucket
 # jump, and the filter-match highlight splice.
 #
-# usage: scripts/test/picker.sh
+# usage: tests/picker.sh
 # exit:  0 — all checks passed · 1 — at least one failed
 
-# shellcheck source-path=SCRIPTDIR/../cli
+# shellcheck source-path=SCRIPTDIR/../scripts/cli
 # shellcheck disable=SC2034  # the emulated locals are read by the
 #                              _picker_* helpers via dynamic scoping
 set -euo pipefail
 export FOUNDRY_PLAIN=1
 
-PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_DIR="$PLUGIN_ROOT/scripts/cli"
 # shellcheck source=render/primitives.sh
 . "$CLI_DIR/render/primitives.sh"
 # shellcheck source=render/picker_widget.sh
 . "$CLI_DIR/render/picker_widget.sh"
 
+# Deliberately NOT on tests/harness.sh: every check here builds on the
+# state the previous one produced, so the first failure must stop the
+# suite — counters would only cascade noise after it.
 fail() { echo "NOT OK - $*" >&2; exit 1; }
 
 # Build a page: padding, header, 2 backlog rows, 1 done row, action.

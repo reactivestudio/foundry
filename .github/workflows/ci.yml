@@ -54,16 +54,16 @@ jobs:
             scripts/cli/render/*.sh \
             scripts/cli/commands/*.sh \
             scripts/cli/pages/*.sh \
-            scripts/test/*.sh
+            tests/*.sh
 
       - name: smoke suite (system bash — 3.2 on macOS)
-        run: /bin/bash scripts/test/smoke.sh
+        run: /bin/bash tests/smoke.sh
 
       - name: picker widget checks
-        run: /bin/bash scripts/test/picker.sh
+        run: /bin/bash tests/picker.sh
 
       - name: store layer checks
-        run: /bin/bash scripts/test/store.sh
+        run: /bin/bash tests/store.sh
 
       - name: page builder checks
-        run: /bin/bash scripts/test/pages.sh
+        run: /bin/bash tests/pages.sh

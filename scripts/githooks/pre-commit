@@ -25,15 +25,13 @@ if command -v shellcheck >/dev/null 2>&1; then
     scripts/cli/render/*.sh \
     scripts/cli/commands/*.sh \
     scripts/cli/pages/*.sh \
-    scripts/test/*.sh \
+    tests/*.sh \
     || { echo "pre-commit: shellcheck failed — commit blocked" >&2; exit 1; }
 else
   echo "pre-commit: shellcheck not installed — skipping (CI still runs it)" >&2
 fi
 
-for suite in smoke picker store pages; do
-  /bin/bash "scripts/test/$suite.sh" >/dev/null \
-    || { echo "pre-commit: scripts/test/$suite.sh failed — commit blocked" >&2; exit 1; }
-done
+/bin/bash tests/run.sh >/dev/null \
+  || { echo "pre-commit: tests/run.sh failed — commit blocked" >&2; exit 1; }
 
 echo "pre-commit: all green"

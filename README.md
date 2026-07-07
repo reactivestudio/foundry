@@ -66,10 +66,11 @@ foundry version                  версия плагина
 
 ```bash
 git config core.hooksPath scripts/githooks   # pre-commit: shellcheck + тесты
-scripts/test/smoke.sh                        # e2e CLI (plain)
-scripts/test/picker.sh                       # внутренности пикера без TTY
-scripts/test/store.sh                        # yaml/index/template/slug
-scripts/test/pages.sh                        # построение страниц без TTY
+tests/run.sh                                 # все сьюты разом
+tests/smoke.sh                               # e2e CLI (plain)
+tests/picker.sh                              # внутренности пикера без TTY
+tests/store.sh                               # yaml/index/template/slug
+tests/pages.sh                               # построение страниц без TTY
 ```
 
 CI гоняет всё на ubuntu (bash 5.x, GNU) и macos (`/bin/bash` 3.2) —
