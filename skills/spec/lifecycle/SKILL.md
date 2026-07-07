@@ -77,6 +77,6 @@ Append-only — no rotation, no edits. To inspect: `tracking.sh history-tail <di
 
 - `scripts/cli/store/change.sh new|locate|path|move|list|show` — CRUD orchestration
 - `scripts/cli/store/tracking.sh init|get|set|history|history-tail` — flat YAML + history I/O
-- `scripts/cli/spec/state-machine.sh validate-bucket|check-serial|list-buckets` — transition + invariant checks
+- `scripts/cli/spec/state-machine.sh validate-bucket|check-serial|list-buckets|transitions-from` — transition + invariant checks; `transitions-from <bucket>` prints allowed moves as `<to>\t<verb>` lines (the single source the CLI's hints and action bars derive from)
 
 **Hard rule:** never edit `.foundry/changes/**` files by hand. All mutations go through `change.sh`.
