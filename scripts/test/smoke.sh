@@ -133,6 +133,11 @@ assert_exit 0 "sync rebuilds indexes" run_cli sync
 assert_file .foundry/changes/backlog/.index.yaml "sync: index file written"
 assert_exit 0  "help exits 0"               run_cli help
 assert_exit 64 "unknown subcommand exits 64" run_cli bogus
+manifest_version=$(awk -F'"' '/"version":/ { print $4; exit }' \
+  "$PLUGIN_ROOT/.claude-plugin/plugin.json")
+assert_contains "foundry $manifest_version" "version matches plugin.json" \
+  run_cli version
+assert_exit 64 "list: unknown bucket rejected" run_cli list --bucket=bogus
 
 # ── invocation paths ───────────────────────────────────────────────────────
 assert_exit 0 "invocation: ./foundry" \

@@ -27,6 +27,15 @@ bucket_icon() {
   esac
 }
 
+# True iff $1 is a registered bucket.
+bucket_valid() {
+  local bucket="$1" known_bucket
+  for known_bucket in "${BUCKETS[@]}"; do
+    [[ "$bucket" == "$known_bucket" ]] && return 0
+  done
+  return 1
+}
+
 # Palette-slot name per bucket — resolved to an actual colour by
 # ui_color_code in render/primitives.sh.
 bucket_color() {

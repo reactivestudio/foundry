@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# pre-commit — the repo enforcing its own rule: shellcheck + all four
+# test suites must pass before a commit lands.  Foundry's doctrine is
+# enforcement over discipline — this hook applies it to foundry itself.
+#
+# One-time activation after clone:
+#   git config core.hooksPath scripts/githooks
+#
+# Bypass for a genuine emergency (and only then): git commit --no-verify
+
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$REPO_ROOT" || exit 1
+
+echo "pre-commit: shellcheck + test suites"
+
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck -S style \
+    scripts/cli/app \
+    scripts/cli/config/*.sh \
+    scripts/cli/spec/*.sh \
+    scripts/cli/spec/lint/*.sh \
+    scripts/cli/store/*.sh \
+    scripts/cli/render/*.sh \
+    scripts/cli/commands/*.sh \
+    scripts/cli/pages/*.sh \
+    scripts/test/*.sh \
+    || { echo "pre-commit: shellcheck failed — commit blocked" >&2; exit 1; }
+else
+  echo "pre-commit: shellcheck not installed — skipping (CI still runs it)" >&2
+fi
+
+for suite in smoke picker store pages; do
+  /bin/bash "scripts/test/$suite.sh" >/dev/null \
+    || { echo "pre-commit: scripts/test/$suite.sh failed — commit blocked" >&2; exit 1; }
+done
+
+echo "pre-commit: all green"

@@ -95,6 +95,8 @@ CHANGES_DIR="$FOUNDRY_ROOT/changes"
 . "$CLI_DIR/render/picker_widget.sh"
 # shellcheck source=commands/help.sh
 . "$CLI_DIR/commands/help.sh"
+# shellcheck source=commands/version.sh
+. "$CLI_DIR/commands/version.sh"
 # shellcheck source=commands/list_changes.sh
 . "$CLI_DIR/commands/list_changes.sh"
 # shellcheck source=commands/show_change.sh
@@ -133,6 +135,7 @@ main() {
     move)            cmd_move_change "$@" ;;
     setup)           cmd_setup_project "$@" ;;
     sync)            cmd_sync_indexes "$@" ;;
+    version|--version) cmd_version ;;
     -h|--help|help)  cmd_help ;;
     *)               ui_error "unknown subcommand: $subcommand"; cmd_help; exit 64 ;;
   esac

@@ -37,13 +37,8 @@ EOF
   exit 64
 }
 
-bucket_valid() {
-  local bucket="$1" known_bucket
-  for known_bucket in "${BUCKETS[@]}"; do
-    [[ "$bucket" == "$known_bucket" ]] && return 0
-  done
-  return 1
-}
+# bucket_valid comes from config/constants.sh (the bucket registry),
+# sourced above.
 
 # THE transition table — the only place allowed moves are written down.
 # One line per transition: "<to-bucket>\t<verb>", in canonical

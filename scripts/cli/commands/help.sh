@@ -17,6 +17,7 @@ usage:
   foundry sync                     rebuild per-bucket index caches (run after
                                    manual edits inside .foundry/changes/)
   foundry setup                    scaffold .foundry/ in the current project
+  foundry version                  print the installed plugin version
 
 global flags:
   --plain                          ASCII output, no prompts

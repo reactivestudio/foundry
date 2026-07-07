@@ -23,6 +23,10 @@ cmd_list_changes() {
     updated|created|slug|title) ;;
     *) ui_error "list: --sort must be one of: updated, created, slug, title"; exit 64 ;;
   esac
+  if [[ "$bucket_filter" != "all" ]] && ! bucket_valid "$bucket_filter"; then
+    ui_error "list: unknown bucket: $bucket_filter (valid: ${BUCKETS[*]})"
+    exit 64
+  fi
 
   local rows; rows=$(query_change_rows all)
 
