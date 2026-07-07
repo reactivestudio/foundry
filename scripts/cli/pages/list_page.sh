@@ -2,10 +2,66 @@
 # list_page.sh — single-bucket paged view (entered from a "+N more" row).
 #
 # Source this file; do not execute it directly.
-# Needs: query.sh, render/{table,brand_header,picker_widget,primitives}.sh, pages/detail_page.sh,
-# PAGE_SORT / PAGE_REVERSE (set by main_page).
+# Needs: store/query.sh, render/{table,brand_header,picker_widget,primitives}.sh,
+# pages/detail_page.sh, PAGE_SORT / PAGE_REVERSE (set by main_page).
 # Reuses picker_run with bucket-specific column header, page summary,
 # and inline pagination actions.
+
+# Populate PICKER_* arrays for one page of a single bucket.  Executes
+# inside list_page and reads its locals (page_rows, previous_count,
+# next_count, total) through bash dynamic scoping — same pattern as
+# the other page builders.
+_list_page_entries() {
+  picker_reset
+
+  # Extra blank row before the column header — matches the main
+  # view's breathing space between the ⌕ Search caret and the
+  # STATUS / TITLE / CREATED / UPDATED strip.
+  picker_push_padding
+
+  # Column header.
+  picker_push_header "$(render_columns_row)"
+
+  # Blank padding row beneath the column header — matches main view.
+  picker_push_padding
+
+  # ── inline pagination: "+N previous" at top when page > 1 ──
+  # Reuses render_more_row so the row visually matches the main-
+  # screen overflow row (blank icon/bucket cells, label in fd_more
+  # across the title cell, blank date cells).  Selecting it pages
+  # back; the picker treats it as an action.  Filterable=0 so it
+  # stays visible regardless of search text.
+  if (( previous_count > 0 )); then
+    picker_push_action \
+      "$(render_more_row "+${previous_count} previous")" "__page_previous__"
+  fi
+
+  # Bucket rows — same composition as the main page (byte-identical
+  # rows), so filter-match title highlighting works here too.
+  local row_bucket slug title updated_epoch created_epoch
+  while IFS=$'\t' read -r row_bucket slug title _ updated_epoch created_epoch; do
+    render_push_change_row "$row_bucket" "$slug" "$title" "$updated_epoch" "$created_epoch"
+  done <<< "$page_rows"
+
+  # ── inline pagination: "+M next" at bottom when more pages exist ──
+  if (( next_count > 0 )); then
+    picker_push_action "$(render_more_row "+${next_count} next")" "__page_next__"
+  fi
+
+  # Minimal summary — replaces the verbose
+  #   "○ backlog  ·  page X of Y  ·  N total"
+  # of pre-0.33.3.  Position is now implied by the in-list pagination
+  # entries above, and the bucket badge already sits in the header
+  # subtitle, so the only orientation the summary still owes the
+  # user is the total count.  Dim so it reads as chrome, not data.
+  picker_push_padding
+  picker_push_summary "   $(ui_dim "${total} changes total")"
+  picker_push_padding
+
+  # Back action.  Pagination is now in-list, so the only chrome
+  # action left at the bottom is the back navigation.
+  picker_push_action "$(ui_paint fd_chrome "⇠  Back to all changes")" "__page_back__"
+}
 
 list_page() {
   local bucket="$1"
@@ -33,53 +89,7 @@ list_page() {
     local next_count=$((total - end_row))
     local page_rows; page_rows=$(printf '%s\n' "$rows" | sed -n "${start_row},${end_row}p")
 
-    picker_reset
-
-    # Extra blank row before the column header — matches the main
-    # view's breathing space between the ⌕ Search caret and the
-    # STATUS / TITLE / CREATED / UPDATED strip.
-    picker_push_padding
-
-    # Column header.
-    picker_push_header "$(render_columns_row)"
-
-    # Blank padding row beneath the column header — matches main view.
-    picker_push_padding
-
-    # ── inline pagination: "+N previous" at top when page > 1 ──
-    # Reuses render_more_row so the row visually matches the main-
-    # screen overflow row (blank icon/bucket cells, label in fd_more
-    # across the title cell, blank date cells).  Selecting it pages
-    # back; the picker treats it as an action.  Filterable=0 so it
-    # stays visible regardless of search text.
-    if (( previous_count > 0 )); then
-      picker_push_action "$(render_more_row "+${previous_count} previous")" "__page_previous__"
-    fi
-
-    # Bucket rows — same composition as the main page (byte-identical
-    # rows), so filter-match title highlighting works here too.
-    while IFS=$'\t' read -r row_bucket slug title _ updated_epoch created_epoch; do
-      render_push_change_row "$row_bucket" "$slug" "$title" "$updated_epoch" "$created_epoch"
-    done <<< "$page_rows"
-
-    # ── inline pagination: "+M next" at bottom when more pages exist ──
-    if (( next_count > 0 )); then
-      picker_push_action "$(render_more_row "+${next_count} next")" "__page_next__"
-    fi
-
-    # Minimal summary — replaces the verbose
-    #   "○ backlog  ·  page X of Y  ·  N total"
-    # of pre-0.33.3.  Position is now implied by the in-list pagination
-    # entries above, and the bucket badge already sits in the header
-    # subtitle, so the only orientation the summary still owes the
-    # user is the total count.  Dim so it reads as chrome, not data.
-    picker_push_padding
-    picker_push_summary "   $(ui_dim "${total} changes total")"
-    picker_push_padding
-
-    # Back action.  Pagination is now in-list, so the only chrome
-    # action left at the bottom is the back navigation.
-    picker_push_action "$(ui_paint fd_chrome "⇠  Back to all changes")" "__page_back__"
+    _list_page_entries
 
     # Two-line branded header — IDENTICAL to the main view.  The user
     # explicitly wants the list page's header to match main 1:1

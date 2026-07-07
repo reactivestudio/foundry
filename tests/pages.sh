@@ -52,6 +52,8 @@ TRACKING_SH="$CLI_DIR/store/tracking.sh"
 . "$CLI_DIR/render/picker_widget.sh"
 # shellcheck source=pages/main_page.sh
 . "$CLI_DIR/pages/main_page.sh"
+# shellcheck source=pages/list_page.sh
+. "$CLI_DIR/pages/list_page.sh"
 # shellcheck source=pages/detail_page.sh
 . "$CLI_DIR/pages/detail_page.sh"
 
@@ -107,6 +109,32 @@ for sentinel in __act_add__ __act_sync__ __act_reload__ __act_exit__; do
   assert_equals 1 "$(count_slots "$sentinel")" "main: action $sentinel present once"
 done
 assert_equals 1 "$(count_types summary)" "main: summary row present"
+
+# ── list page (single bucket, page 2 of 3) ────────────────────────────────
+# Emulate list_page's locals mid-pagination: 1 row on screen, 1 page
+# before, 1 page after → both pagination actions must appear.
+page_rows=$'backlog\tbeta\tBeta change\t2h\t90\t40'
+previous_count=1
+next_count=1
+total=3
+
+_list_page_entries
+
+assert_equals 1 "$(count_types header)" "list: column header present"
+assert_equals 1 "$(count_types row)"    "list: one data row on this page"
+assert_equals 1 "$(count_slots __page_previous__)" \
+  "list: mid-pagination offers +N previous"
+assert_equals 1 "$(count_slots __page_next__)" \
+  "list: mid-pagination offers +M next"
+assert_equals 1 "$(count_slots __page_back__)" "list: Back action present"
+assert_equals 1 "$(count_types summary)" "list: total-count summary present"
+
+# First page: no "+N previous".
+previous_count=0
+next_count=2
+_list_page_entries
+assert_equals 0 "$(count_slots __page_previous__)" \
+  "list: first page hides +N previous"
 
 # ── detail page ────────────────────────────────────────────────────────────
 # Real files on disk, stubbed tracking fields.  Proposal has 8 content

@@ -42,14 +42,24 @@
 # treatment as the main page's column headers, with fd_title (not
 # dim) because section headings on a single-record screen organise
 # the screen rather than label repeating columns.
+#
+# The _detail_page_*_entries section builders below execute inside
+# _detail_page_entries and read its locals (slug, bucket, dir) through
+# bash dynamic scoping — same pattern as _show_change_* and _picker_*.
 _detail_page_entries() {
   local slug="$1" bucket="$2"
   local dir="$CHANGES_DIR/$bucket/$slug"
   query_change_fields "$dir"   # → CHANGE_TITLE/STATUS/CREATED/UPDATED/REASON
 
   picker_reset
+  _detail_page_meta_entries
+  _detail_page_proposal_entries
+  _detail_page_history_entries
+  _detail_page_action_bar_entries
+}
 
-  # ── META ──
+# ── META ──
+_detail_page_meta_entries() {
   # Compact horizontal layout — small-caps column header row + a
   # single data row underneath, mirroring the main page's
   # STATUS / TITLE / CREATED / UPDATED column grammar.  Vertical
@@ -94,8 +104,10 @@ _detail_page_entries() {
       "$(ui_dim "$(printf '%-8s' 'reason')")" \
       "$(ui_paint "$(bucket_color "$bucket")" "$CHANGE_REASON")")"
   fi
+}
 
-  # ── PROPOSAL ──
+# ── PROPOSAL ──
+_detail_page_proposal_entries() {
   # Heading: small caps + fd_title (ᴘʀᴏᴘᴏꜱᴀʟ).  Content: every source
   # line passes through render_markdown_line which STRIPS markers (#, -,
   # **, ``, [text](url), etc.) and wraps the result in ui_dim.
@@ -105,102 +117,104 @@ _detail_page_entries() {
   #      that fired the filter — same affordance the main page has
   #      for row titles (cf. picker's info-type match-rebuild path).
   # Cursor never lands inside the proposal — type stays "info".
-  if [[ -f "$dir/proposal.md" ]]; then
-    picker_push_padding  # extra spacer (user asked +1 before heading)
-    picker_push_padding
-    picker_push_info "$(ui_paint fd_title "⛰  $(ui_small_caps PROPOSAL)")"
-    picker_push_padding
+  [[ -f "$dir/proposal.md" ]] || return 0
+  picker_push_padding  # extra spacer (user asked +1 before heading)
+  picker_push_padding
+  picker_push_info "$(ui_paint fd_title "⛰  $(ui_small_caps PROPOSAL)")"
+  picker_push_padding
 
-    # Preview cap: render at most the first 5 NON-BLANK lines of the
-    # proposal here on the detail page.  Blank lines between them
-    # are preserved as paragraph breaks (they don't count against the
-    # cap).  If the proposal has more than 5 visible lines we tack on
-    # a "⏿ View..." action that opens the full document in
-    # proposal_page; if everything fits, the View action is
-    # suppressed entirely — no reason to expose a "view full" link
-    # when the user is already looking at the full thing.
-    local _source_lines=() _rendered_lines=() _plain_lines=()
-    local _line
-    while IFS= read -r _line || [[ -n "$_line" ]]; do
-      _source_lines+=("$_line")
-    done < "$dir/proposal.md"
+  # Preview cap: render at most the first 5 NON-BLANK lines of the
+  # proposal here on the detail page.  Blank lines between them
+  # are preserved as paragraph breaks (they don't count against the
+  # cap).  If the proposal has more than 5 visible lines we tack on
+  # a "⏿ View..." action that opens the full document in
+  # proposal_page; if everything fits, the View action is
+  # suppressed entirely — no reason to expose a "view full" link
+  # when the user is already looking at the full thing.
+  local _source_lines=() _rendered_lines=() _plain_lines=()
+  local _line
+  while IFS= read -r _line || [[ -n "$_line" ]]; do
+    _source_lines+=("$_line")
+  done < "$dir/proposal.md"
 
-    # Pre-render so each source line is processed exactly once: we
-    # need rendered (for the entry), plain (for PICKER_TITLE / search
-    # highlight), and a total-visible count to decide the View action.
-    local _total_visible=0 _line_index
-    for _line_index in "${!_source_lines[@]}"; do
-      _rendered_lines[_line_index]="$(render_markdown_line "${_source_lines[$_line_index]}")"
-      _plain_lines[_line_index]="$(render_markdown_line "${_source_lines[$_line_index]}" plain)"
-      [[ -n "${_rendered_lines[$_line_index]}" ]] && _total_visible=$((_total_visible + 1))
-    done
+  # Pre-render so each source line is processed exactly once: we
+  # need rendered (for the entry), plain (for PICKER_TITLE / search
+  # highlight), and a total-visible count to decide the View action.
+  local _total_visible=0 _line_index
+  for _line_index in "${!_source_lines[@]}"; do
+    _rendered_lines[_line_index]="$(render_markdown_line "${_source_lines[$_line_index]}")"
+    _plain_lines[_line_index]="$(render_markdown_line "${_source_lines[$_line_index]}" plain)"
+    [[ -n "${_rendered_lines[$_line_index]}" ]] && _total_visible=$((_total_visible + 1))
+  done
 
-    local _shown_count=0 _preview_cap=5
-    for _line_index in "${!_source_lines[@]}"; do
-      (( _shown_count >= _preview_cap )) && break
-      if [[ -z "${_rendered_lines[$_line_index]}" ]]; then
-        # Blank line → paragraph break, non-filterable info row.
-        picker_push_info ''
-      else
-        picker_push_filtered_info \
-          "   ${_rendered_lines[$_line_index]}" "${_plain_lines[$_line_index]}"
-        _shown_count=$((_shown_count + 1))
-      fi
-    done
-
-    # "View..." action — only when there's more to view.  Eye glyph
-    # ⏿ (U+23FF OBSERVER EYE SYMBOL) is pure unicode (no Nerd Font
-    # cluster).  Opens proposal_page, a dedicated picker screen
-    # with the full document + a single ⇠ Back action.
-    if (( _total_visible > _preview_cap )); then
-      picker_push_padding
-      picker_push_action "$(ui_paint fd_chrome '⏿  View...')" "__view_proposal__"
-      picker_push_padding  # extra spacer after View (user-asked +1)
+  local _shown_count=0 _preview_cap=5
+  for _line_index in "${!_source_lines[@]}"; do
+    (( _shown_count >= _preview_cap )) && break
+    if [[ -z "${_rendered_lines[$_line_index]}" ]]; then
+      # Blank line → paragraph break, non-filterable info row.
+      picker_push_info ''
+    else
+      picker_push_filtered_info \
+        "   ${_rendered_lines[$_line_index]}" "${_plain_lines[$_line_index]}"
+      _shown_count=$((_shown_count + 1))
     fi
-  fi
+  done
 
-  # ── HISTORY ──
-  # Heading + small-caps column header + data rows all anchor at col 7
-  # (3-cell indent + 3-cell picker prefix).
-  if [[ -f "$dir/history.log" ]]; then
+  # "View..." action — only when there's more to view.  Eye glyph
+  # ⏿ (U+23FF OBSERVER EYE SYMBOL) is pure unicode (no Nerd Font
+  # cluster).  Opens proposal_page, a dedicated picker screen
+  # with the full document + a single ⇠ Back action.
+  if (( _total_visible > _preview_cap )); then
     picker_push_padding
-    picker_push_info "$(ui_paint fd_title "⛙  $(ui_small_caps HISTORY)")"
-    picker_push_padding
-
-    picker_push_info "$(printf '   %s  %s  %s  %s' \
-      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps WHEN)" 12)")" \
-      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps ACTOR)" 14)")" \
-      "$(ui_dim "$(ui_pad_visual "$(ui_small_caps EVENT)" 8)")" \
-      "$(ui_dim "$(ui_small_caps CHANGE)")")"
-
-    local history_lines=()
-    local _line
-    while IFS= read -r _line; do
-      history_lines+=("$_line")
-    done < <(render_history_newest_first "$dir/history.log")
-
-    local history_line actor_color
-    for history_line in "${history_lines[@]}"; do
-      render_history_fields "$history_line"
-      case "$HIST_ACTOR" in
-        user)          actor_color=fd_done ;;
-        state-machine) actor_color=fd_chrome ;;
-        *)             actor_color=muted ;;
-      esac
-      picker_push_filtered_info "$(printf '   %s  %s  %s  %s' \
-        "$(ui_paint fd_updated "$(printf '%-12s' "$HIST_RELATIVE")")" \
-        "$(ui_paint "$actor_color" "$(printf '%-14s' "$HIST_ACTOR")")" \
-        "$(ui_paint fd_title    "$(printf '%-8s'  "$HIST_EVENT")")" \
-        "$(ui_paint fd_created  "$HIST_PRETTY")")"
-      if [[ -n "$HIST_REASON" ]]; then
-        # Reason wrap as a non-filterable info row — aligned under the
-        # CHANGE column (3 indent + 12 when + 2 + 14 actor + 2 + 8 event + 2 = 43).
-        picker_push_info "$(printf '   %42s%s' '' "$(ui_dim "\"$HIST_REASON\"")")"
-      fi
-    done
+    picker_push_action "$(ui_paint fd_chrome '⏿  View...')" "__view_proposal__"
+    picker_push_padding  # extra spacer after View (user-asked +1)
   fi
+}
 
-  # ── ACTION BAR (bottom) ──
+# ── HISTORY ──
+# Heading + small-caps column header + data rows all anchor at col 7
+# (3-cell indent + 3-cell picker prefix).
+_detail_page_history_entries() {
+  [[ -f "$dir/history.log" ]] || return 0
+  picker_push_padding
+  picker_push_info "$(ui_paint fd_title "⛙  $(ui_small_caps HISTORY)")"
+  picker_push_padding
+
+  picker_push_info "$(printf '   %s  %s  %s  %s' \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps WHEN)" 12)")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps ACTOR)" 14)")" \
+    "$(ui_dim "$(ui_pad_visual "$(ui_small_caps EVENT)" 8)")" \
+    "$(ui_dim "$(ui_small_caps CHANGE)")")"
+
+  local history_lines=()
+  local _line
+  while IFS= read -r _line; do
+    history_lines+=("$_line")
+  done < <(render_history_newest_first "$dir/history.log")
+
+  local history_line actor_color
+  for history_line in "${history_lines[@]}"; do
+    render_history_fields "$history_line"
+    case "$HIST_ACTOR" in
+      user)          actor_color=fd_done ;;
+      state-machine) actor_color=fd_chrome ;;
+      *)             actor_color=muted ;;
+    esac
+    picker_push_filtered_info "$(printf '   %s  %s  %s  %s' \
+      "$(ui_paint fd_updated "$(printf '%-12s' "$HIST_RELATIVE")")" \
+      "$(ui_paint "$actor_color" "$(printf '%-14s' "$HIST_ACTOR")")" \
+      "$(ui_paint fd_title    "$(printf '%-8s'  "$HIST_EVENT")")" \
+      "$(ui_paint fd_created  "$HIST_PRETTY")")"
+    if [[ -n "$HIST_REASON" ]]; then
+      # Reason wrap as a non-filterable info row — aligned under the
+      # CHANGE column (3 indent + 12 when + 2 + 14 actor + 2 + 8 event + 2 = 43).
+      picker_push_info "$(printf '   %42s%s' '' "$(ui_dim "\"$HIST_REASON\"")")"
+    fi
+  done
+}
+
+# ── ACTION BAR (bottom) ──
+_detail_page_action_bar_entries() {
   # Derived live from the state machine's transitions-from list, so the
   # bar can never offer a move the machine would reject (and a matrix
   # change shows up here without a second edit).  Label = capitalized

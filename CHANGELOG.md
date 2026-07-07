@@ -3,6 +3,14 @@
 Формат: одна запись на осмысленную серию версий; полная гранулярность —
 в `git log` (каждый коммит несёт версию и расшифровку).
 
+## 0.33.29 — 2026-07-07
+
+- Длинные функции разобраны на секционные хелперы (dynamic-scope
+  паттерн): `_detail_page_{meta,proposal,history,action_bar}_entries`,
+  `_list_page_entries` (симметрия с остальными страницами + покрытие
+  pages-тестом, 24 проверки), `_list_changes_{single_bucket,grouped,
+  footer_hints}`, `_setup_{scaffold,install_cli}`.
+
 ## 0.33.28 — 2026-07-07
 
 - Тесты выехали из `scripts/test/` в топ-уровневый `tests/`; общие
