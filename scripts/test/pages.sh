@@ -12,7 +12,7 @@
 
 # shellcheck source-path=SCRIPTDIR/../cli
 # shellcheck disable=SC2034  # PAGE_* / CHANGE_* feed the sourced builders
-# shellcheck disable=SC2329  # the stubs ARE invoked — indirectly, by the
+# shellcheck disable=SC2317,SC2329  # the stubs ARE invoked — indirectly, by the
 #                              sourced page builders they override
 set -uo pipefail   # no -e: assertions inspect non-zero exit codes
 

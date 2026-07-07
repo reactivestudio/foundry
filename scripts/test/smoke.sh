@@ -22,7 +22,7 @@ fail_count=0
 pass() { printf 'ok - %s\n' "$1"; pass_count=$((pass_count + 1)); }
 fail() { printf 'NOT OK - %s\n' "$1" >&2; fail_count=$((fail_count + 1)); }
 
-# shellcheck disable=SC2329  # invoked indirectly through assert_* "$@"
+# shellcheck disable=SC2317,SC2329  # invoked indirectly through assert_* "$@"
 run_cli() { CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" "$PLUGIN_ROOT/cli" --plain "$@"; }
 
 # assert_exit <expected-code> <label> <command...>
@@ -111,7 +111,7 @@ assert_exit 64 "move: missing slug is usage" run_cli move
 assert_exit 64 "move: unknown flag rejected" run_cli move custom-slug --bogus
 
 # ── state machine: transitions table ───────────────────────────────────────
-# shellcheck disable=SC2329  # invoked indirectly through assert_* "$@"
+# shellcheck disable=SC2317,SC2329  # invoked indirectly through assert_* "$@"
 state_machine() { "$PLUGIN_ROOT/scripts/cli/spec/state-machine.sh" "$@"; }
 assert_contains "in-progress	start" "transitions-from backlog lists start" \
   state_machine transitions-from backlog
@@ -174,9 +174,9 @@ assert_contains "multi line reason" "sanitize: reason readable in show" \
   run_cli show hostile-title-with-newline
 
 # ── lint gates ─────────────────────────────────────────────────────────────
-# shellcheck disable=SC2329  # invoked indirectly through assert_* "$@"
+# shellcheck disable=SC2317,SC2329  # invoked indirectly through assert_* "$@"
 line_count() { "$PLUGIN_ROOT/scripts/cli/spec/lint/line-count.sh" "$@"; }
-# shellcheck disable=SC2329  # invoked indirectly through assert_* "$@"
+# shellcheck disable=SC2317,SC2329  # invoked indirectly through assert_* "$@"
 opinion_words() { "$PLUGIN_ROOT/scripts/cli/spec/lint/opinion-words.sh" "$@"; }
 printf '# title\n\ncontent one\ncontent two\n---\n' > artifact.md
 assert_exit 0  "line-count: within limit"      line_count artifact.md 5
