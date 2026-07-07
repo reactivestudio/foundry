@@ -14,7 +14,7 @@ set -uo pipefail   # no -e: assertions inspect non-zero exit codes
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=harness.sh
-. "$(dirname "${BASH_SOURCE[0]}")/harness.sh"
+. "$PLUGIN_ROOT/tests/harness.sh"
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
 cd "$SANDBOX" || exit 1
@@ -125,19 +125,15 @@ rm -f .foundry/config.yaml
 # ── sanitization: hostile free text can't corrupt the schema ──────────────
 assert_exit 0 "new: title with tab and newline accepted" \
   run_cli new "$(printf 'Hostile\ttitle with\nnewline')"
-if [[ "$(grep -c '^title:' .foundry/changes/backlog/hostile-title-with-newline/tracking.yaml)" == "1" ]]; then
-  pass "sanitize: hostile title is one YAML line"
-else
-  fail "sanitize: hostile title is one YAML line"
-fi
+hostile_dir=.foundry/changes/backlog/hostile-title-with-newline
+assert_equals 1 "$(grep -c '^title:' "$hostile_dir/tracking.yaml")" \
+  "sanitize: hostile title is one YAML line"
 assert_exit 0 "move: reason with newline accepted" \
   run_cli move hostile-title-with-newline --to=declined \
     --reason="$(printf 'multi\nline\treason')"
-if [[ "$(wc -l < .foundry/changes/declined/hostile-title-with-newline/history.log | tr -d ' ')" == "2" ]]; then
-  pass "sanitize: history stays one TSV line per event"
-else
-  fail "sanitize: history stays one TSV line per event"
-fi
+hostile_dir=.foundry/changes/declined/hostile-title-with-newline
+assert_equals 2 "$(wc -l < "$hostile_dir/history.log" | tr -d ' ')" \
+  "sanitize: history stays one TSV line per event"
 assert_contains "multi line reason" "sanitize: reason readable in show" \
   run_cli show hostile-title-with-newline
 

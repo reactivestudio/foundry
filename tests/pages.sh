@@ -21,7 +21,7 @@ export FOUNDRY_PLAIN=1
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_DIR="$PLUGIN_ROOT/scripts/cli"
 # shellcheck source=harness.sh
-. "$(dirname "${BASH_SOURCE[0]}")/harness.sh"
+. "$PLUGIN_ROOT/tests/harness.sh"
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
 

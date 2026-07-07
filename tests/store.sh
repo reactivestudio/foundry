@@ -15,6 +15,8 @@ set -uo pipefail   # no -e: assertions inspect non-zero exit codes
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI_DIR="$PLUGIN_ROOT/scripts/cli"
+# shellcheck source=harness.sh
+. "$PLUGIN_ROOT/tests/harness.sh"
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
 cd "$SANDBOX" || exit 1
@@ -31,14 +33,14 @@ TRACKING_SH="$CLI_DIR/store/tracking.sh"
 # shellcheck source=spec/slug.sh
 . "$CLI_DIR/spec/slug.sh"
 
-# shellcheck source=harness.sh
-. "$(dirname "${BASH_SOURCE[0]}")/harness.sh"
 
 # ── tracking.sh: yaml round-trips with hostile values ──────────────────────
 change_dir="$FOUNDRY_ROOT/changes/backlog/unit-test"
 mkdir -p "$FOUNDRY_ROOT/changes/.template"
-printf 'slug: __SLUG__\ntitle: __TITLE__\nstatus: backlog\ncreated_at: __TIMESTAMP__\nupdated_at: __TIMESTAMP__\n' \
-  > "$FOUNDRY_ROOT/changes/.template/tracking.yaml"
+{
+  printf 'slug: __SLUG__\ntitle: __TITLE__\nstatus: backlog\n'
+  printf 'created_at: __TIMESTAMP__\nupdated_at: __TIMESTAMP__\n'
+} > "$FOUNDRY_ROOT/changes/.template/tracking.yaml"
 "$TRACKING_SH" init "$change_dir" unit-test "Unit test change"
 
 assert_equals "Unit test change" "$("$TRACKING_SH" get "$change_dir" title)" \
