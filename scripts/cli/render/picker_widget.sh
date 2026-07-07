@@ -399,7 +399,8 @@ _picker_render_frame() {
   # is empty) or the last typed character (when not).  The extra
   # space lives outside `ui_bright "$filter"` so the caret column
   # math (prompt_columns = 14) stays in step.
-  frame+=$'   '"${prompt_painted}$(ui_bright "$filter") "$'\033['"${_caret_sequence}m"$'▏\033[0m\n\n\n'
+  frame+=$'   '"${prompt_painted}$(ui_bright "$filter") "
+  frame+=$'\033['"${_caret_sequence}m"$'▏\033[0m\n\n\n'
   local j entry_index row_render is_cursor
   for (( j = 0; j < ${#visible_indices[@]}; j++ )); do
     entry_index="${visible_indices[$j]}"
@@ -478,7 +479,8 @@ _picker_render_frame() {
         # pre-derived entries_brand[] slot (any builder path that
         # bypassed the standard init loop).  Falls back to the
         # already-coloured PICKER_ENTRIES.
-        frame+=" ${cursor_arrow} ${entries_brand[$entry_index]:-${PICKER_ENTRIES[$entry_index]}}"$'\n'
+        frame+=" ${cursor_arrow} "
+        frame+="${entries_brand[$entry_index]:-${PICKER_ENTRIES[$entry_index]}}"$'\n'
       else
         frame+=" ${cursor_arrow} ${row_render}"$'\n'
       fi
@@ -653,7 +655,8 @@ picker_run() {
         stty -icanon min 1 time 0
         if [[ "$escape_tail" == '[' ]]; then
           case "$arrow_key" in
-            A) (( selectable_count > 0 )) && cursor=$(( (cursor - 1 + selectable_count) % selectable_count )) ;;
+            A) (( selectable_count > 0 )) \
+                 && cursor=$(( (cursor - 1 + selectable_count) % selectable_count )) ;;
             B) (( selectable_count > 0 )) && cursor=$(( (cursor + 1) % selectable_count )) ;;
           esac
         else

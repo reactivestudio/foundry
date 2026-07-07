@@ -17,11 +17,11 @@ cmd_move_change() {
     case "$arg" in
       --to=*)     to="${arg#--to=}" ;;
       --reason=*) reason="${arg#--reason=}" ;;
-      *) ui_error "unknown flag: $arg"; exit 64 ;;
+      *) ui_error "move: unknown flag: $arg"; exit 64 ;;
     esac
   done
 
-  local from; from=$(query_bucket_of "$slug") || { ui_error "not found: $slug"; exit 1; }
+  local from; from=$(query_bucket_of "$slug") || { ui_error "move: not found: $slug"; exit 1; }
 
   if [[ -z "$to" ]]; then
     if [[ "$UI_MODE" == "interactive" ]]; then
@@ -29,10 +29,11 @@ cmd_move_change() {
       local bucket_options=() bucket
       for bucket in "${BUCKETS[@]}"; do
         [[ "$bucket" == "$from" ]] && continue
-        bucket_options+=("$(ui_icon "$bucket") $bucket")
+        bucket_options+=("$(bucket_icon "$bucket") $bucket")
       done
       local picked_option
-      picked_option=$(ui_choose "Move $slug from $(ui_icon "$from") $from to:" "${bucket_options[@]}") || exit 1
+      picked_option=$(ui_choose \
+        "Move $slug from $(bucket_icon "$from") $from to:" "${bucket_options[@]}") || exit 1
       to="${picked_option#* }"
     else
       ui_error "move: --to=<bucket> required in --plain mode"

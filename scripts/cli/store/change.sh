@@ -4,6 +4,12 @@
 #
 # Wraps tracking.sh + state-machine.sh. All filesystem mutations go through
 # this script — never edit .foundry/ by hand.
+#
+# Deliberately NO file locking: foundry is a single-operator tool, and
+# every multi-step write ends in an atomic mv (tracking.sh, index
+# rebuilds) or IS an atomic mv (bucket moves).  Two racing invocations
+# lose cleanly — the second mv fails with a visible error — instead of
+# corrupting state.  Revisit only if the tool ever grows daemons.
 
 set -euo pipefail
 
@@ -61,6 +67,10 @@ cmd_new() {
   fi
   local dir="$CHANGES_DIR/backlog/$slug"
   "$TRACKING_SH" init "$dir" "$slug" "$title"
+  # Re-read the title tracking.sh just wrote — it sanitizes newlines
+  # and tabs out of free text, and the proposal heading and the index
+  # entry below must carry the same canonical value.
+  title=$("$TRACKING_SH" get "$dir" title)
   if [[ ! -f "$dir/proposal.md" ]]; then
     render_template \
       "$CHANGES_DIR/.template/proposal.md" \

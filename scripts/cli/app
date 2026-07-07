@@ -52,6 +52,7 @@ CLI_DIR="$PLUGIN_ROOT/scripts/cli"
 # /foundry:change and /foundry:setup use from Claude Code).
 CHANGE_SH="$CLI_DIR/store/change.sh"
 TRACKING_SH="$CLI_DIR/store/tracking.sh"
+STATE_MACHINE_SH="$CLI_DIR/spec/state-machine.sh"
 
 # ── parse --plain anywhere in the args ────────────────────────────────────
 ARGS=()

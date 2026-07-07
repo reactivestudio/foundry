@@ -35,8 +35,9 @@ fi
 file="$1"
 max="$2"
 
-[[ "$max" =~ ^[0-9]+$ ]] || { echo "max must be positive integer, got: $max" >&2; exit 64; }
-[[ -f "$file" ]] || { echo "no such file: $file" >&2; exit 64; }
+[[ "$max" =~ ^[0-9]+$ ]] \
+  || { echo "max must be a positive integer, got: $max" >&2; exit 64; }
+[[ -f "$file" ]] || { echo "not found: $file" >&2; exit 64; }
 
 if (( raw )); then
   line_count=$(wc -l < "$file" | tr -d ' ')

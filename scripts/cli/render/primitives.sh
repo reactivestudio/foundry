@@ -177,9 +177,18 @@ ui_small_caps() {
 # Terminal width capped at $1, falling back to $2 (default 100) when
 # neither COLUMNS nor tput can tell.  Each layout picks its own cap —
 # plain list 120, picker table 140, divider 100 — so the cap is an arg.
+#
+# The detected width is cached for the process (_UI_COLUMNS_CACHE) so
+# the tput fork happens once, not once per rendered row.  There is no
+# SIGWINCH handling anyway — a resize takes effect on the next CLI
+# invocation.  Detection failures are NOT cached: the caller's
+# fallback applies and the next call probes again.
 ui_terminal_columns() {
   local cap="$1" fallback="${2:-100}" columns
-  columns=${COLUMNS:-$(tput cols 2>/dev/null || echo "$fallback")}
+  if [[ -z "${_UI_COLUMNS_CACHE:-}" ]]; then
+    _UI_COLUMNS_CACHE=${COLUMNS:-$(tput cols 2>/dev/null || echo "")}
+  fi
+  columns=${_UI_COLUMNS_CACHE:-$fallback}
   (( columns > cap )) && columns=$cap
   printf '%d' "$columns"
 }
@@ -219,46 +228,25 @@ ui_divider() {
   fi
 }
 
-# ── status icons + per-bucket color ────────────────────────────────────────
-# Small consistent-width glyphs — all 1 cell in monospace, accept the
-# smaller visual size in exchange for guaranteed alignment.
-ui_icon() {
-  case "$1" in
-    backlog)     printf '○' ;;  # U+25CB WHITE CIRCLE
-    in-progress) printf '⊙' ;;  # U+2299 CIRCLED DOT OPERATOR
-    done)        printf '●' ;;  # U+25CF BLACK CIRCLE
-    declined)    printf '⊗' ;;  # U+2297 CIRCLED TIMES
-    *)           printf '?' ;;
-  esac
-}
-
 # Strip ANSI color codes — used to parse a colored picker row.
 ui_strip_ansi() {
   sed -E $'s/\033\\[[0-9;]*[a-zA-Z]//g'
 }
 
-ui_bucket_color() {
-  case "$1" in
-    backlog)     echo fd_backlog ;;
-    in-progress) echo fd_inprogress ;;
-    done)        echo fd_done ;;
-    declined)    echo fd_declined ;;
-    *)           echo dim ;;
-  esac
-}
+# ── bucket status (glyph + colour come from config/constants.sh) ──────────
 
 # Echo "<icon> <bucket>" — icon in baby blue, label in per-bucket color.
 ui_status() {
   local bucket="$1"
   printf '%s %s' \
-    "$(ui_paint fd_icon "$(ui_icon "$bucket")")" \
-    "$(ui_paint "$(ui_bucket_color "$bucket")" "$bucket")"
+    "$(ui_paint fd_icon "$(bucket_icon "$bucket")")" \
+    "$(ui_paint "$(bucket_color "$bucket")" "$bucket")"
 }
 
 # Just the icon, in the shared baby-blue.
 ui_status_icon() {
   local bucket="$1"
-  ui_paint fd_icon "$(ui_icon "$bucket")"
+  ui_paint fd_icon "$(bucket_icon "$bucket")"
 }
 
 # ── header (used at top of every command output) ───────────────────────────
@@ -342,6 +330,11 @@ ui_confirm() {
     ui_error "ui_confirm: interactive only"
     return 2
   fi
+}
+
+# Upper-case the first letter — bash 3.2 has no ${var^}.
+ui_capitalize() {
+  printf '%s%s' "$(printf '%s' "${1:0:1}" | tr '[:lower:]' '[:upper:]')" "${1:1}"
 }
 
 # Press-any-key gate; used between an action's output and the next redraw.

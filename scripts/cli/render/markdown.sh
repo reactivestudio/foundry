@@ -50,7 +50,8 @@ render_markdown_line() {
   # inline marker strip (order matters: ** before *); single quotes are
   # deliberate — the backticks are sed literals, nothing should expand
   # shellcheck disable=SC2016
-  line=$(printf '%s' "$line" | sed -E 's/\*\*([^*]+)\*\*/\1/g; s/`([^`]+)`/\1/g; s/\[([^]]+)\]\([^)]+\)/\1/g; s/\*([^*]+)\*/\1/g')
+  line=$(printf '%s' "$line" | sed -E \
+    's/\*\*([^*]+)\*\*/\1/g; s/`([^`]+)`/\1/g; s/\[([^]]+)\]\([^)]+\)/\1/g; s/\*([^*]+)\*/\1/g')
   if [[ -z "$line" ]]; then
     printf ''
   elif [[ "$mode" == "plain" ]]; then

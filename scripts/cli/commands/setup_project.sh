@@ -109,7 +109,7 @@ usage: foundry setup [--install-cli]
                   or rc-file shell hook left by older setup versions.
 EOF
         return 0 ;;
-      *) ui_error "setup: unknown arg: $arg"; exit 64 ;;
+      *) ui_error "setup: unknown flag: $arg"; exit 64 ;;
     esac
   done
 
@@ -127,7 +127,8 @@ EOF
   local bucket
   for bucket in "${BUCKETS[@]}"; do
     mkdir -p "$FOUNDRY_ROOT/changes/$bucket"
-    [[ -f "$FOUNDRY_ROOT/changes/$bucket/.gitkeep" ]] || : > "$FOUNDRY_ROOT/changes/$bucket/.gitkeep"
+    [[ -f "$FOUNDRY_ROOT/changes/$bucket/.gitkeep" ]] \
+      || : > "$FOUNDRY_ROOT/changes/$bucket/.gitkeep"
   done
 
   # Mirror plugin's .template/ into .foundry/, preserving structure;

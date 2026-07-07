@@ -50,7 +50,8 @@ query_change_rows() {
       else
         age="?"
       fi
-      printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$bucket" "$slug" "$title" "$age" "$updated_epoch" "$created_epoch"
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$bucket" "$slug" "$title" "$age" "$updated_epoch" "$created_epoch"
     done < <(index_read_bucket "$bucket")
   done
 }

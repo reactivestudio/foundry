@@ -60,7 +60,8 @@ render_bucket_section() {
 
   read -r slug_width title_width updated_width <<< "$(render_list_widths)"
   while IFS=$'\t' read -r row_bucket slug title _ updated_epoch _; do
-    render_list_row "$row_bucket" "$slug" "$title" "$updated_epoch" "$slug_width" "$title_width" "$updated_width"
+    render_list_row "$row_bucket" "$slug" "$title" "$updated_epoch" \
+      "$slug_width" "$title_width" "$updated_width"
   done <<< "$visible_rows"
 
   if (( row_count > limit )); then
@@ -74,13 +75,21 @@ render_bucket_section() {
 # ── picker pages ─────────────────────────────────────────────────────────
 
 # Column widths used by picker rows, the column-header row and the
-# "+N more" rows so everything aligns.
+# "+N more" rows so everything aligns.  Sets RENDER_*_WIDTH globals
+# instead of printing: this runs once per rendered ROW (hot path), and
+# the previous printf + $(subshell) + read pair cost a fork per row.
+# render_list_widths above keeps the printf form — it runs once per
+# listing, where a fork is noise.
+# shellcheck disable=SC2034  # RENDER_*_WIDTH are this file's row-geometry protocol
 render_picker_widths() {
   local terminal_columns; terminal_columns=$(ui_terminal_columns 140)
-  local bucket_width=12 created_width=18 updated_width=11
-  local title_width=$(( terminal_columns - bucket_width - created_width - updated_width - 10 ))
-  (( title_width < 20 )) && title_width=20
-  printf '%d %d %d %d' "$bucket_width" "$title_width" "$created_width" "$updated_width"
+  RENDER_BUCKET_WIDTH=12
+  RENDER_CREATED_WIDTH=18
+  RENDER_UPDATED_WIDTH=11
+  RENDER_TITLE_WIDTH=$(( terminal_columns - RENDER_BUCKET_WIDTH \
+                         - RENDER_CREATED_WIDTH - RENDER_UPDATED_WIDTH - 10 ))
+  (( RENDER_TITLE_WIDTH < 20 )) && RENDER_TITLE_WIDTH=20
+  return 0
 }
 
 # render_row_parts — populate per-row globals consumed by the page
@@ -98,8 +107,9 @@ render_picker_widths() {
 render_row_parts() {
   local bucket="$1" title="$2" updated_epoch="$3" created_epoch="$4"
 
-  local bucket_width title_width created_width updated_width
-  read -r bucket_width title_width created_width updated_width <<< "$(render_picker_widths)"
+  render_picker_widths   # → RENDER_*_WIDTH
+  local bucket_width=$RENDER_BUCKET_WIDTH title_width=$RENDER_TITLE_WIDTH
+  local created_width=$RENDER_CREATED_WIDTH updated_width=$RENDER_UPDATED_WIDTH
 
   local created_display="?" updated_display="?" iso_timestamp
   if [[ "$created_epoch" != "0" ]]; then
@@ -114,10 +124,10 @@ render_row_parts() {
   ROW_TITLE=$(ui_truncate "$title_width" "$title")
   ROW_TITLE_WIDTH=$title_width
   local _padded_bucket; _padded_bucket=$(printf '%-*s' "$bucket_width" "$bucket")
-  local _icon_glyph; _icon_glyph=$(ui_icon "$bucket")
+  local _icon_glyph; _icon_glyph=$(bucket_icon "$bucket")
   ROW_LEFT=$(printf '%s  %s  ' \
     "$(ui_paint fd_icon "$_icon_glyph")" \
-    "$(ui_paint "$(ui_bucket_color "$bucket")" "$_padded_bucket")")
+    "$(ui_paint "$(bucket_color "$bucket")" "$_padded_bucket")")
   # ROW_LEFT_HOVER: same structure, but the status icon paints in
   # fd_brand instead of fd_icon — used when the cursor lands on this
   # row, so icon + title (re-painted in fd_brand by picker_run) read
@@ -125,7 +135,7 @@ render_row_parts() {
   # bucket colour so the bucket identity stays legible.
   ROW_LEFT_HOVER=$(printf '%s  %s  ' \
     "$(ui_paint fd_brand "$_icon_glyph")" \
-    "$(ui_paint "$(ui_bucket_color "$bucket")" "$_padded_bucket")")
+    "$(ui_paint "$(bucket_color "$bucket")" "$_padded_bucket")")
   ROW_RIGHT=$(printf '  %s  %s' \
     "$(ui_paint fd_created "$(printf '%-*s' "$created_width" "$created_display")")" \
     "$(ui_paint fd_updated "$(printf '%-*s' "$updated_width" "$updated_display")")")
@@ -138,8 +148,9 @@ render_row_parts() {
 # 2 cells from the picker = 5 → STATUS aligns with "backlog".
 # Small-caps via ui_pad_visual which counts visual cells (wc -m).
 render_columns_row() {
-  local bucket_width title_width created_width updated_width
-  read -r bucket_width title_width created_width updated_width <<< "$(render_picker_widths)"
+  render_picker_widths   # → RENDER_*_WIDTH
+  local bucket_width=$RENDER_BUCKET_WIDTH title_width=$RENDER_TITLE_WIDTH
+  local created_width=$RENDER_CREATED_WIDTH updated_width=$RENDER_UPDATED_WIDTH
   printf '   %s  %s  %s  %s' \
     "$(ui_dim "$(ui_pad_visual "$(ui_small_caps STATUS)" "$bucket_width")")" \
     "$(ui_dim "$(ui_pad_visual "$(ui_small_caps TITLE)" "$title_width")")" \
@@ -161,8 +172,9 @@ render_columns_row() {
 # rows sit "under" real titles without falling into chrome-gray.
 render_more_row() {
   local label="$1"
-  local bucket_width title_width created_width updated_width
-  read -r bucket_width title_width created_width updated_width <<< "$(render_picker_widths)"
+  render_picker_widths   # → RENDER_*_WIDTH
+  local bucket_width=$RENDER_BUCKET_WIDTH title_width=$RENDER_TITLE_WIDTH
+  local created_width=$RENDER_CREATED_WIDTH updated_width=$RENDER_UPDATED_WIDTH
   printf '   %s  %s  %s  %s' \
     "$(printf '%-*s' "$bucket_width" "")" \
     "$(ui_paint fd_more "$(printf '%-*s' "$title_width" "$label")")" \
@@ -186,7 +198,8 @@ render_change_stats() {
   for bucket in "${BUCKETS[@]}"; do
     local bucket_count
     bucket_count=$(ui_count_lines "$(printf '%s\n' "$all_rows" | query_filter_bucket "$bucket")")
-    stats_line+="  $(ui_dim '·')  $(ui_paint "$(ui_bucket_color "$bucket")" "$(ui_icon "$bucket") $bucket_count")"
+    stats_line+="  $(ui_dim '·')  "
+    stats_line+="$(ui_paint "$(bucket_color "$bucket")" "$(bucket_icon "$bucket") $bucket_count")"
   done
   printf '%s' "$stats_line"
 }

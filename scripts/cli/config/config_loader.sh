@@ -5,7 +5,9 @@
 # (per-project, optional). Each line is "key: value".
 #
 # Usage:
-#   value=$(config_get list_per_bucket_limit 3)
+#   value=$(config_get some_key fallback)
+# Known keys go through the typed accessors below — the ONLY place
+# their default values live.
 
 config_get() {
   local key="$1" default="${2:-}"
@@ -24,3 +26,16 @@ config_get() {
   fi
   printf '%s' "$default"
 }
+
+# ── typed accessors (single source of the defaults) ──────────────────────────
+
+# Sort key for lists and pages: updated | created | slug | title.
+config_default_sort() { config_get default_sort updated; }
+
+# 1 when config says default_reverse: true, else 0 — arithmetic-ready.
+config_default_reverse_flag() {
+  [[ "$(config_get default_reverse false)" == "true" ]] && printf 1 || printf 0
+}
+
+# Rows shown per bucket before "+N more" folds the rest.
+config_list_per_bucket_limit() { config_get list_per_bucket_limit 3; }

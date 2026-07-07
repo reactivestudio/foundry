@@ -37,7 +37,7 @@ _main_page_entries() {
   # rows start.  Type=padding so the cursor skips it.
   picker_push_padding
 
-  local limit; limit="$(config_get list_per_bucket_limit 3)"
+  local limit; limit="$(config_list_per_bucket_limit)"
   local bucket
   for bucket in "${BUCKETS[@]}"; do
     local bucket_rows; bucket_rows=$(printf '%s\n' "$rows" \
@@ -56,7 +56,8 @@ _main_page_entries() {
       # with the bucket it belongs to — Tab on the last row of bucket X
       # then lands on the next bucket (not on +N more which still
       # belongs to bucket X).
-      picker_push_action "$(render_more_row "+$((bucket_count - limit)) more...")" "__more__$bucket" 1 "$bucket"
+      picker_push_action "$(render_more_row "+$((bucket_count - limit)) more...")" \
+        "__more__$bucket" 1 "$bucket"
       # Empty padding row after +N more.  Note: the user has asked
       # multiple times for "half a row" of gap here.  In a cell-based
       # terminal that's physically not possible — rows are atomic units
@@ -98,7 +99,9 @@ _new_change_dialog() {
   local title
   title=$(ui_input "Change title (free text)" --width 60) || return
   [[ -z "$title" ]] && return
-  cmd_new_change "$title"
+  # Subshell: a refusal (e.g. duplicate slug) exits non-zero — the TUI
+  # must show the message and return to the picker, not die with it.
+  (cmd_new_change "$title") || true
   ui_pause
 }
 
@@ -113,9 +116,8 @@ main_page() {
     exit 64
   fi
 
-  PAGE_SORT="$(config_get default_sort updated)"
-  PAGE_REVERSE=0
-  [[ "$(config_get default_reverse false)" == "true" ]] && PAGE_REVERSE=1
+  PAGE_SORT="$(config_default_sort)"
+  PAGE_REVERSE="$(config_default_reverse_flag)"
 
   trap 'clear; exit 0' INT
 
@@ -147,7 +149,7 @@ main_page() {
         __act_add__)
           _new_change_dialog ;;
         __act_sync__)
-          cmd_sync_indexes ;;   # full rebuild of per-bucket .index.yaml files
+          (cmd_sync_indexes) || true ;;  # rebuild indexes; refusal must not kill the TUI
         __act_reload__)
           : ;;   # loop back, rebuild entries
         __act_exit__)

@@ -34,10 +34,13 @@ usage() {
 
 [[ $# -eq 1 ]] || usage
 file="$1"
-[[ -f "$file" ]] || { echo "no such file: $file" >&2; exit 64; }
+[[ -f "$file" ]] || { echo "not found: $file" >&2; exit 64; }
 
-EN_OPINION_WORDS='recommend|recommends|recommended|suggest|suggests|suggested|should|ought|better|prefer|prefers|propose|proposes|advise|advises|ideally|preferable'
-RU_OPINION_WORDS='следует|рекомендую|рекомендуется|рекомендуем|лучше|предлагаю|предпочтительно|желательно'
+EN_OPINION_WORDS='recommend|recommends|recommended|suggest|suggests|suggested'
+EN_OPINION_WORDS+='|should|ought|better|prefer|prefers|propose|proposes'
+EN_OPINION_WORDS+='|advise|advises|ideally|preferable'
+RU_OPINION_WORDS='следует|рекомендую|рекомендуется|рекомендуем|лучше'
+RU_OPINION_WORDS+='|предлагаю|предпочтительно|желательно'
 OPINION_PATTERN="\\b(${EN_OPINION_WORDS})\\b|(${RU_OPINION_WORDS})"
 
 # Strip fenced code blocks before scanning. Preserve line numbers by

@@ -29,6 +29,15 @@ EOF
 
 now_utc() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 
+# Collapse newlines, carriage returns and tabs into single spaces.
+# tracking.yaml is flat "key: value" one-per-line and history.log is
+# line-per-event TSV — a value carrying either delimiter would corrupt
+# the schema for every awk/grep parser downstream.  Applied to every
+# free-text write (title on init, set values, history fields).
+sanitize_single_line() {
+  printf '%s' "$1" | tr '\n\r\t' '   '
+}
+
 # Read field value. Echoes value (without leading space) or empty.
 # index()==1 → literal prefix match: the field name can't inject regex,
 # and one awk replaces the grep|head|sed pipeline.
@@ -71,7 +80,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/template.sh"
 
 cmd_init() {
-  local dir="$1" slug="$2" title="$3"
+  local dir="$1" slug="$2" title
+  title=$(sanitize_single_line "$3")
   local tracking_file="$dir/tracking.yaml"
   local history_file="$dir/history.log"
   local timestamp; timestamp=$(now_utc)
@@ -94,7 +104,8 @@ cmd_get() {
 }
 
 cmd_set() {
-  local dir="$1" field="$2" value="$3"
+  local dir="$1" field="$2" value
+  value=$(sanitize_single_line "$3")
   yaml_set "$dir/tracking.yaml" "$field" "$value"
   if [[ "$field" != "updated_at" ]]; then
     yaml_set "$dir/tracking.yaml" "updated_at" "$(now_utc)"
@@ -103,7 +114,8 @@ cmd_set() {
 
 cmd_history() {
   local dir="$1" actor="$2" event="$3"
-  local details="${4:-}"
+  local details
+  details=$(sanitize_single_line "${4:-}")
   printf '%s\t%s\t%s\t%s\n' "$(now_utc)" "$actor" "$event" "$details" >> "$dir/history.log"
 }
 

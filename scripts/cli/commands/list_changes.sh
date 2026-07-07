@@ -6,23 +6,22 @@
 
 cmd_list_changes() {
   require_foundry
-  local bucket_filter="all" sort_key
-  sort_key="$(config_get default_sort updated)"
-  local reverse=0
-  [[ "$(config_get default_reverse false)" == "true" ]] && reverse=1
+  local bucket_filter="all" sort_key reverse
+  sort_key="$(config_default_sort)"
+  reverse="$(config_default_reverse_flag)"
 
   for arg in "$@"; do
     case "$arg" in
       --bucket=*) bucket_filter="${arg#--bucket=}" ;;
       --sort=*)   sort_key="${arg#--sort=}" ;;
       --reverse)  reverse=1 ;;
-      *) ui_error "unknown flag: $arg"; exit 64 ;;
+      *) ui_error "list: unknown flag: $arg"; exit 64 ;;
     esac
   done
 
   case "$sort_key" in
     updated|created|slug|title) ;;
-    *) ui_error "--sort must be one of: updated, created, slug, title"; exit 64 ;;
+    *) ui_error "list: --sort must be one of: updated, created, slug, title"; exit 64 ;;
   esac
 
   local rows; rows=$(query_change_rows all)
@@ -46,10 +45,12 @@ cmd_list_changes() {
       echo
       return 0
     fi
-    ui_header "Foundry" "$(ui_status "$bucket_filter") · $bucket_count · sort: $sort_key $sort_arrow"
+    ui_header "Foundry" \
+      "$(ui_status "$bucket_filter") · $bucket_count · sort: $sort_key $sort_arrow"
     read -r slug_width title_width updated_width <<< "$(render_list_widths)"
     while IFS=$'\t' read -r row_bucket slug title _ updated_epoch _; do
-      render_list_row "$row_bucket" "$slug" "$title" "$updated_epoch" "$slug_width" "$title_width" "$updated_width"
+      render_list_row "$row_bucket" "$slug" "$title" "$updated_epoch" \
+        "$slug_width" "$title_width" "$updated_width"
     done < <(printf '%s\n' "$bucket_rows" | query_sort "$sort_key" "$reverse")
     echo
     return 0
@@ -63,7 +64,7 @@ cmd_list_changes() {
     breakdown+="$(ui_status_icon "$bucket") $bucket_count  "
   done
   ui_header "Foundry" "$total · ${breakdown% } · sort: $sort_key $sort_arrow"
-  local limit; limit="$(config_get list_per_bucket_limit 3)"
+  local limit; limit="$(config_list_per_bucket_limit)"
   for bucket in "${BUCKETS[@]}"; do
     render_bucket_section "$bucket" "$rows" "$sort_key" "$reverse" "$limit"
   done

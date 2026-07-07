@@ -58,5 +58,6 @@ render_page_header() {
   local _project _project_line
   _project=$(basename "$PWD")
   _project_line="$(ui_dim 'project:')  $(ui_paint_bold fd_project "[${_project}]")"
-  render_brand_header "$(ui_dim 'Code change registry — propose, track, implement, ship')" "$_project_line"
+  render_brand_header \
+    "$(ui_dim 'Code change registry — propose, track, implement, ship')" "$_project_line"
 }

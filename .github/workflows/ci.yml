@@ -1,0 +1,68 @@
+# ci.yml — lint + tests on every push/PR.
+#
+# macOS runner matters: /bin/bash there is 3.2, the oldest bash the CLI
+# promises to support (zero-dependency macOS out of the box).  Ubuntu
+# covers GNU coreutils (date -d, tac) on the fallback code paths.
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: manifest sanity (plugin.json / marketplace.json)
+        run: |
+          python3 - <<'PYEOF'
+          import json
+          for path in (".claude-plugin/plugin.json",
+                       ".claude-plugin/marketplace.json"):
+              with open(path) as manifest_file:
+                  manifest = json.load(manifest_file)
+              assert manifest.get("name"), path + ": name missing"
+              print("ok -", path)
+          PYEOF
+
+      - name: install shellcheck
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            if [ "$(uname)" = "Darwin" ]; then
+              brew install shellcheck
+            else
+              sudo apt-get update -q && sudo apt-get install -y shellcheck
+            fi
+          fi
+          shellcheck --version
+
+      - name: shellcheck (style level)
+        run: |
+          shellcheck -S style \
+            scripts/cli/app \
+            scripts/cli/config/*.sh \
+            scripts/cli/spec/*.sh \
+            scripts/cli/spec/lint/*.sh \
+            scripts/cli/store/*.sh \
+            scripts/cli/render/*.sh \
+            scripts/cli/commands/*.sh \
+            scripts/cli/pages/*.sh \
+            scripts/test/*.sh
+
+      - name: smoke suite (system bash — 3.2 on macOS)
+        run: /bin/bash scripts/test/smoke.sh
+
+      - name: picker widget checks
+        run: /bin/bash scripts/test/picker.sh
+
+      - name: store layer checks
+        run: /bin/bash scripts/test/store.sh
+
+      - name: page builder checks
+        run: /bin/bash scripts/test/pages.sh

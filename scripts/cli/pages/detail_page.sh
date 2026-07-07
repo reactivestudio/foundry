@@ -34,7 +34,8 @@
 #   <padding>
 #     <rel>  <actor>  <event>  <details>     (newest first)
 #   <padding>
-#   ▶  Start / ⏸ Pause / ✓ Finish / ↩ Revive / ×  Decline   (bucket-conditional)
+#   ▶  Start / ✓ Done|Finish / ⏸ Pause / ↩ Revive / ×  Decline
+#                       (derived from state-machine transitions-from)
 #   ⇠  Back
 #
 # Section headings use ui_small_caps + fd_title — the same small-caps
@@ -83,7 +84,7 @@ _detail_page_entries() {
   picker_push_info "$(printf '   %s  %s  %s  %s  %s' \
     "$(ui_paint fd_chrome  "$(printf '%-*s' "$_id_width"      "$_id_truncated")")" \
     "$(ui_paint_bold fd_title "$(printf '%-*s' "$_title_width"  "$_title_truncated")")" \
-    "$(ui_paint "$(ui_bucket_color "$bucket")" "$(printf '%-*s' "$_status_width" "$CHANGE_STATUS")")" \
+    "$(ui_paint "$(bucket_color "$bucket")" "$(printf '%-*s' "$_status_width" "$CHANGE_STATUS")")" \
     "$(ui_paint fd_updated "$(printf '%-*s' "$_updated_width" "$_updated_display")")" \
     "$(ui_paint fd_created "$_created_display")")"
   if [[ -n "$CHANGE_REASON" ]]; then
@@ -91,7 +92,7 @@ _detail_page_entries() {
     # long to fit horizontally on the same line.
     picker_push_info "$(printf '   %s  %s' \
       "$(ui_dim "$(printf '%-8s' 'reason')")" \
-      "$(ui_paint "$(ui_bucket_color "$bucket")" "$CHANGE_REASON")")"
+      "$(ui_paint "$(bucket_color "$bucket")" "$CHANGE_REASON")")"
   fi
 
   # ── PROPOSAL ──
@@ -141,7 +142,8 @@ _detail_page_entries() {
         # Blank line → paragraph break, non-filterable info row.
         picker_push_info ''
       else
-        picker_push_filtered_info "   ${_rendered_lines[$_line_index]}" "${_plain_lines[$_line_index]}"
+        picker_push_filtered_info \
+          "   ${_rendered_lines[$_line_index]}" "${_plain_lines[$_line_index]}"
         _shown_count=$((_shown_count + 1))
       fi
     done
@@ -199,35 +201,31 @@ _detail_page_entries() {
   fi
 
   # ── ACTION BAR (bottom) ──
-  # Per user 0.33.14:
-  # - in-progress's "Done" → "Finish" (Done stays exclusive to the
-  #   backlog → done skip path; in-progress uses the active verb).
-  # - labels stay plain — no parenthetical hints.
-  # - ALL icons painted in fd_chrome to match the labels.  The
-  #   previous bucket-target colour-coding (▶ orange, ✓ mint, etc.)
-  #   was visually noisy next to the chrome labels — single-colour
-  #   strip reads more like a tool bar.
+  # Derived live from the state machine's transitions-from list, so the
+  # bar can never offer a move the machine would reject (and a matrix
+  # change shows up here without a second edit).  Label = capitalized
+  # verb from the table ("Start", "Finish", "Done", "Pause", "Revive",
+  # "Decline"); icon per verb below.  ALL icons painted in fd_chrome to
+  # match the labels (0.33.14: single-colour strip reads as a tool bar).
+  # Selecting pushes the "__move__<to-bucket>" sentinel — the dispatch
+  # below turns it straight into cmd_move_change --to=<to-bucket>.
   # +1 padding before the bar so it breathes off the HISTORY block.
   picker_push_padding
   picker_push_padding
-  case "$bucket" in
-    backlog)
-      picker_push_action "$(ui_paint fd_chrome '▶  Start')" "__act_start__"
-      picker_push_action "$(ui_paint fd_chrome '✓  Done')" "__act_finish__"
-      picker_push_action "$(ui_paint fd_chrome '×  Decline')" "__act_decline__"
-      ;;
-    in-progress)
-      picker_push_action "$(ui_paint fd_chrome '✓  Finish')" "__act_finish__"
-      picker_push_action "$(ui_paint fd_chrome '⏸  Pause')" "__act_pause__"
-      picker_push_action "$(ui_paint fd_chrome '×  Decline')" "__act_decline__"
-      ;;
-    done)
-      : # terminal state — only Back below
-      ;;
-    declined)
-      picker_push_action "$(ui_paint fd_chrome '↩  Revive')" "__act_revive__"
-      ;;
-  esac
+  local to verb icon
+  while IFS=$'\t' read -r to verb; do
+    [[ -z "$to" ]] && continue
+    case "$verb" in
+      start)       icon='▶' ;;
+      finish|done) icon='✓' ;;
+      pause)       icon='⏸' ;;
+      revive)      icon='↩' ;;
+      decline)     icon='×' ;;
+      *)           icon='•' ;;
+    esac
+    picker_push_action \
+      "$(ui_paint fd_chrome "$icon  $(ui_capitalize "$verb")")" "__move__$to"
+  done < <("$STATE_MACHINE_SH" transitions-from "$bucket")
   picker_push_action "$(ui_paint fd_chrome '⇠  Back')" "__act_back__"
 }
 
@@ -265,29 +263,24 @@ detail_page() {
           # external pager, no terminal-mode handoff.
           proposal_page "$slug" "$bucket"
           ;;
-        __act_start__)
-          cmd_move_change "$slug" --to=in-progress
-          ui_pause
-          ;;
-        __act_finish__)
-          cmd_move_change "$slug" --to=done
-          ui_pause
-          ;;
-        __act_pause__)
-          cmd_move_change "$slug" --to=backlog
-          ui_pause
-          ;;
-        __act_revive__)
-          cmd_move_change "$slug" --to=backlog
-          ui_pause
-          ;;
-        __act_decline__)
+        __move__declined)
+          # Decline is the one transition that needs input first.
           local reason
           reason=$(ui_input "Reason for declining" --header "Decline $slug") || reason=""
           if [[ -n "$reason" ]]; then
-            cmd_move_change "$slug" --to=declined --reason="$reason"
+            # Subshell: commands exit non-zero on domain refusals (the
+            # plain-mode contract); in the TUI that exit must not take
+            # down the whole app — show the message, pause, re-render.
+            (cmd_move_change "$slug" --to=declined --reason="$reason") || true
             ui_pause
           fi
+          ;;
+        __move__*)
+          # Subshell for the same reason: a state-machine refusal
+          # (e.g. serial invariant on Start) prints its message and
+          # exits 1 — the TUI pauses on it and lives on.
+          (cmd_move_change "$slug" --to="${PICKER_RESULT_SLUG#__move__}") || true
+          ui_pause
           ;;
         __act_back__)
           return
