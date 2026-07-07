@@ -143,13 +143,16 @@ picker_push_action() {
 # (history rows: column colours stay on matches because we don't ask
 # for the dim rebuild).
 picker_push_filtered_info() {
+  # $2 is optional — bind it before taking ${#…}: bare ${#2} with no
+  # second argument trips `set -u` on bash 5.x (3.2 silently gave 0).
+  local _plain_title="${2:-}"
   PICKER_ENTRIES+=("$1")
   PICKER_SLUGS+=("")
   PICKER_TYPES+=("info")
   PICKER_FILTERABLE+=("1")
   PICKER_BUCKET+=("")
-  PICKER_TITLE+=("${2:-}")
-  PICKER_TITLE_WIDTH+=("${#2}")
+  PICKER_TITLE+=("$_plain_title")
+  PICKER_TITLE_WIDTH+=("${#_plain_title}")
   PICKER_LEFT+=("")
   PICKER_LEFT_HOVER+=("")
   PICKER_RIGHT+=("")

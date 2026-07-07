@@ -13,6 +13,14 @@
 # Substitution uses bash parameter expansion, so values containing
 # &, /, |, $, etc. are safe — no sed-replacement hazards.
 
+# ...except that bash 5.2 (GNU/Linux) gave `&` a sed-style special
+# meaning inside ${var//pattern/replacement} — it expands to the match,
+# which would corrupt values containing '&' (caught by CI on ubuntu;
+# macOS bash 3.2 has no such feature).  Turn it off for the whole
+# sourcing process: the CLI targets 3.2 semantics everywhere.  The
+# shopt doesn't exist before 5.2 — hence the silent fallback.
+shopt -u patsub_replacement 2>/dev/null || true
+
 render_template() {
   local source_file="$1" destination_file="$2"
   shift 2
