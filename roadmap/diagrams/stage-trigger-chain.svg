@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 800" role="img">
+<title>Цепочка запуска стадии</title>
+<style>
+text{font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
+.th{font-size:14px;font-weight:600;fill:#444441}
+.ts{font-size:12px;fill:#7a7a72}
+.arr{stroke:#888780;stroke-width:1.5;fill:none}
+.pink>rect{fill:#FBEAF0;stroke:#993556}
+.pink .th{fill:#4B1528}.pink .ts{fill:#993556}
+.gray>rect{fill:#F1EFE8;stroke:#5F5E5A}
+.gray .th{fill:#2C2C2A}.gray .ts{fill:#5F5E5A}
+.purple>rect{fill:#EEEDFE;stroke:#534AB7}
+.purple .th{fill:#26215C}.purple .ts{fill:#534AB7}
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#888780" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g class="pink"><rect x="120" y="8" width="12" height="12" rx="3" stroke-width="1"/></g>
+<text class="ts" x="138" y="14" dominant-baseline="central">ты</text>
+<g class="gray"><rect x="230" y="8" width="12" height="12" rx="3" stroke-width="1"/></g>
+<text class="ts" x="248" y="14" dominant-baseline="central">механика</text>
+<g class="purple"><rect x="390" y="8" width="12" height="12" rx="3" stroke-width="1"/></g>
+<text class="ts" x="408" y="14" dominant-baseline="central">агент</text>
+<g class="pink"><rect x="180" y="40" width="320" height="56" rx="8" stroke-width="1"/><text class="th" x="340" y="59" text-anchor="middle" dominant-baseline="central">1 · Ты: «запустить стадию»</text><text class="ts" x="340" y="78" text-anchor="middle" dominant-baseline="central">из desktop или /foundry:stage</text></g>
+<line x1="340" y1="96" x2="340" y2="126" class="arr" marker-end="url(#arrow)"/>
+<g class="gray"><rect x="180" y="132" width="320" height="56" rx="8" stroke-width="1"/><text class="th" x="340" y="151" text-anchor="middle" dominant-baseline="central">2 · foundry CLI — state machine</text><text class="ts" x="340" y="170" text-anchor="middle" dominant-baseline="central">какая стадия следующая → active</text></g>
+<line x1="340" y1="188" x2="340" y2="218" class="arr" marker-end="url(#arrow)"/>
+<g class="gray"><rect x="180" y="224" width="320" height="56" rx="8" stroke-width="1"/><text class="th" x="340" y="243" text-anchor="middle" dominant-baseline="central">3 · desktop запускает claude -p</text><text class="ts" x="340" y="262" text-anchor="middle" dominant-baseline="central">в каталоге проекта</text></g>
+<line x1="340" y1="280" x2="340" y2="310" class="arr" marker-end="url(#arrow)"/>
+<g class="purple"><rect x="180" y="316" width="320" height="56" rx="8" stroke-width="1"/><text class="th" x="340" y="335" text-anchor="middle" dominant-baseline="central">4 · агент стадии работает</text><text class="ts" x="340" y="354" text-anchor="middle" dominant-baseline="central">сессия видна в claude-desktop</text></g>
+<line x1="340" y1="372" x2="340" y2="402" class="arr" marker-end="url(#arrow)"/>
+<g class="purple"><rect x="180" y="408" width="320" height="56" rx="8" stroke-width="1"/><text class="th" x="340" y="427" text-anchor="middle" dominant-baseline="central">5 · пишет артефакт versions/vN</text><text class="ts" x="340" y="446" text-anchor="middle" dominant-baseline="central">входы — по манифесту ссылок</text></g>
+<line x1="340" y1="464" x2="340" y2="494" class="arr" marker-end="url(#arrow)"/>
+<text class="ts" x="566" y="480" text-anchor="end" dominant-baseline="central">замечания → новый луп</text>
+<g class="gray"><rect x="180" y="500" width="320" height="56" rx="8" stroke-width="1"/><text class="th" x="340" y="519" text-anchor="middle" dominant-baseline="central">6 · hook: снимок + review</text><text class="ts" x="340" y="538" text-anchor="middle" dominant-baseline="central">сигнал приложению</text></g>
+<line x1="340" y1="556" x2="340" y2="586" class="arr" marker-end="url(#arrow)"/>
+<g class="pink"><rect x="180" y="592" width="320" height="56" rx="8" stroke-width="1"/><text class="th" x="340" y="611" text-anchor="middle" dominant-baseline="central">7 · ревью в foundry-desktop</text><text class="ts" x="340" y="630" text-anchor="middle" dominant-baseline="central">правки, комментарии с метками</text></g>
+<line x1="340" y1="648" x2="340" y2="678" class="arr" marker-end="url(#arrow)"/>
+<g class="pink"><rect x="180" y="684" width="320" height="56" rx="8" stroke-width="1"/><text class="th" x="340" y="703" text-anchor="middle" dominant-baseline="central">8 · вердикт</text><text class="ts" x="340" y="722" text-anchor="middle" dominant-baseline="central">approve или замечания</text></g>
+<path d="M500 712 L572 712 L572 344 L508 344" class="arr" marker-end="url(#arrow)"/>
+<line x1="340" y1="740" x2="340" y2="766" class="arr" marker-end="url(#arrow)"/>
+<text class="ts" x="340" y="784" text-anchor="middle" dominant-baseline="central">approve → стадия completed → следующая стадия</text>
+</svg>
