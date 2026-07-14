@@ -1,14 +1,18 @@
 # Foundry — Roadmap
 
-Живой документ. Сейчас детализированы только первые две фазы — **фреймворк**, в котором будем работать. Остальное намечено одной строкой каждое, детализируется по мере прохождения.
+Живой документ. Каждая фаза описана структурно: цель, что добавляем и в каком
+компоненте, какие правила начинают действовать, где стоит human gate, что
+считается закрытием. Детализация уточняется по мере прохождения — но скелет
+всех фаз зафиксирован здесь.
 
 ---
 
 ## Что строим
 
-Claude Code marketplace plugin, реализующий CRISPY methodology для solo senior/staff инженера на Kotlin / Spring Boot.
+Claude Code marketplace plugin, реализующий CRISPY methodology для solo
+senior/staff инженера на Kotlin / Spring Boot.
 
-**Источники** (полные документы в корне):
+**Источники** (полные документы рядом):
 - **[CRISPY.md](CRISPY.md)** — primary канон (Dex Horthy, обновлённый RPI)
 - **[12-FACTOR.md](12-FACTOR.md)** — engineering principles
 - **[NO-VIBES.md](NO-VIBES.md)** — context engineering для coding agents
@@ -16,87 +20,77 @@ Claude Code marketplace plugin, реализующий CRISPY methodology для
 
 ---
 
-## Инварианты framework'а (применяем с Phase 0)
+## Инварианты framework'а
 
-1. **State в файлах, не в LLM памяти.** Возобновление — из артефактов на диске. ([12-FACTOR §6](12-FACTOR.md), [CRISPY §11](CRISPY.md))
+1. **State в файлах, не в LLM-памяти.** Возобновление — из артефактов на диске. ([12-FACTOR §6](12-FACTOR.md), [CRISPY §11](CRISPY.md))
 2. **Own your control flow.** State machine на bash, не «промпт решает что дальше». ([12-FACTOR §5](12-FACTOR.md), [CRISPY §8](CRISPY.md))
-3. **Каждый агент ≤40 инструкций** (применимо начиная с Phase 2). ([CRISPY §1](CRISPY.md))
-4. **Артефакт стадии — это её compact** (resume точка). Никаких отдельных `compact.md`. ([CRISPY §11](CRISPY.md))
-5. **Trajectory matters** — failure = first-class артефакт, не «продолжаем в том же контексте». ([NO-VIBES §4](NO-VIBES.md))
-6. **Sub-agents — для изоляции, не для ролей.** Только researcher как sub-agent. ([NO-VIBES §6](NO-VIBES.md), [12-FACTOR §10](12-FACTOR.md))
+3. **Каждый агент ≤40 инструкций.** ([CRISPY §1](CRISPY.md))
+4. **Артефакт стадии — это её compact** (resume-точка). Никаких отдельных `compact.md`. ([CRISPY §11](CRISPY.md))
+5. **Trajectory matters** — failure = first-class артефакт. ([NO-VIBES §4](NO-VIBES.md))
+6. **Sub-agents — для изоляции, не для ролей.** ([NO-VIBES §6](NO-VIBES.md), [12-FACTOR §10](12-FACTOR.md))
+7. **Система дообучается, но только через approved patches.** Правки человека
+   на gate'ах собираются механикой (не дисциплиной); калибровка превращает
+   систематические правки в патчи skills/lint; ни один патч не применяется
+   без approve. См. «Learning loop» ниже.
 
 ---
 
-## Правила и enforcement — как доктрина становится кодом
+## Механизмы enforcement
 
-Принципы из 4 докладов имеют ценность **только если framework их реально enforce'ит**, не просто документирует. У нас 9 типов механизмов:
+Принципы имеют ценность только если framework их реально enforce'ит:
 
 | # | Механизм | Тип | Где живёт |
 |---|----------|-----|-----------|
-| M1 | **State machine** | hard (bash) | `scripts/cli/store/tracking.sh`, `scripts/cli/spec/state-machine.sh` |
+| M1 | **State machine** | hard (bash) | `scripts/cli/spec/state-machine.sh`, `scripts/cli/store/tracking.sh` |
 | M2 | **Tool restrictions** | hard (Claude Code) | `allowed-tools:` в frontmatter агентов/команд |
 | M3 | **Sub-agent isolation** | structural | Task tool invocation с restricted prompt |
-| M4 | **Bash wrappers** | hard (через allowed-tools) | build/test-обёртки — пишутся на Phase 6 под сборщик целевого проекта |
+| M4 | **Bash wrappers** | hard (через allowed-tools) | build/test-обёртки под сборщик целевого проекта |
 | M5 | **Hooks** | intervention | `hooks/*.sh` через `hooks.json` |
 | M6 | **Agent prompts** | soft | тело `agents/*.md` |
 | M7 | **Skill content** | soft | `skills/**/SKILL.md` |
-| M8 | **Validation scripts** | post-action | `scripts/cli/spec/lint/*.sh` на review gate |
+| M8 | **Validation scripts** | post-action | `scripts/cli/spec/lint/*.sh` на stage gate |
 | M9 | **Frontmatter config** | declarative | `model:`, `allowed-tools:`, `description:` |
+| M10 | **Calibration loop** | gated feedback | `.foundry/feedback/` + `/foundry:calibrate` |
 
-**Hard** — нельзя обойти. **Soft** — агент следует потому что так написано в prompt.
-
-### Карта ключевых правил → mechanisms → фаза
-
-| Правило | Источник | Mechanisms | Phase |
-|---------|----------|-----------|:-:|
-| Human gate на каждой стадии (не аутсорсить мышление) | [CRISPY §9, §13](CRISPY.md) | **M1** | **1** |
-| Serial execution (один in-progress change) | [MISSIONS §7](MISSIONS.md) | **M1** | **1** |
-| State в файлах, не в LLM памяти | [12-FACTOR §6](12-FACTOR.md) | **M1** | **1** |
-| ≤40 инструкций на агента | [CRISPY §1](CRISPY.md) | **M8** (instruction counter — static, на CI) | **2** |
-| Sub-agent возвращает `file:line`, ≤30 строк | [NO-VIBES §6](NO-VIBES.md) | **M8** (generic line-count) — потом M3+M6+M7 в Phase 3 | **2** |
-| Research = только факты, без opinion-words | [CRISPY §3](CRISPY.md) | **M8** (`opinion-words.sh` grep `recommend\|should\|better`) — потом M6+M7 в Phase 3 | **2** |
-| Design discussion ≤220 строк | [CRISPY §4](CRISPY.md) | **M8** (generic line-count) — потом M6 в Phase 4 | **2** |
-| Structure outline ≤100 строк, vertical | [CRISPY §5, §6](CRISPY.md) | **M8** (line-count + horizontal-pattern lint) — потом M6 в Phase 5 | **2** |
-| Compact errors — PASS/FAIL + первые 20 строк | [12-FACTOR §7](12-FACTOR.md), [NO-VIBES §8 анти](NO-VIBES.md) | **M4** (build/test-обёртки; первая gradle-версия выпилена 2026-07-06 как преждевременная) + M2 (сборщик напрямую запрещён) | 6 |
-| Questions/research БЕЗ знания задачи | [CRISPY §3](CRISPY.md) | **M2** (researcher не читает `proposal.md`) + M3 + M6 + M7 + M8 (\*reuse Phase 2\*) | 3 |
-| Не читать whole files | [NO-VIBES](NO-VIBES.md) anti | M7 (skill учит Grep/Read с offset) | 3+ |
-| Validation Contract до кода | [MISSIONS §4](MISSIONS.md) | **M1** (design не → completed без VC файла) | 4 |
-| Plan со снипетами до/после, ≤7 шагов | [CRISPY §7](CRISPY.md) | M6 + **M8** (schema validation) | 6 |
-| Structured handoffs (Missions schema) | [MISSIONS §6](MISSIONS.md) | M6 + **M8** (schema validation на stage completion) | 6 |
-| Read code, not plan | [CRISPY §9](CRISPY.md) | UX flow в `/workflow`: diff перед approve | 6-7 |
-| Adversarial verifier (без design/plan) | [MISSIONS §5](MISSIONS.md) | **M2** (`allowed-tools:` без `design.md`/`plan.md`) | 7 |
-| Model per role (droid whispering) | [MISSIONS §9](MISSIONS.md) | **M9** (`model:` frontmatter) | 10 |
-
-**Жирным** — hard enforcement (структурно невозможно обойти).
-
-### Что фреймворк НЕ enforce'ит (sentinel: discipline + Claude Code built-ins)
-
-| Правило | Источник | Почему не enforce | Замена |
-|---|---|---|---|
-| Smart Zone (≤35% context fill для новичков, ≤60% experienced) | [NO-VIBES §5](NO-VIBES.md), [CRISPY Q&A](CRISPY.md) | Real token count недоступен mid-session; порог fuzzy (Dex сам ходит до 60%); эвристика char-count врёт на 20-30%; Goodhart's law. | Claude Code's built-in `/context` + привычка |
-| «Wrap up при degradation» | [NO-VIBES §1, §4](NO-VIBES.md) | Qualitative («I apologize for the confusion» паттерн), не сводится к числу | Engineer's judgement — framework не блокирует |
-| Trajectory protection (>2 ошибки подряд = новый контекст) | [NO-VIBES §4](NO-VIBES.md) | Хук-счётчик выпилен 2026-07-06: stderr-детекция ошибок шумная, jq-зависимость, потребителя нет до Phase 6 — преждевременный инструментарий | Дисциплина: заметил серию ошибок → новый контекст руками; пересмотреть на Phase 6 |
-| Compaction infra | [CRISPY §11](CRISPY.md) — явно retract | Artifacts per stage = resume точки, compaction не нужна | — |
-
-### Worked example: research isolation
-
-Правило ([NO-VIBES §6](NO-VIBES.md), [CRISPY §3](CRISPY.md)): research stage возвращает факты в формате `file:line — что там`, ≤30 строк, без opinion'ов, **без знания задачи**.
-
-В framework'е enforce'им **пятью механизмами одновременно:**
-
-1. **M2 (tool restrictions):** researcher агент имеет `allowed-tools: Read(.foundry/changes/*/questions.md), Read(src/**), Grep, Glob`. **Не имеет права читать `proposal.md`** — это hard enforcement через Claude Code.
-2. **M3 (sub-agent isolation):** researcher делегирует чтение кодебазы research sub-agent'у через Task tool — свежий контекст. Sub-agent тоже без `proposal.md`.
-3. **M6 (agent prompt):** `agents/researcher.md` явно специфицирует output format и запрещённые слова.
-4. **M7 (skill):** `skills/spec/research-contract/SKILL.md` — детальный контракт + анти-паттерны.
-5. **M8 (validation):** `scripts/cli/spec/lint/`-скрипт для research грепает на `recommend|should|better|следует|рекомендую`, считает строки. Запускается перед approve gate — `tracking.sh` отказывается выполнить `set-stage research completed` если lint fail.
-
-Один принцип = пять слоёв, работающих вместе. **Это и есть "framework enforce'ит доктрину".** Если убрать любой слой — discipline ослабевает (агент может проигнорировать prompt, но не может обойти M2 + M8).
+**Hard** — нельзя обойти. **Soft** — агент следует, потому что так написано в
+prompt. Один принцип enforce'ится несколькими слоями сразу — см. worked
+example в конце документа.
 
 ---
 
-## Pipeline (target shape — детализируется по фазам)
+## Learning loop — как система дообучается
 
-CRISPY 8 фаз + verify из Missions:
+Каждый human gate производит не только «дальше/назад», но и обучающий сигнал.
+Цикл:
+
+1. **Снапшот.** Когда стадия переходит `active → review`, CLI снимает копию
+   артефакта. Механика, не дисциплина: сигнал собирается всегда.
+2. **Дельта.** Человек правит артефакт прямо во время ревью (или approve'ит
+   как есть). На переходе `review → completed` CLI diff'ает снапшот с
+   финальной версией и пишет дельту в `.foundry/feedback/<stage>/` +
+   событие в history. Approve без правок — тоже сигнал («образец хорошего»).
+3. **Калибровка.** `/foundry:calibrate <stage>` — LLM-команда: читает
+   накопленные дельты стадии, ищет систематику (одна и та же правка ≥2 раз)
+   и предлагает патч:
+   - урок, выразимый детерминированной проверкой → **lint-правило (M8)**;
+   - урок-формулировка («в design всегда фиксировать rollback-план») →
+     **skill стадии (M7)** или инструкция агенту (M6) — с учётом бюджета ≤40;
+   - проектно-специфичный урок → аддендум в `.foundry/skills/<stage>.md`
+     целевого проекта (плагин читает его поверх глобального skill).
+4. **Meta-gate.** Патч применяется только после approve. Skills под git —
+   откат тривиален. `instruction-count` на CI не даёт калибровке раздуть
+   промпты.
+
+Правило приоритета: всё, что можно выразить lint'ом — выражаем lint'ом;
+skill — для того, что проверке не поддаётся; ничего не остаётся «в голове».
+
+---
+
+## Pipeline (target shape)
+
+CRISPY 8 фаз + verify из Missions. Документация — не отдельная стадия:
+CHANGELOG/README-правки входят в PR (стадия 9), ADR и грабли — в память
+инженера вне репозитория.
 
 | # | Стадия | Producer | LLM? | Human gate |
 |---|--------|----------|------|------------|
@@ -108,202 +102,347 @@ CRISPY 8 фаз + verify из Missions:
 | 6 | worktree | bash | no | — |
 | 7 | implement | implementor (per task) | yes | **Code review** |
 | 8 | verify | verifier (fresh, adversarial) | yes | Approve report |
-| 9 | pr | bash + template | no | Final approve |
+| 9 | pr + docs | bash + template | no | Final approve |
 
-[CRISPY §12](CRISPY.md) — phase'ы; [MISSIONS §5](MISSIONS.md) — adversarial verifier.
+[CRISPY §12](CRISPY.md) — стадии; [MISSIONS §5](MISSIONS.md) — adversarial verifier.
 
 ---
 
-## Phase 0 — Plugin skeleton
+## Категории компонентов
 
-**Цель:** валидный пустой marketplace plugin, устанавливается локально без ошибок.
+Каждая фаза описывает deliverables в этих категориях:
 
-### Deliverable
+| Категория | Что это | Где живёт |
+|---|---|---|
+| Скрипты | bash-логика, вся детерминированная механика | `scripts/cli/*` |
+| Агенты | producer-промпты стадий, ≤40 инструкций | `agents/*.md` |
+| Skills | контракты и справочники для LLM | `skills/**/SKILL.md` |
+| Команды | промпт-адаптеры входа из сессии Claude Code | `commands/*.md` |
+| Правила | enforcement-проводка: что с этой фазы нельзя обойти | M1–M10 |
+| Артефакты | файлы, появляющиеся в change целевого проекта | `.foundry/changes/<slug>/` |
+| Калибровка | вклад фазы в learning loop | `.foundry/feedback/`, skills |
 
-- `.claude-plugin/plugin.json` — минимальный manifest
-- `.claude-plugin/marketplace.json` — минимальный marketplace descriptor
-- Пустые директории: `agents/`, `skills/`, `commands/`, `scripts/`, `hooks/` (с `.gitkeep`)
-- `hooks/hooks.json` — пустой skeleton (без хуков пока)
-- `README.md` — одна параграф «что это»
+---
 
-### Структура корня после Phase 0
+## Статус фаз
 
-```
-foundry/
-├── .claude-plugin/
-│   ├── plugin.json
-│   └── marketplace.json
-├── agents/.gitkeep
-├── skills/.gitkeep
-├── commands/.gitkeep
-├── scripts/.gitkeep
-├── hooks/
-│   └── hooks.json
-├── 12-FACTOR.md
-├── CRISPY.md
-├── MISSIONS.md
-├── NO-VIBES.md
-├── README.md
-└── ROADMAP.md
-```
+| Фаза | Содержание | Статус |
+|---|---|---|
+| 0 | Plugin skeleton | ✅ закрыта |
+| 1 | Change lifecycle (bucket-уровень, no LLM) | код готов; **STOP открыт: dogfood** |
+| 2 | Стадийный субстрат: stage state machine + lint + feedback | следующая |
+| 3 | Стадии questions + research | — |
+| 4 | Стадия design + Validation Contract + первый calibrate | — |
+| 5 | Стадия structure | — |
+| 6 | plan + worktree + implement + pr/docs | — |
+| 7 | Стадия verify | — |
+| 8 | /quickfix bypass | — |
+| 9 | Интеграции: Jira ↔ foundry | — |
+| 10 | Domain layer: Kotlin / Spring / distributed | — |
+| 11 | Marketplace polish + model per role | — |
 
-### Проверки
+### Параллельный трек: foundry-desktop (обязателен — ревью живёт в нём)
 
-- [ ] `claude plugin validate ./` проходит без ошибок
-- [ ] Локальная установка чистая (`claude plugin install ./` или эквивалент)
-- [ ] `/context` в фреш-сессии показывает overhead плагина ≤200 токенов
-- [ ] `git status` чистый после установки
+Ревью артефактов — обязательная часть системы, поэтому приложение — не
+«потом», а параллельный трек с вехами, синхронизированными с фазами ядра.
+Концепт и архитектура — [foundry-desktop.md](foundry-desktop.md); отдельный
+репозиторий; стек (Compose for Desktop vs Spring Boot + SPA) решить до D1.
 
-### STOP
+| Веха | Содержание | Синхронизация с ядром |
+|---|---|---|
+| D0 | Спайк петли: fs-watch `.foundry/`, рендер артефакта, approve через CLI, прогон `claude -p` | параллельно фазе 2 |
+| D1 | **Review MVP**: change'и проекта, артефакт стадии, diff снапшот↔текущий, комментарии с метками, approve / request-changes | готов к первым артефактам (фаза 3), **обязателен к фазе 4** |
+| D2 | Оркестрация: запуск стадий из приложения, live-статус, доска по бакетам | фазы 5–6 |
+| D3 | Калибровка UI: очередь дельт, черновики патчей, approve | вместе с первым calibrate (фаза 4+), полноценно к фазе 7 |
+| D4 | Аналитика (счётчик лупов) + мультипроект (инбокс ревью) | после фазы 6 |
 
-Не идём в Phase 1, пока пустой плагин не ставится чисто и не валидируется.
+Ревью в `$EDITOR` остаётся как escape-hatch (механика снапшот/дельта/вердикт
+одна и та же) — но целевая поверхность ревью с D1 — приложение.
+
+---
+
+## Phase 0 — Plugin skeleton ✅
+
+Валидный пустой marketplace-плагин: manifest'ы, скелет директорий, README.
+Закрыта: `claude plugin validate` чистый, установка локально работает.
 
 ---
 
 ## Phase 1 — Change lifecycle framework (no LLM)
 
-**Цель:** управлять change'ами полностью без LLM-вызовов. Это substrate + **первый слой enforcement (M1)**, на котором живут все последующие фазы.
+**Цель:** управлять change'ами полностью без LLM. Substrate + первый hard
+enforcement (M1) на bucket-уровне.
 
-**Enforcement-вклад фазы:** M1 (state machine) — hard enforcement для:
-- Human gate как обязательный transition (агент не может сам пометить стадию `completed`)
-- Serial execution (один in-progress change за раз)
-- Невозможность обратных transitions (`done` → `backlog` запрещён)
-- Stage state machine (нельзя `completed` без артефакта, проверяется в Phase 4+ когда появятся артефакты)
+**Сделано:**
 
-### Концепция
+| Категория | Что есть |
+|---|---|
+| Скрипты | слои `scripts/cli/`: config / spec (state-machine, slug, lint) / store (change CRUD, tracking, index, query) / render / commands / pages; TUI-пикер; `--plain` |
+| Команды | `/foundry:change`, `/foundry:setup` — адаптеры без логики, мутации только через CLI |
+| Skills | `spec/lifecycle`, `spec/naming`, `spec/lint` |
+| Правила | M1: переходы бакетов только через state machine; serial execution (один in-progress); `done` терминален; decline требует причину |
+| Артефакты | `proposal.md`, flat `tracking.yaml`, append-only `history.log` |
+| Качество | 107 проверок в 4 сьютах (`tests/`), CI ubuntu+macos (bash 3.2), pre-commit hook, shellcheck-чистота |
 
-Каждый **change** — единица работы, проходящая через стадии CRISPY pipeline.
-
-**Два уровня состояния:**
-
-1. **Bucket state** (положение в файловой системе):
-   - `backlog` — создан, не начат
-   - `in-progress` — активная работа
-   - `done` — завершён
-   - `declined` — отклонён с причиной
-
-2. **Stage state** (per стадия в `tracking.yaml`):
-   - `required` — стадия обязательна
-   - `skipped` — стадия пропущена
-   - `active` — стадия в работе
-   - `completed` — артефакт стадии готов и approved
-
-Phase 1 **не коммитит** конкретный список стадий — он приходит позже (Phase 2+ добавляет questions/research, Phase 3 добавляет design, etc.). `tracking.yaml` хранит список стадий как массив, framework агностичен к именам.
-
-### Файловая раскладка в target проекте
-
-```
-.foundry/
-├── changes/
-│   ├── backlog/
-│   │   └── <slug>/
-│   │       ├── tracking.yaml
-│   │       └── proposal.md
-│   ├── in-progress/
-│   ├── done/
-│   ├── declined/
-│   └── .template/
-│       ├── tracking.yaml
-│       └── proposal.md
-```
-
-Артефакты стадий (`questions.md`, `research.md` и т.д.) добавятся в директорию change'а в Phase 2+.
-
-### Схема `tracking.yaml`
-
-```yaml
-slug: add-rate-limiting
-title: Rate limiting for /api/orders
-created_at: 2026-05-24T10:00:00Z
-updated_at: 2026-05-24T10:00:00Z
-status: backlog
-stages: []   # пустой массив — стадии добавляются Phase 2+
-history:
-  - at: 2026-05-24T10:00:00Z
-    actor: user
-    event: created
-```
-
-Когда Phase 2 добавит первую стадию, `stages:` пополнится:
-```yaml
-stages:
-  - name: questions
-    state: todo
-```
-
-### Deliverable
-
-**Bash скрипты** (`scripts/`):
-- `change.sh` — CRUD по change'ам: `new`, `locate`, `move`, `list`
-- `tracking.sh` — read/write `tracking.yaml`: `get-bucket`, `set-bucket`, `add-stage`, `set-stage`, `append-history`
-- `state-machine.sh` — валидация переходов bucket'ов и stage state'ов
-
-**Команды** (`commands/`):
-- `change.md` — `/foundry:change` (browse + drill + state mutations через AskUserQuestion)
-- `setup.md` — `/foundry:setup` (скаффолд `.foundry/` в целевом проекте)
-
-**Skills** (`skills/`):
-- `spec/lifecycle/SKILL.md` — state machine reference, schema YAML
-- `spec/naming/SKILL.md` — раскладка `.foundry/`, naming, slug rules
-
-**Template** (внутри `commands/setup.md` создаёт):
-- `.foundry/changes/.template/tracking.yaml`
-- `.foundry/changes/.template/propose.md`
-- `.foundry/changes/{backlog,in-progress,done,declined}/.gitkeep`
-
-### Проверки (exercise на реальных change'ах)
-
-- [ ] `/foundry:setup` в пустом проекте создаёт `.foundry/` структуру
-- [ ] `/change "rate limit for orders"` создаёт change в `backlog/` с tracking.yaml и propose.md
-- [ ] Создать 3 change'а с разными slug'ами
-- [ ] Переместить один: `backlog → in-progress` (через `/foundry:change` drill + AskUserQuestion)
-- [ ] Переместить один в `declined` с причиной — поле `decline_reason` в YAML
-- [ ] `tracking.sh` отказывается выполнить invalid transition (`done → backlog`)
-- [ ] `/foundry:change` (без аргументов) показывает таблицу всех change'ей с их bucket'ом
-- [ ] `history:` в YAML корректно накапливается на каждой мутации
-
-### Применяемые принципы
-
-- [12-FACTOR §5](12-FACTOR.md) — все state transitions через bash, не через LLM
-- [12-FACTOR §6](12-FACTOR.md) — state в файлах, любая команда может прочитать актуальное
-- [NO-VIBES §8](NO-VIBES.md) — не используем слово "spec" в именах артефактов (propose, change — нейтральные)
-
-### STOP
-
-Не идём в Phase 2, пока:
-1. На реальном проекте можно создать-провести-завершить change без LLM
-2. State machine ловит invalid transitions
-3. `/foundry:change` drill UX работает (можно из него мутировать состояние)
-
-Это базовый каркас. Без него LLM-стадии бессмысленны — они должны куда-то писать артефакты и обновлять state.
+**STOP (открыт):** прогнать реальный change на живом проекте:
+`foundry new` → работа → `move done`. Собрать трение — оно входной материал
+для фазы 2. Не начинаем фазу 2 до этого.
 
 ---
 
-## Phase 2+ — намёткой
+## Phase 2 — Стадийный субстрат: stages + lint + feedback
 
-Детализируется по мере прохождения. Список даётся чтобы видеть направление, не как commitment:
+**Цель:** вся механика, на которой живут LLM-стадии, — до того как написан
+первый агент. Stage-уровень state machine (M1), полный lint-набор (M8),
+сбор feedback-дельт (M10-основание).
 
-- **Phase 2** — **M8 substrate**: generic lint scripts (instruction count, line count, opinion-words, horizontal-pattern). Reusable infra **до** producer-агентов. Build/test-обёртки (M4) переехали в Phase 6 — писать под сборщик, когда появится потребитель. [CRISPY §1, §3, §4, §5, §7](CRISPY.md), [12-FACTOR §7](12-FACTOR.md), [NO-VIBES §4, §6](NO-VIBES.md). *(Прежний план «Metrics через OTel» drop'нут — runtime token metrics не поддержаны докладами, см. секцию «Что фреймворк НЕ enforce'ит» выше.)*
-- **Phase 3** — Stages `questions` + `research`: валидация objectivity-разделения. Plug в Phase 2 lint substrate. [CRISPY §3](CRISPY.md)
-- **Phase 4** — Stage `design`: главный leverage point, deep human review. [CRISPY §4](CRISPY.md). Здесь же — Validation Contract init. [MISSIONS §4](MISSIONS.md)
-- **Phase 5** — Stage `structure`: vertical outline. [CRISPY §5, §6](CRISPY.md)
-- **Phase 6** — Stages `plan` + `worktree` + `implement` (per-task RPI loop). Structured handoffs. [MISSIONS §6](MISSIONS.md)
-- **Phase 7** — Stage `verify` (creator-verifier adversarial). [MISSIONS §3, §5](MISSIONS.md)
-- **Phase 8** — `/quickfix` bypass для тривиальных задач. [NO-VIBES §14](NO-VIBES.md)
-- **Phase 9** — Domain layer: Kotlin/Spring/distributed skills
-- **Phase 10** — Marketplace polish + droid whispering (model per role). [MISSIONS §9](MISSIONS.md)
+**Enforcement-вклад:** M1 расширяется на стадии; M8 полный; M10 — сбор сигнала.
+
+| Категория | Добавляем |
+|---|---|
+| Скрипты | `store/tracking.sh`: `add-stage` / `set-stage` / список стадий в `tracking.yaml`; `spec/state-machine.sh`: stage-переходы `required → active → review → completed` (+ `skipped`), снапшот артефакта на `active → review`, дельта на `review → completed`; `store/feedback.sh`: запись/чтение дельт; `spec/lint/instruction-count.sh` (бюджет ≤40 на агента), `spec/lint/horizontal-pattern.sh` (vertical plans); уже есть: `line-count.sh`, `opinion-words.sh` |
+| Команды | — (субстрат не имеет пользовательского входа, кроме существующих) |
+| Правила | `set-stage completed` невозможен без прохождения lint-гейта стадии и без артефакта; CI гоняет `instruction-count` на `agents/*.md` (пока их нет — правило ждёт первых агентов) |
+| Артефакты | `stages:` в `tracking.yaml`; `feedback/<stage>/` в сторе проекта |
+| Хранилище | **переезд в глобальный стор**: `~/.foundry/projects/<id>/` + `registry.yaml` (cwd→id, worktree через `git-common-dir`); в репозитории проекта — ничего; `setup` = регистрация + скаффолд + permissions `~/.foundry/**`. Мигрировать до первых артефактов — пустое хранилище дешевле живого |
+| Калибровка | дельты собираются механикой с первой же LLM-стадии; формат записи: verdict (approved / edited / rejected) + diff + опциональная нота человека |
+
+**Проверки:** stage-переходы валидируются и покрыты тестами; снапшот/дельта
+работают на искусственном артефакте; все четыре lint'а имеют тесты;
+инвалидный stage-переход невозможен из CLI и из `/foundry:change`.
+
+**STOP:** lint-набор и stage-механика полностью покрыты тестами на обеих
+платформах CI. Ни одного агента в этой фазе не пишем.
 
 ---
 
-## Open questions (фиксируем по мере необходимости)
+## Phase 3 — Стадии questions + research
 
-- Schema YAML — flat или nested `stages:`? (флэт легче парсить awk'ом)
-- Slug generation — auto из title (LLM) или ручной (user)?
-- `tracking.yaml` history — append-only лог или ротация?
-- Multi-change параллелизм — один in-progress за раз или несколько? (для solo, по [MISSIONS §7](MISSIONS.md), serial проще)
+**Цель:** первая пара LLM-стадий и главная инновация CRISPY — изоляция
+research от задачи ради фактов вместо мнений. ([CRISPY §3](CRISPY.md))
 
-Эти вопросы решаются на Phase 1, не сейчас.
+**Enforcement-вклад:** M2 + M3 + M6 + M7 впервые в бою, M8 подключается к стадиям.
+
+| Категория | Добавляем |
+|---|---|
+| Скрипты | проводка стадий в CLI: `foundry show` отображает стадии и их состояние; stage-подсказки из state machine |
+| Агенты | `agents/questioner.md` — видит proposal, генерирует вопросы к кодебазе без упоминания решения; `agents/researcher.md` — видит **только вопросы**, отвечает фактами `file:line`, делегирует чтение кодебазы sub-agent'у (M3) |
+| Skills | `skills/spec/questions-contract/SKILL.md`, `skills/spec/research-contract/SKILL.md` — формат, анти-паттерны, примеры |
+| Команды | `commands/stage.md` — `/foundry:stage`: запустить следующую стадию активного change; какая стадия следующая — решает state machine, не LLM |
+| Правила | M2: researcher и его sub-agent в `allowed-tools:` **не имеют** `Read(proposal.md)`; M8 на gate: `opinion-words` + `line-count ≤30` для research; M1: `review → completed` только человеком |
+| Артефакты | `questions.md`, `research.md` |
+| Калибровка | дельты по обеим стадиям копятся с первого прогона (механика фазы 2) |
+
+**Проверки:** на реальном change: questions не содержит решения; research —
+только факты, lint зелёный; попытка researcher'а прочитать proposal
+блокируется allowed-tools.
+
+**STOP:** пара questions/research прогнана на ≥2 реальных change'ах и
+дельты записались.
 
 ---
 
-*Phase N не закрыт, пока на нём не прогнан реальный change. Метрики (с Phase 2) подтверждают success criteria.*
+## Phase 4 — Стадия design + Validation Contract + первая калибровка
+
+**Цель:** главный leverage point — ~200 строк, которые человек читает
+внимательно ([CRISPY §4](CRISPY.md)); testable-критерии до кода
+([MISSIONS §4](MISSIONS.md)); первое замыкание learning loop.
+
+**Enforcement-вклад:** M1 (гейт на артефакт-зависимость), M10 полный цикл.
+
+| Категория | Добавляем |
+|---|---|
+| Скрипты | state machine: `design → completed` требует существующего `validation-contract.md` |
+| Агенты | `agents/designer.md` — current state / desired end state / patterns to follow / resolved decisions / open questions |
+| Skills | `skills/spec/design-contract/SKILL.md` (структура, ≤220 строк), `skills/spec/validation-contract/SKILL.md` (что такое testable-критерий) |
+| Команды | `commands/calibrate.md` — `/foundry:calibrate <stage>`: анализ дельт → предложение патча → approve → применение |
+| Правила | M8: `line-count ≤220` на design; M1: без validation contract стадия не закрывается; M10: патчи skills/lint только через approve |
+| Артефакты | `design.md`, `validation-contract.md` |
+| Калибровка | **первый рабочий цикл**: правки design'а на deep review → дельты → calibrate → патч design-contract skill или новое lint-правило |
+
+**Human gate:** deep review design'а — главная точка вложения внимания.
+
+**Проверки:** design ≤220 строк проходит lint; без VC не закрывается;
+calibrate на накопленных дельтах предлагает осмысленный патч; патч без
+approve не применяется.
+
+**STOP:** design-стадия прогнана на реальном change, deep review дал правки,
+calibrate превратил их в патч, патч принят и виден в git.
+
+---
+
+## Phase 5 — Стадия structure
+
+**Цель:** vertical outline — «C header file» изменения: фазы имплементации,
+порядок, как тестируем после каждой. ([CRISPY §5, §6](CRISPY.md))
+
+| Категория | Добавляем |
+|---|---|
+| Агенты | `agents/outliner.md` — vertical-фазы, каждая компилируется и тестируется |
+| Skills | `skills/spec/structure-contract/SKILL.md` |
+| Правила | M8: `line-count ≤100` + `horizontal-pattern` (лестница «вся БД → весь сервис → весь API» = fail) |
+| Артефакты | `structure.md` |
+| Калибровка | дельты spot-check'а копятся; calibrate доступен для стадии |
+
+**Human gate:** spot-check.
+
+**STOP:** structure на реальном change прошла lint и spot-check без
+переделки более одного раза.
+
+---
+
+## Phase 6 — plan + worktree + implement + pr/docs
+
+**Цель:** исполнительный контур: тактический план per task, изолированная
+ветка, имплементация vertical-слайсами, PR с документацией.
+([CRISPY §7](CRISPY.md), [MISSIONS §6](MISSIONS.md))
+
+**Enforcement-вклад:** M4 впервые (build/test-обёртки), M8 schema validation.
+
+| Категория | Добавляем |
+|---|---|
+| Скрипты | worktree-механика (git branch, mechanical); build/test-обёртки под сборщик целевого проекта — compact errors: PASS/FAIL + первые 20 строк ([12-FACTOR §7](12-FACTOR.md)); PR-шаблон; schema-валидация плана и handoff'ов |
+| Агенты | `agents/planner.md` — план ≤7 шагов со снипетами до/после; `agents/implementor.md` — per-task, structured handoff на выходе |
+| Skills | `skills/spec/plan-contract/SKILL.md`, `skills/spec/handoff/SKILL.md` (Missions schema) |
+| Команды | расширение `/foundry:stage` на исполнительные стадии; diff-просмотр перед approve («read the code», [CRISPY §9](CRISPY.md)) |
+| Правила | M2: сборщик напрямую запрещён — только через обёртки; M8: план и handoff валидируются схемой; M1: implement не закрывается без зелёного verify... (гейт стадии 8) |
+| Артефакты | `plan/<task>.md`, handoff-записи, PR body; CHANGELOG/README-правки — часть того же PR |
+| Калибровка | дельты code review — самый богатый сигнал: систематические правки кода → патчи implement-skill и доменных skills (фаза 10) |
+
+**Human gates:** spot-check плана; **code review** (читаем код, не план);
+final approve PR.
+
+**STOP:** полный проход стадий 5–9 на реальном change: от плана до
+смерженного PR с обновлённой документацией.
+
+---
+
+## Phase 7 — Стадия verify
+
+**Цель:** adversarial-проверка свежим контекстом: verifier не видит design и
+plan — только validation contract и код. ([MISSIONS §3, §5](MISSIONS.md))
+
+| Категория | Добавляем |
+|---|---|
+| Агенты | `agents/verifier.md` — fresh context, проверяет код против validation contract |
+| Skills | `skills/spec/verify-contract/SKILL.md` — формат отчёта: PASS/FAIL per критерий |
+| Правила | M2: в `allowed-tools:` verifier'а нет `design.md` и `plan/`; M1: change не уходит в `done` без approved verify-отчёта |
+| Артефакты | `verify-report.md` |
+| Калибровка | FAIL'ы verify — сигнал против implement: то, что verifier ловит систематически, должно стать lint'ом или правкой implement-skill |
+
+**Human gate:** approve отчёта.
+
+**STOP:** verify поймал хотя бы одну реальную проблему, которую пропустил
+code review, — или два change'а подряд прошли verify чисто.
+
+---
+
+## Phase 8 — /quickfix bypass
+
+**Цель:** тривиальным задачам не нужен конвейер — но нужен учёт и гейт.
+([NO-VIBES §14](NO-VIBES.md))
+
+| Категория | Добавляем |
+|---|---|
+| Команды | `commands/quickfix.md` — `/foundry:quickfix`: change создаётся, стадии 1–5 помечаются `skipped`, сразу implement |
+| Правила | M1: bypass стадий ≠ bypass state machine — change существует, история пишется, гейт на выходе (diff review) обязателен |
+| Калибровка | если quickfix регулярно перерастает в полный change — сигнал, что классификация «тривиально» врёт; видно из history |
+
+**STOP:** quickfix реально быстрее ручного объезда — иначе им не будут
+пользоваться.
+
+---
+
+## Phase 9 — Интеграции: Jira ↔ foundry
+
+**Цель:** замкнуть внешний контур: задача рождается в Jira, результат
+возвращается в Jira; двойной ввод исчезает.
+
+| Категория | Добавляем |
+|---|---|
+| Скрипты | поле `jira_key` в `tracking.yaml`; шаблон учитывает его с фазы 2 (миграций нет — поле опциональное) |
+| Команды | `commands/jira.md` — промпт-адаптер поверх Atlassian MCP: `new --from-jira <key>` (title + proposal из задачи), синк при `move` (in-progress → Jira In Progress), закрытие (комментарий с результатом + worklog + transition в Done) |
+| Правила | foundry — источник правды, Jira догоняет; маппинг статусов: To Do ↔ backlog, In Progress ↔ in-progress, Done ↔ done, Won't Do ↔ declined; синк — побочный эффект команд, не отдельная дисциплина |
+| Артефакты | ссылка на Jira-задачу в `tracking.yaml` и в PR body |
+
+**STOP:** реальная задача прошла Jira → foundry → PR → Jira Done без ручного
+дублирования текста.
+
+---
+
+## Phase 10 — Domain layer: Kotlin / Spring / distributed
+
+**Цель:** доменные skills целевого стека. Наполняются не «из головы», а из
+калибровки: систематические правки code review (фазы 6–7) — основной
+источник контента.
+
+| Категория | Добавляем |
+|---|---|
+| Skills | `skills/domain/kotlin/`, `skills/domain/spring/`, `skills/domain/distributed/` — паттерны, анти-паттерны, выбор инструментов |
+| Правила | M7: implementor подключает доменные skills по типу задачи; бюджет инструкций считается суммарно (CI) |
+| Калибровка | это фаза-потребитель learning loop: дельты фаз 6–7 конвертируются в доменные skills |
+
+**STOP:** на реальном change видно снижение числа правок code review
+по сравнению с фазой 6 (метрика — из feedback-историй).
+
+---
+
+## Phase 11 — Marketplace polish + model per role
+
+**Цель:** публикация и оптимизация стоимости/качества per-стадия.
+([MISSIONS §9](MISSIONS.md))
+
+| Категория | Добавляем |
+|---|---|
+| Правила | M9: `model:` frontmatter per агент — дешёвая модель для механических стадий, сильная для design/verify |
+| Прочее | manifest polish, инструкция установки, версия 1.0 |
+
+**STOP:** плагин ставится «с нуля» по README на чистой машине.
+
+---
+
+## Что фреймворк НЕ enforce'ит (осознанно)
+
+| Правило | Источник | Почему не enforce | Замена |
+|---|---|---|---|
+| Smart Zone (≤35–60% context fill) | [NO-VIBES §5](NO-VIBES.md) | Real token count недоступен; порог fuzzy; Goodhart's law | `/context` + привычка |
+| «Wrap up при degradation» | [NO-VIBES §1, §4](NO-VIBES.md) | Качественный признак, не число | Суждение инженера |
+| Trajectory protection (>2 ошибки = новый контекст) | [NO-VIBES §4](NO-VIBES.md) | stderr-детекция шумная; потребителя нет до фазы 6 | Дисциплина; пересмотреть на фазе 6 |
+| Compaction infra | [CRISPY §11](CRISPY.md) | Артефакты стадий = resume-точки | — |
+
+---
+
+## Worked example: research isolation
+
+Правило ([NO-VIBES §6](NO-VIBES.md), [CRISPY §3](CRISPY.md)): research
+возвращает факты `file:line`, ≤30 строк, без opinion'ов, **без знания задачи**.
+
+Enforce'им пятью механизмами одновременно:
+
+1. **M2:** researcher имеет `allowed-tools: Read(questions.md), Read(src/**), Grep, Glob` — **права читать `proposal.md` нет**.
+2. **M3:** чтение кодебазы делегируется sub-agent'у — свежий контекст, тоже без proposal.
+3. **M6:** `agents/researcher.md` специфицирует формат и запрещённые слова.
+4. **M7:** `skills/spec/research-contract/SKILL.md` — контракт + анти-паттерны.
+5. **M8:** `opinion-words.sh` + `line-count.sh` на gate — `set-stage research completed` невозможен при fail.
+
+Убери любой слой — дисциплина ослабевает; вместе — агент может проигнорировать
+prompt, но не может обойти M2 + M8. **Это и есть «framework enforce'ит
+доктрину».** С фазы 4 к этому добавляется M10: правки человека на gate'ах
+делают каждый следующий прогон стадии лучше предыдущего.
+
+---
+
+## Open questions
+
+- Формат feedback-дельты: полный unified diff или структурированная запись
+  (verdict + суть правки)? Решаем на фазе 2 по первым реальным дельтам.
+- Проектные аддендумы skills (`.foundry/skills/<stage>.md`): читать всегда
+  или по opt-in в config? Решаем на фазе 4.
+- Jira-маппинг кастомных статусов (не стандартный workflow) — на фазе 9.
+- Метрика качества стадии (доля approve-без-правок?) — не раньше фазы 6,
+  когда появится статистика.
+
+---
+
+*Фаза не закрыта, пока на ней не прогнан реальный change. Правки человека на
+gate'ах — не накладной расход, а топливо калибровки.*
