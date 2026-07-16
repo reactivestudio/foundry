@@ -22,11 +22,11 @@ text{font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif}
 <text class="ts" x="108" y="186" dominant-baseline="central">через CLI</text>
 <rect x="170" y="120" width="340" height="380" rx="8" class="dash"/>
 <text class="ts" x="340" y="140" text-anchor="middle" dominant-baseline="central">~/.foundry — одна точка правды</text>
-<g class="gray"><rect x="200" y="156" width="280" height="40" rx="8" stroke-width="1"/><text class="th" x="340" y="176" text-anchor="middle" dominant-baseline="central">registry.yaml — cwd → id</text></g>
+<g class="gray"><rect x="200" y="156" width="280" height="40" rx="8" stroke-width="1"/><text class="th" x="340" y="176" text-anchor="middle" dominant-baseline="central">cwd → projects/*/project.yaml</text></g>
 <rect x="190" y="216" width="300" height="264" rx="8" class="dash"/>
 <text class="ts" x="340" y="234" text-anchor="middle" dominant-baseline="central">projects/&lt;id&gt;/</text>
-<g class="gray"><rect x="210" y="252" width="260" height="64" rx="8" stroke-width="1"/><text class="th" x="340" y="274" text-anchor="middle" dominant-baseline="central">changes/&lt;бакет&gt;/&lt;slug&gt;/</text><text class="ts" x="340" y="296" text-anchor="middle" dominant-baseline="central">tracking · inputs · proposal</text></g>
-<g class="gray"><rect x="210" y="332" width="260" height="64" rx="8" stroke-width="1"/><text class="th" x="340" y="354" text-anchor="middle" dominant-baseline="central">stages/NN-стадия/</text><text class="ts" x="340" y="376" text-anchor="middle" dominant-baseline="central">артефакт · versions/vN · reviews/vN</text></g>
+<g class="gray"><rect x="210" y="252" width="260" height="64" rx="8" stroke-width="1"/><text class="th" x="340" y="274" text-anchor="middle" dominant-baseline="central">changes/&lt;slug&gt;/</text><text class="ts" x="340" y="296" text-anchor="middle" dominant-baseline="central">proposal · tracking · history</text></g>
+<g class="gray"><rect x="210" y="332" width="260" height="64" rx="8" stroke-width="1"/><text class="th" x="340" y="354" text-anchor="middle" dominant-baseline="central">stages/NN-стадия/</text><text class="ts" x="340" y="376" text-anchor="middle" dominant-baseline="central">input · output · rounds/vN</text></g>
 <g class="gray"><rect x="210" y="412" width="260" height="40" rx="8" stroke-width="1"/><text class="th" x="340" y="432" text-anchor="middle" dominant-baseline="central">feedback/&lt;stage&gt;.jsonl</text></g>
 <g class="gray"><rect x="40" y="280" width="120" height="56" rx="8" stroke-width="1"/><text class="th" x="100" y="299" text-anchor="middle" dominant-baseline="central">foundry CLI</text><text class="ts" x="100" y="318" text-anchor="middle" dominant-baseline="central">мутации</text></g>
 <line x1="160" y1="308" x2="164" y2="308" class="arr" marker-end="url(#arrow)"/>

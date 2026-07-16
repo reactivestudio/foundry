@@ -1,0 +1,14 @@
+# Настройки CLI — раскомментируй, чтобы переопределить умолчание.
+# Проектные переопределения — projects/<id>/config.yaml, они побеждают.
+#
+# Имена ключей — те же, что читает scripts/cli/config/config_loader.sh
+# сегодня; переименование list_per_bucket_limit едет вместе с отказом от
+# бакетов в коде.
+
+# Сколько строк показывать в группе списка. Лишние сворачиваются в "⋯ +N more".
+# list_per_bucket_limit: 3
+
+# Порядок внутри группы: updated | created | slug | title
+# default_sort: updated
+
+# default_reverse: false

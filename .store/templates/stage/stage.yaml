@@ -1,0 +1,20 @@
+# Состояние одной стадии. Разворачивается в stages/<NN>-<stage>/ при её старте.
+# Статус изменения целиком — в tracking.yaml change'а, здесь его нет: одно и то
+# же в двух местах однажды разойдётся.
+#
+# status: pending | in-progress | done | stale
+#   stale — стадию обесценил возврат на более раннюю; её выход больше не в счёт,
+#   пока она не прогонится заново.
+#
+# session — id сессии Claude Code. Ленту прогона не копируем, она лежит у него
+# в ~/.claude/projects/<путь>/<id>.jsonl и читается по этому id.
+#
+# Поля кругов здесь пока нет: как записать список кругов, где у каждого своё
+# «чем вызван», на плоском YAML — открытый вопрос (roadmap/components.md).
+stage: __STAGE__
+status: pending
+session:
+agent:
+skills:
+started_at: __TIMESTAMP__
+updated_at: __TIMESTAMP__
