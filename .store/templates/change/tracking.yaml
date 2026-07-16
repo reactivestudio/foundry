@@ -1,0 +1,14 @@
+# Состояние изменения целиком. Статус — поле, а не каталог: путь
+# changes/<slug>/ не меняется за всю жизнь изменения, поэтому ссылки на него
+# не протухают. Состояние отдельной стадии — в её stage.yaml, здесь его нет.
+# stages разворачивается из templates/pipelines/<type>.yaml при создании.
+slug: __SLUG__
+title: __TITLE__
+type: __TYPE__
+status: backlog
+stage: __STAGE__
+stages: __STAGES__
+branch:
+worktree:
+created_at: __TIMESTAMP__
+updated_at: __TIMESTAMP__

@@ -152,7 +152,7 @@ CHANGELOG/README-правки входят в PR (стадия 9), ADR и гра
 |---|---|---|
 | D0 | Спайк петли: fs-watch `.foundry/`, рендер артефакта, approve через CLI, прогон `claude -p` | параллельно фазе 2 |
 | D1 | **Review MVP**: change'и проекта, артефакт стадии, diff снапшот↔текущий, комментарии с метками, approve / request-changes | готов к первым артефактам (фаза 3), **обязателен к фазе 4** |
-| D2 | Оркестрация: запуск стадий из приложения, live-статус, доска по бакетам | фазы 5–6 |
+| D2 | Оркестрация: запуск стадий из приложения, live-статус, доска по статусам | фазы 5–6 |
 | D3 | Калибровка UI: очередь дельт, черновики патчей, approve | вместе с первым calibrate (фаза 4+), полноценно к фазе 7 |
 | D4 | Аналитика (счётчик лупов) + мультипроект (инбокс ревью) | после фазы 6 |
 
@@ -180,7 +180,7 @@ enforcement (M1) на bucket-уровне.
 | Скрипты | слои `scripts/cli/`: config / spec (state-machine, slug, lint) / store (change CRUD, tracking, index, query) / render / commands / pages; TUI-пикер; `--plain` |
 | Команды | `/foundry:change`, `/foundry:setup` — адаптеры без логики, мутации только через CLI |
 | Skills | `spec/lifecycle`, `spec/naming`, `spec/lint` |
-| Правила | M1: переходы бакетов только через state machine; serial execution (один in-progress); `done` терминален; decline требует причину |
+| Правила | M1: переходы статуса только через state machine; serial execution (один in-progress); `done` терминален; decline требует причину |
 | Артефакты | `proposal.md`, flat `tracking.yaml`, append-only `history.log` |
 | Качество | 107 проверок в 4 сьютах (`tests/`), CI ubuntu+macos (bash 3.2), pre-commit hook, shellcheck-чистота |
 
@@ -204,7 +204,7 @@ enforcement (M1) на bucket-уровне.
 | Команды | — (субстрат не имеет пользовательского входа, кроме существующих) |
 | Правила | `set-stage completed` невозможен без прохождения lint-гейта стадии и без артефакта; CI гоняет `instruction-count` на `agents/*.md` (пока их нет — правило ждёт первых агентов) |
 | Артефакты | `stages:` в `tracking.yaml`; `feedback/<stage>/` в сторе проекта |
-| Хранилище | **переезд в глобальный стор**: `~/.foundry/projects/<id>/` + `registry.yaml` (cwd→id, worktree через `git-common-dir`); в репозитории проекта — ничего; `setup` = регистрация + скаффолд + permissions `~/.foundry/**`. Мигрировать до первых артефактов — пустое хранилище дешевле живого |
+| Хранилище | **переезд в глобальный стор**: `~/.foundry/projects/<id>/`, поиск проекта обходом `projects/*/project.yaml` (реестра нет — это был бы второй список тех же проектов; worktree'ы через `git-common-dir`); статус — поле в `tracking.yaml`, не каталог; в репозитории проекта — ничего; `setup` = скелет `.store/` → `~/.foundry/` + `projects/<id>/` + permissions `~/.foundry/**`. Раскладка — [components.md](components.md#хранилище-данных--глобальное-одна-точка-правды). Мигрировать до первых артефактов — пустое хранилище дешевле живого |
 | Калибровка | дельты собираются механикой с первой же LLM-стадии; формат записи: verdict (approved / edited / rejected) + diff + опциональная нота человека |
 
 **Проверки:** stage-переходы валидируются и покрыты тестами; снапшот/дельта
