@@ -7,6 +7,12 @@
 # Проектная версия — projects/<id>/templates/pipelines/feature.yaml, она
 # побеждает. Другие категории (багфикс, мелкая правка) появятся тогда, когда
 # их состав будет решён, а не назначен здесь по догадке.
+#
+# per_task — стадии, которые идут не по change'у целиком, а по задачам из
+# tasks.yaml структуры. У них output/ и rounds/ разложены по задачам:
+# output/01-<task>.md и rounds/01-<task>/vN/. Вход у стадии всё равно один:
+# задача — не вход, а то, по чему стадия разложена.
 
 type: feature
 stages: questions research design structure plan implement verify
+per_task: plan implement
